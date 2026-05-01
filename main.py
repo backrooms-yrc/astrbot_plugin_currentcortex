@@ -1,10 +1,6 @@
 import re
-import time
-import hashlib
 import asyncio
-import json
-from typing import Any, Dict, List, Optional, Tuple
-from collections import OrderedDict
+from typing import Any, Dict, List, Optional
 
 import aiohttp
 
@@ -21,8 +17,6 @@ HELP_TEXT = """🎨 Pixiv 随机图片插件 使用说明
 📌 基本用法
   /pixiv               获取一张随机全年龄图片（默认参数）
   /pixiv help          显示此帮助信息
-  /pixiv clear-cache   清除所有缓存
-  /pixiv cache-stats   查看缓存统计信息
 
 📌 参数选项（使用 key:value 格式，可组合使用）
   r18:0               全年龄（默认）
@@ -41,83 +35,6 @@ HELP_TEXT = """🎨 Pixiv 随机图片插件 使用说明
   /pixiv r18:2 tag:白丝 keyword:初音ミク num:3
   /pixiv tag:萝莉 excludeAI:true num:5
   /pixiv uid:123456 num:3"""
-
-
-class CacheManager:
-    def __init__(self, max_size: int = 100, ttl: int = 3600):
-        self._cache: OrderedDict[str, Tuple[float, Any]] = OrderedDict()
-        self._max_size = max_size
-        self._ttl = ttl
-        self._lock = asyncio.Lock()
-        self._hits = 0
-        self._misses = 0
-        self._expired_count = 0
-
-    @staticmethod
-    def _make_key(params: Dict[str, Any]) -> str:
-        normalized: Dict[str, Any] = {}
-        for k in sorted(params.keys()):
-            v = params[k]
-            if isinstance(v, list):
-                v = tuple(v)
-            normalized[k] = v
-        raw = json.dumps(normalized, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-        return hashlib.md5(raw.encode("utf-8")).hexdigest()
-
-    async def get(self, params: Dict[str, Any]) -> Optional[Any]:
-        key = self._make_key(params)
-        async with self._lock:
-            if key not in self._cache:
-                self._misses += 1
-                return None
-            timestamp, data = self._cache[key]
-            if time.time() - timestamp > self._ttl:
-                del self._cache[key]
-                self._expired_count += 1
-                logger.debug(f"Cache expired for key: {key}")
-                return None
-            self._cache.move_to_end(key)
-            self._hits += 1
-            logger.debug(f"Cache hit for key: {key} (hits={self._hits}, misses={self._misses})")
-            return data
-
-    async def set(self, data: Any, params: Dict[str, Any]):
-        key = self._make_key(params)
-        async with self._lock:
-            self._cache[key] = (time.time(), data)
-            self._cache.move_to_end(key)
-            while len(self._cache) > self._max_size:
-                self._cache.popitem(last=False)
-        logger.debug(f"Cache set for key: {key} (total entries: {len(self._cache)})")
-
-    async def clear(self) -> int:
-        async with self._lock:
-            count = len(self._cache)
-            self._cache.clear()
-        self._hits = 0
-        self._misses = 0
-        self._expired_count = 0
-        logger.info(f"Cache cleared, removed {count} entries")
-        return count
-
-    async def remove(self, params: Dict[str, Any]) -> bool:
-        key = self._make_key(params)
-        async with self._lock:
-            if key in self._cache:
-                del self._cache[key]
-                logger.debug(f"Cache removed for key: {key}")
-                return True
-            logger.debug(f"Cache remove miss for key: {key}")
-            return False
-
-    def stats(self) -> Dict[str, int]:
-        return {
-            "entries": len(self._cache),
-            "max_size": self._max_size,
-            "hits": self._hits,
-            "misses": self._misses,
-            "expired": self._expired_count,
-        }
 
 
 class PixivAPIClient:
@@ -254,9 +171,6 @@ class PixivPlugin(Star):
         self._exclude_ai = config.get("exclude_ai", False)
         self._request_timeout = int(config.get("request_timeout", 15))
 
-        cache_ttl = int(config.get("cache_ttl", 3600))
-        max_cache_size = int(config.get("max_cache_size", 100))
-        self._cache = CacheManager(max_size=max_cache_size, ttl=cache_ttl)
         self._api_client = PixivAPIClient(timeout=self._request_timeout)
 
         logger.info(
@@ -276,40 +190,13 @@ class PixivPlugin(Star):
             yield event.plain_result(HELP_TEXT)
             return
 
-        if raw_args.lower() in ("clear-cache", "clearcache", "清除缓存"):
-            count = await self._cache.clear()
-            yield event.plain_result(f"✅ 缓存已清除，共清理 {count} 条记录")
-            return
-
-        if raw_args.lower() in ("cache-stats", "cachestats", "缓存状态"):
-            stats = self._cache.stats()
-            stats_text = "\n".join(
-                f"  {k}: {v}" for k, v in stats.items()
-            )
-            yield event.plain_result(f"📊 缓存统计信息：\n{stats_text}")
-            return
-
         try:
             params = self._build_request_params(raw_args)
 
-            cached_result = await self._cache.get(params)
-            if cached_result is not None:
-                logger.info(
-                    f"Cache hit for user {user_name}, "
-                    f"params={params}, stats={self._cache.stats()}"
-                )
-                yield event.plain_result("📦 [缓存命中] 以下是之前的请求结果：")
-                cached_response_items = await self._process_cached_response(cached_result, params, event)
-                for item in cached_response_items:
-                    yield item
-                return
-
-            logger.info(f"Cache miss for user {user_name}, params={params}")
+            logger.info(f"Fetching for user {user_name}, params={params}")
 
             api_params = self._prepare_api_params(params)
             result = await self._api_client.fetch_images(**api_params)
-
-            await self._cache.set(result, params)
 
             response_items = await self._process_response(result, params, event)
             for item in response_items:
@@ -339,8 +226,7 @@ class PixivPlugin(Star):
         }
 
         if parsed.get("tag"):
-            tag_val = parsed["tag"]
-            params["tag"] = tuple(tag_val) if isinstance(tag_val, list) else tag_val
+            params["tag"] = parsed["tag"]
         if parsed.get("keyword"):
             params["keyword"] = parsed["keyword"]
         if parsed.get("uid"):
@@ -399,11 +285,6 @@ class PixivPlugin(Star):
 
         logger.warning(f"Unknown response type: {response_type}")
         return [event.plain_result("⚠️ API 返回了未知格式的数据，请联系管理员")]
-
-    async def _process_cached_response(
-        self, cached_result: Dict[str, Any], params: Dict[str, Any], event: AstrMessageEvent
-    ) -> List[Any]:
-        return await self._process_response(cached_result, params, event)
 
     def _extract_items(self, data: Any) -> List[Dict[str, Any]]:
         if isinstance(data, list):
@@ -485,4 +366,3 @@ class PixivPlugin(Star):
 
     async def terminate(self):
         logger.info("PixivPlugin is being terminated")
-        await self._cache.clear()
