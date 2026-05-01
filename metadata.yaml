@@ -1,40 +1,6 @@
 name: astrbot_plugin_pixiv
+display_name: Pixiv 随机图片
 desc: Pixiv 随机图片插件 - 支持通过 /pixiv 指令获取随机 Pixiv 图片（含 R18 内容），支持标签筛选、关键词搜索、多图获取等功能
 author: AstrBot Community
-version: 1.0.0
+version: v1.0.0
 repo: https://github.com/user/astrbot_plugin_pixiv
-dependencies:
-  - aiohttp>=3.8.0
-config:
-  - key: default_r18
-    type: int
-    default: 0
-    desc: "默认 R18 模式：0=全年龄，1=仅R18，2=混合模式"
-  - key: cache_ttl
-    type: int
-    default: 3600
-    desc: "缓存有效期（秒），同一请求在该时间内返回缓存结果，避免重复请求"
-  - key: max_cache_size
-    type: int
-    default: 100
-    desc: "最大缓存条目数"
-  - key: default_num
-    type: int
-    default: 1
-    desc: "默认每次获取的图片数量（1-20）"
-  - key: image_proxy
-    type: string
-    default: "pixiv.bileizhen.top"
-    desc: "图片反代域名，默认为 pixiv.bileizhen.top，可改为其他代理域名"
-  - key: default_size
-    type: string
-    default: "regular"
-    desc: "默认图片尺寸：original/regular/small/thumb/mini"
-  - key: exclude_ai
-    type: bool
-    default: false
-    desc: "是否排除 AI 生成作品"
-  - key: request_timeout
-    type: int
-    default: 15
-    desc: "API 请求超时时间（秒）"

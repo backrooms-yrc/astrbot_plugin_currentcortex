@@ -7,9 +7,9 @@ from collections import OrderedDict
 
 import aiohttp
 
-from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
-from astrbot.api import logger
+from astrbot.api import logger, AstrBotConfig
 
 
 API_BASE_URL = "https://api.bileizhen.top/api/pixiv"
@@ -201,12 +201,10 @@ class PixivAPIError(Exception):
     "AstrBot Community",
     "Pixiv 随机图片插件 - 支持通过 /pixiv 指令获取随机 Pixiv 图片（含 R18 内容），支持标签筛选、关键词搜索等功能",
     "1.0.0",
-    "https://github.com/user/astrbot_plugin_pixiv",
 )
 class PixivPlugin(Star):
-    def __init__(self, context: Context):
+    def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
-        config = context.get_config() or {}
 
         self._default_r18 = int(config.get("default_r18", 0))
         self._default_num = max(1, min(20, int(config.get("default_num", 1))))

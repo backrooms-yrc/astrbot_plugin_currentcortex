@@ -1,0 +1,49 @@
+{
+    "default_r18": {
+        "description": "默认 R18 模式",
+        "type": "int",
+        "hint": "0=全年龄，1=仅R18，2=混合模式",
+        "default": 0,
+        "options": [0, 1, 2]
+    },
+    "cache_ttl": {
+        "description": "缓存有效期（秒）",
+        "type": "int",
+        "hint": "同一请求在该时间内返回缓存结果，避免重复请求",
+        "default": 3600
+    },
+    "max_cache_size": {
+        "description": "最大缓存条目数",
+        "type": "int",
+        "default": 100
+    },
+    "default_num": {
+        "description": "默认每次获取的图片数量",
+        "type": "int",
+        "hint": "范围 1-20",
+        "default": 1
+    },
+    "image_proxy": {
+        "description": "图片反代域名",
+        "type": "string",
+        "hint": "默认为 pixiv.bileizhen.top，可改为其他代理域名",
+        "default": "pixiv.bileizhen.top"
+    },
+    "default_size": {
+        "description": "默认图片尺寸",
+        "type": "string",
+        "hint": "original / regular / small / thumb / mini",
+        "default": "regular",
+        "options": ["original", "regular", "small", "thumb", "mini"]
+    },
+    "exclude_ai": {
+        "description": "是否排除 AI 生成作品",
+        "type": "bool",
+        "default": false
+    },
+    "request_timeout": {
+        "description": "API 请求超时时间（秒）",
+        "type": "int",
+        "default": 15
+    }
+}
