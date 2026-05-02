@@ -14,27 +14,57 @@ PIXIV_ARTWORK_URL = "https://www.pixiv.net/artworks/{}"
 
 HELP_TEXT = """🎨 Pixiv 随机图片插件 使用说明
 
-📌 基本用法
+📌 基本命令
   /pixiv               获取一张随机全年龄图片（默认参数）
   /pixiv help          显示此帮助信息
 
-📌 参数选项（使用 key:value 格式，可组合使用）
-  r18:0               全年龄（默认）
-  r18:1               仅限 R18 内容
-  r18:2               混合模式（全年龄+R18）
-  tag:标签名           按标签筛选（OR匹配用 | 分隔，多个tag:指定AND匹配）
-  keyword:关键词        标题/作者/标签模糊搜索
-  num:1-20            获取图片数量（默认 1）
-  size:original        图片尺寸：original/regular/small/thumb/mini
-  excludeAI:true       排除 AI 生成作品
-  uid:作者ID           指定作者 UID
-  ratio:gt1.2lt1.8     长宽比筛选（gt=大于, lt=小于, 如 gt1.2lt1.8）
+📌 内容分级选项
+  r18:0               全年龄内容（默认）
+  r18:1               仅 R18 成人内容 ⚠️
+  r18:2               混合模式（全年龄 + R18）🔞
 
-📌 示例
-  /pixiv r18:1
-  /pixiv r18:2 tag:白丝 keyword:初音ミク num:3
-  /pixiv tag:萝莉 excludeAI:true num:5
-  /pixiv uid:123456 num:3"""
+📌 搜索与筛选参数（使用 key:value 格式，可组合使用）
+  tag:标签名           按标签筛选图片
+                       • OR 匹配：tag:萝莉|少女
+                       • AND 匹配：tag:萝莉 tag:少女（多个tag参数）
+  keyword:关键词       标题/作者/标签模糊搜索
+  uid:作者ID           指定特定作者的 UID
+  num:数量             获取图片数量（1-20，默认 1）
+
+📌 图片设置
+  size:尺寸            图片大小选项：
+                       • original  - 原图（默认）
+                       • regular   - 常规尺寸
+                       • small     - 小图
+                       • thumb     - 缩略图
+                       • mini      - 迷你图
+  excludeAI:true      排除 AI 生成的作品
+  ratio:表达式         长宽比筛选
+                       • gt1.2 = 大于 1.2
+                       • lt1.8 = 小于 1.8
+                       示例：ratio:gt1.2lt1.8
+
+📌 使用示例
+  基础用法：
+    /pixiv                          随机全年龄图片
+    /pixiv r18:1                    随机 R18 图片
+    /pixiv help                     显示帮助
+
+  高级搜索：
+    /pixiv r18:1 tag:白丝 num:3     获取3张白丝R18图
+    /pixiv keyword:初音ミク num:5   搜索初音未来相关图片
+    /pixiv tag:萝莉 excludeAI:true  排除AI的萝莉标签图片
+    /pixiv uid:123456 num:3         获取指定作者的作品
+
+  组合筛选：
+    /pixiv r18:2 tag:白丝 keyword:初音ミク num:3 size:original
+
+⚠️ 注意事项
+  • R18 内容仅限成年用户使用
+  • 图片来源于 Pixiv，请遵守相关法律法规
+  • 如遇问题可发送 /pixiv help 查看帮助
+
+💡 提示：所有参数均可自由组合使用"""
 
 
 class PixivAPIClient:
@@ -215,17 +245,15 @@ class PixivPlugin(Star):
         user_name = event.get_sender_name()
         message_str = event.message_str.strip()
 
-        command_prefix_pattern = re.compile(r'^[/!！]pixiv\s*', re.IGNORECASE)
-        raw_args = command_prefix_pattern.sub('', message_str).strip()
+        logger.debug(f"[DEBUG] 收到消息: '{message_str}'")
 
-        lower_args = raw_args.lower()
-        if lower_args in ("help", "-h", "--help", "帮助") or lower_args.lstrip("-") == "help":
+        if self._is_help_command(message_str):
             logger.info(f"Help command triggered by {user_name}")
             yield event.plain_result(HELP_TEXT)
             return
 
         try:
-            params = self._build_request_params(raw_args)
+            params = self._build_request_params(message_str)
 
             logger.info(f"Fetching for user {user_name}, params={params}")
 
@@ -250,8 +278,71 @@ class PixivPlugin(Star):
             logger.error(f"Unexpected error for user {user_name}: {e}", exc_info=True)
             yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试或联系管理员")
 
-    def _build_request_params(self, raw_args: str) -> Dict[str, Any]:
-        parsed = CommandParser.parse(raw_args)
+    def _is_help_command(self, message: str) -> bool:
+        """
+        检测是否为帮助命令
+        支持多种格式，增强健壮性
+        """
+        if not message:
+            return False
+
+        msg_clean = message.strip()
+        logger.debug(f"[DEBUG] 检测help命令: 原始='{msg_clean}'")
+
+        # 标准化消息：移除命令前缀
+        normalized = re.sub(r'^[/!！]', '', msg_clean).strip()
+        logger.debug(f"[DEBUG] 标准化后: '{normalized}'")
+
+        # 提取参数部分（处理 "pixiv help" 格式）
+        if normalized.lower().startswith('pixiv'):
+            args_part = normalized[5:].strip()
+            logger.debug(f"[DEBUG] 提取参数: '{args_part}'")
+        else:
+            args_part = normalized
+
+        lower_args = args_part.lower().strip()
+
+        # 定义所有帮助关键词
+        help_keywords = {'help', '-h', '--help', '帮助', 'h', '?', '？'}
+
+        # 精确匹配
+        if lower_args in help_keywords:
+            logger.debug(f"[DEBUG] ✅ 精确匹配到help关键词: '{lower_args}'")
+            return True
+
+        # 处理可能的额外空格或变体
+        if lower_args in ('', ' '):
+            return False
+
+        # 检查是否以帮助关键词开头（如 "help me" 这种情况也应该显示帮助）
+        for kw in ['help', '帮助']:
+            if lower_args == kw or lower_args.startswith(kw + ' ') or lower_args.endswith(' ' + kw):
+                logger.debug(f"[DEBUG] ✅ 模式匹配到help关键词: '{lower_args}' (关键词: {kw})")
+                return True
+
+        # 使用正则表达式进行更灵活的匹配
+        help_patterns = [
+            r'^(/|!|！)?pixiv\s*(help|-h|--help|帮助|\?)\s*$',
+            r'^(help|-h|--help|帮助|\?|？)\s*$',
+            r'^(/|!|！)?pixiv\s*$',  # 仅 /pixiv 不算help
+        ]
+
+        for pattern in help_patterns[:-1]:  # 排除最后一个模式（仅 /pixiv）
+            if re.match(pattern, msg_clean, re.IGNORECASE):
+                logger.debug(f"[DEBUG] ✅ 正则匹配成功: pattern='{pattern}'")
+                return True
+
+        logger.debug(f"[DEBUG] ❌ 不是help命令")
+        return False
+
+    def _build_request_params(self, message: str) -> Dict[str, Any]:
+        # 标准化消息：移除命令前缀和 "pixiv" 关键字
+        cleaned = re.sub(r'^[/!！]\s*pixiv\s*', '', message.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^pixiv\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+
+        logger.debug(f"[DEBUG] _build_request_params 输入: '{message}' → 清理后: '{cleaned}'")
+
+        parsed = CommandParser.parse(cleaned)
 
         params: Dict[str, Any] = {
             "r18": parsed.get("r18", self._default_r18),
