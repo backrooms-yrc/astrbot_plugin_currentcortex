@@ -140,7 +140,7 @@ class CommandParser:
         params: Dict[str, Any] = {}
 
         key_value_pattern = re.compile(
-            r'(?:^|\s)([a-zA-Z_]+):\s*([^\s]+(?:\s*[^\s]+)*?)(?=\s+[a-zA-Z_]+:|$)',
+            r'([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([^\s]+)',
         )
         consumed_positions = []
         for match in key_value_pattern.finditer(text):
