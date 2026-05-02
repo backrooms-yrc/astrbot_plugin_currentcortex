@@ -370,7 +370,26 @@ class WeatherAPIClient:
                     data = await resp.json()
                     logger.debug(f"Weather API JSON response: {data}")
 
-                    return {"type": "json", "data": data, "city": city}
+                    if not isinstance(data, dict):
+                        logger.warning(f"Unexpected weather API response format: {type(data)}")
+                        raise WeatherAPIError("API 返回数据格式异常")
+
+                    if data.get("error"):
+                        error_msg = data.get("error", "未知错误")
+                        logger.error(f"Weather API returned error: {error_msg}")
+                        raise WeatherAPIError(f"API 错误: {error_msg}")
+
+                    weather_data = data.get("data", {})
+                    if not weather_data:
+                        logger.warning(f"Weather API returned empty data: {data}")
+                        raise WeatherAPIError("API 返回数据为空")
+
+                    return {
+                        "type": "json",
+                        "data": weather_data,
+                        "city": weather_data.get("city", city),
+                        "raw_response": data
+                    }
 
             except aiohttp.ClientError as e:
                 logger.error(f"Weather network error: {e}")
@@ -501,27 +520,39 @@ class PixivPlugin(Star):
         try:
             city = self._parse_weather_params(message_str)
             if not city:
+                logger.warning(f"[Weather] No city specified by user {user_name}")
                 yield event.plain_result("❌ 请指定城市名称\n💡 用法：/weather 广州市\n💡 发送 /weather help 查看帮助")
+                return
+
+            if len(city) > 50:
+                logger.warning(f"[Weather] City name too long ({len(city)} chars) from user {user_name}")
+                yield event.plain_result("❌ 城市名称过长（最多50个字符）\n💡 请输入正确的城市名称")
                 return
 
             logger.info(f"[Weather] Fetching weather for user {user_name}, city={city}")
 
             result = await self._weather_client.fetch_weather(city)
 
+            logger.debug(f"[Weather] API response received for {city}, type={result.get('type')}")
+
             response_text = self._format_weather_response(result)
-            logger.info(f"[Weather] Successfully fetched weather for {user_name}, city={city}")
+            logger.info(f"[Weather] Successfully formatted weather response for {user_name}, city={city}")
             yield event.plain_result(response_text)
 
         except WeatherAPIError as e:
-            logger.error(f"[Weather] API error for user {user_name}: {e}")
+            logger.error(f"[Weather] API error for user {user_name}: {e} (status_code={e.status_code})")
             error_msg = f"❌ 查询天气失败\n📝 错误信息：{str(e)}"
             if e.status_code:
                 error_msg += f"\n🔢 状态码：{e.status_code}"
             error_msg += "\n💡 请稍后重试或检查城市名称是否正确"
+            error_msg += "\n💡 支持的城市示例：广州市、北京市、上海市"
             yield event.plain_result(error_msg)
+        except ValueError as e:
+            logger.error(f"[Weather] Parameter validation error for user {user_name}: {e}")
+            yield event.plain_result(f"❌ 参数错误：{str(e)}\n💡 用法：/weather 城市名称")
         except Exception as e:
             logger.error(f"[Weather] Unexpected error for user {user_name}: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试")
+            yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试或联系管理员")
 
     def _parse_weather_params(self, message: str) -> Optional[str]:
         cleaned = re.sub(r'^[/!！]\s*weather\s*', '', message.strip(), flags=re.IGNORECASE)
@@ -543,44 +574,84 @@ class PixivPlugin(Star):
         data = result.get("data", {})
         city = result.get("city", "未知城市")
 
-        if isinstance(data, dict):
-            response_parts = [f"🌤️ {city} 天气预报"]
+        if not isinstance(data, dict):
+            logger.warning(f"[Weather] Invalid data format in response: {type(data)}")
+            return f"🌤️ {city} 天气信息\n\n⚠️ 数据格式异常"
 
-            if "city" in data:
-                response_parts.append(f"\n📍 城市：{data['city']}")
+        response_parts = [f"🌤️ {city} 天气预报"]
 
-            if "update_time" in data:
-                response_parts.append(f"⏰ 更新时间：{data['update_time']}")
+        adm = data.get("adm", "")
+        if adm:
+            response_parts.append(f"📍 {adm}")
 
-            if "forecast" in data and isinstance(data["forecast"], list):
-                response_parts.append("\n📅 未来天气预报：")
-                for forecast in data["forecast"][:3]:
-                    date = forecast.get("date", "")
-                    weather = forecast.get("weather", "")
-                    temp = forecast.get("temperature", "")
-                    wind = forecast.get("wind", "")
+        now = data.get("now")
+        if isinstance(now, dict) and now:
+            response_parts.append("\n☀️ 当前天气")
+            temp = now.get("temp", "")
+            weather = now.get("weather", "")
+            wind_dir = now.get("windDir", "")
+            wind_scale = now.get("windScale", "")
+            humidity = now.get("humidity", "")
+            feels_like = now.get("feelsLike", "")
 
-                    day_info = f"\n📆 {date}" if date else ""
-                    weather_info = f"☁️ 天气：{weather}" if weather else ""
-                    temp_info = f"🌡️ 温度：{temp}" if temp else ""
-                    wind_info = f"💨 风力：{wind}" if wind else ""
+            if temp:
+                response_parts.append(f"🌡️ 温度：{temp}")
+            if weather:
+                response_parts.append(f"☁️ 天气：{weather}")
+            if feels_like:
+                response_parts.append(f"🤒 体感温度：{feels_like}")
+            if wind_dir and wind_scale:
+                response_parts.append(f"💨 风力：{wind_dir} {wind_scale}级")
+            elif wind_dir:
+                response_parts.append(f"💨 风向：{wind_dir}")
+            if humidity:
+                response_parts.append(f"💧 湿度：{humidity}%")
 
-                    response_parts.append(f"{day_info}  {weather_info}  {temp_info}  {wind_info}")
+        forecast_list = data.get("forecast")
+        if isinstance(forecast_list, list) and forecast_list:
+            response_parts.append("\n📅 未来天气预报")
+            for i, forecast in enumerate(forecast_list[:3], 1):
+                if not isinstance(forecast, dict):
+                    continue
 
-            elif "weather" in data or "temperature" in data:
-                weather = data.get("weather", "")
-                temperature = data.get("temperature", "")
-                wind = data.get("wind", "")
-                humidity = data.get("humidity", "")
+                date = forecast.get("date", "")
+                weekday = forecast.get("weekday", "")
+                weather = forecast.get("weather", "")
+                temp_min = forecast.get("tempMin", "")
+                temp_max = forecast.get("tempMax", "")
+                wind_dir = forecast.get("windDir", "")
+                wind_scale = forecast.get("windScale", "")
+                humidity_f = forecast.get("humidity", "")
 
-                response_parts.append(f"\n☁️ 天气状况：{weather}" if weather else "")
-                response_parts.append(f"🌡️ 温度：{temperature}" if temperature else "")
-                response_parts.append(f"💨 风力：{wind}" if wind else "")
-                response_parts.append(f"💧 湿度：{humidity}" if humidity else "")
+                day_label = f"\n📆 第{i}天"
+                if date and weekday:
+                    day_label += f"：{date}（{weekday}）"
+                elif date:
+                    day_label += f"：{date}"
 
-            return "\n".join([p for p in response_parts if p])
+                response_parts.append(day_label)
 
-        return f"🌤️ {city} 天气信息\n\n{str(data)}"
+                if weather:
+                    response_parts.append(f"   ☁️ 天气：{weather}")
+                if temp_min or temp_max:
+                    temp_str = f"{temp_min}~{temp_max}" if temp_min and temp_max else (temp_max or temp_min)
+                    response_parts.append(f"   🌡️ 温度：{temp_str}")
+                if wind_dir and wind_scale:
+                    response_parts.append(f"   💨 风力：{wind_dir} {wind_scale}级")
+                elif wind_dir:
+                    response_parts.append(f"   � 风向：{wind_dir}")
+                if humidity_f:
+                    response_parts.append(f"   💧 湿度：{humidity_f}%")
+
+        final_response = "\n".join([p for p in response_parts if p])
+
+        if len(final_response.strip()) <= len(f"🌤️ {city} 天气预报"):
+            logger.warning(f"[Weather] Response appears empty after formatting. Raw data keys: {list(data.keys())}")
+            raw_data = result.get("raw_response", {})
+            return f"🌤️ {city} 天气信息\n\n⚠️ 未能解析天气数据\n原始数据：{str(raw_data)[:200]}"
+
+        logger.info(f"[Weather] Formatted response with {len(response_parts)} parts for city: {city}")
+        return final_response
 
     @filter.command("pixiv")
     async def pixiv_command(self, event: AstrMessageEvent):
