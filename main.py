@@ -40,23 +40,33 @@ HELP_TEXT = """🎨 Pixiv 随机图片插件 使用说明
 class PixivAPIClient:
     def __init__(self, timeout: int = 15):
         self._timeout = aiohttp.ClientTimeout(total=timeout)
+        self._headers = {
+            "User-Agent": "AstrBot-Pixiv-Plugin/1.0",
+            "Accept": "application/json, image/*",
+        }
 
     async def fetch_images(self, **params) -> Dict[str, Any]:
         clean_params = {k: v for k, v in params.items() if v is not None}
 
         if "excludeAI" in clean_params:
-            clean_params["excludeAI"] = str(clean_params["excludeAI"]).lower() == "true"
+            clean_params["excludeAI"] = bool(clean_params["excludeAI"])
 
-        async with aiohttp.ClientSession(timeout=self._timeout) as session:
+        has_filter_params = any(k in clean_params for k in ("r18", "num", "tag", "keyword", "uid",
+                                                              "size", "excludeAI", "aspectRatio",
+                                                              "dateAfter", "dateBefore"))
+
+        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
             try:
-                async with session.get(API_BASE_URL, params=clean_params, allow_redirects=False) as resp:
+                if has_filter_params:
+                    resp = await self._post_request(session, clean_params)
+                else:
+                    resp = await self._get_request(session, clean_params)
+
+                async with resp:
                     if resp.status in (301, 302, 303, 307, 308):
                         redirect_url = resp.headers.get("Location", "")
                         logger.info(f"Received redirect to: {redirect_url}")
-                        return {
-                            "type": "redirect",
-                            "url": redirect_url,
-                        }
+                        return {"type": "redirect", "url": redirect_url}
 
                     if resp.status != 200:
                         error_text = await resp.text()
@@ -67,13 +77,10 @@ class PixivAPIClient:
                     if "image" in content_type:
                         image_url = str(resp.url)
                         logger.info(f"Received direct image response: {image_url}")
-                        return {
-                            "type": "redirect",
-                            "url": image_url,
-                        }
+                        return {"type": "redirect", "url": image_url}
 
                     data = await resp.json()
-                    logger.debug(f"API JSON response keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
+                    logger.debug(f"API JSON response keys: {list(data.keys()) if isinstance(data, dict) else type(data).__name__}")
                     return {"type": "json", "data": data}
 
             except aiohttp.ClientError as e:
@@ -82,6 +89,31 @@ class PixivAPIClient:
             except asyncio.TimeoutError:
                 logger.error("Request timeout")
                 raise PixivAPIError("API 请求超时，请稍后再试", status_code=0)
+
+    async def _get_request(self, session: aiohttp.ClientSession, params: Dict[str, Any]):
+        logger.debug(f"GET {API_BASE_URL} params={params}")
+        return await session.get(API_BASE_URL, params=params, allow_redirects=False)
+
+    async def _post_request(self, session: aiohttp.ClientSession, params: Dict[str, Any]):
+        body = self._normalize_post_params(params)
+        logger.debug(f"POST {API_BASE_URL} body={body}")
+        return await session.post(
+            API_BASE_URL,
+            json=body,
+            allow_redirects=False,
+        )
+
+    @staticmethod
+    def _normalize_post_params(params: Dict[str, Any]) -> Dict[str, Any]:
+        body: Dict[str, Any] = {}
+        for k, v in params.items():
+            if k == "size" and isinstance(v, str):
+                body[k] = [v]
+            elif k == "tag" and isinstance(v, str):
+                body[k] = [v]
+            else:
+                body[k] = v
+        return body
 
 
 class CommandParser:
@@ -186,7 +218,9 @@ class PixivPlugin(Star):
         command_prefix_pattern = re.compile(r'^[/!！]pixiv\s*', re.IGNORECASE)
         raw_args = command_prefix_pattern.sub('', message_str).strip()
 
-        if raw_args.lower() in ("help", "-h", "--help", "帮助"):
+        lower_args = raw_args.lower()
+        if lower_args in ("help", "-h", "--help", "帮助") or lower_args.lstrip("-") == "help":
+            logger.info(f"Help command triggered by {user_name}")
             yield event.plain_result(HELP_TEXT)
             return
 
