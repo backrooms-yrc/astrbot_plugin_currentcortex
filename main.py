@@ -10,7 +10,24 @@ from astrbot.api import logger, AstrBotConfig
 
 
 API_BASE_URL = "https://api.bileizhen.top/api/pixiv"
+HITOKOTO_API_URL = "https://api.bileizhen.top/api/one"
+WEATHER_API_URL = "https://api.bileizhen.top/api/weather"
 PIXIV_ARTWORK_URL = "https://www.pixiv.net/artworks/{}"
+
+HITOKOTO_CATEGORIES = {
+    "a": "动画",
+    "b": "漫画",
+    "c": "游戏",
+    "d": "文学",
+    "e": "原创",
+    "f": "来自网络",
+    "g": "其他",
+    "h": "影视",
+    "i": "诗词",
+    "j": "网易云",
+    "k": "哲学",
+    "l": "抖机灵",
+}
 
 HELP_TEXT = """🎨 Pixiv 随机图片插件 使用说明
 
@@ -65,6 +82,59 @@ HELP_TEXT = """🎨 Pixiv 随机图片插件 使用说明
   • 如遇问题可发送 /pixiv help 查看帮助
 
 💡 提示：所有参数均可自由组合使用"""
+
+HITOKOTO_HELP_TEXT = """✨ 每日一言 使用说明
+
+📌 基本命令
+  /hitokoto             获取一条随机一言（默认全部分类）
+  /hitokoto help       显示此帮助信息
+
+📌 分类选项（使用分类代码）
+  a - 动画            g - 其他
+  b - 漫画            h - 影视
+  c - 游戏            i - 诗词
+  d - 文学            j - 网易云
+  e - 原创            k - 哲学
+  f - 来自网络        l - 抖机灵
+
+📌 使用示例
+  基础用法：
+    /hitokoto                  随机获取一言
+    /hitokoto help             显示帮助
+
+  指定分类：
+    /hitokoto a               获取动画类一言
+    /hitokoto d               获取文学类一言
+    /hitokoto i               获取诗词类一言
+
+⚠️ 注意事项
+  • 每次调用都会实时获取最新数据，无缓存
+  • 一言内容来源于社区贡献，仅供参考
+  • 如遇问题可发送 /hitokoto help 查看帮助"""
+
+WEATHER_HELP_TEXT = """🌤️ 天气查询 使用说明
+
+📌 基本命令
+  /weather <城市名>     查询指定城市的天气
+  /weather help         显示此帮助信息
+
+📌 使用示例
+  基础用法：
+    /weather 广州市           查询广州市天气
+    /weather 北京             查询北京市天气
+    /weather 上海             查询上海市天气
+    /weather help             显示帮助
+
+📌 返回信息
+  • 当前城市名称
+  • 未来3天天气预报
+  • 温度、天气状况、风力等信息
+
+⚠️ 注意事项
+  • 请输入正确的城市名称（支持中文）
+  • 每次查询都会实时获取最新数据，无缓存
+  • 数据来源于第三方API，仅供参考
+  • 如遇问题可发送 /weather help 查看帮助"""
 
 
 class PixivAPIClient:
@@ -210,6 +280,118 @@ class CommandParser:
         return params
 
 
+class HitokotoAPIClient:
+    def __init__(self, timeout: int = 10):
+        self._timeout = aiohttp.ClientTimeout(total=timeout)
+        self._headers = {
+            "User-Agent": "AstrBot-Hitokoto-Plugin/1.0",
+            "Accept": "application/json",
+        }
+
+    async def fetch_hitokoto(
+        self,
+        category: Optional[str] = None,
+        min_length: int = 0,
+        max_length: int = 30,
+    ) -> Dict[str, Any]:
+        params = {
+            "encode": "json",
+            "min_length": min_length,
+            "max_length": max_length,
+        }
+        if category and category.lower() in HITOKOTO_CATEGORIES:
+            params["c"] = category.lower()
+
+        logger.debug(f"Fetching hitokoto with params: {params}")
+
+        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+            try:
+                async with session.get(HITOKOTO_API_URL, params=params) as resp:
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        logger.error(f"Hitokoto API returned status {resp.status}: {error_text[:500]}")
+                        raise HitokotoAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+
+                    data = await resp.json()
+                    logger.debug(f"Hitokoto API response: {data}")
+
+                    if not isinstance(data, dict) or "hitokoto" not in data:
+                        logger.warning(f"Unexpected hitokoto response format: {data}")
+                        raise HitokotoAPIError("API 返回数据格式异常")
+
+                    return {
+                        "text": data.get("hitokoto", ""),
+                        "from": data.get("from", ""),
+                        "type": data.get("type", ""),
+                        "category_name": HITOKOTO_CATEGORIES.get(data.get("type", ""), "未知"),
+                    }
+
+            except aiohttp.ClientError as e:
+                logger.error(f"Hitokoto network error: {e}")
+                raise HitokotoAPIError(f"网络请求失败: {str(e)}", status_code=0) from e
+            except asyncio.TimeoutError:
+                logger.error("Hitokoto request timeout")
+                raise HitokotoAPIError("API 请求超时，请稍后再试", status_code=0)
+
+
+class WeatherAPIClient:
+    def __init__(self, timeout: int = 15):
+        self._timeout = aiohttp.ClientTimeout(total=timeout)
+        self._headers = {
+            "User-Agent": "AstrBot-Weather-Plugin/1.0",
+            "Accept": "application/json",
+        }
+
+    async def fetch_weather(self, city: str) -> Dict[str, Any]:
+        if not city or not city.strip():
+            raise WeatherAPIError("城市名称不能为空")
+
+        params = {
+            "dz": city.strip(),
+            "return": "json",
+        }
+
+        logger.debug(f"Fetching weather for city: {city}")
+
+        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+            try:
+                async with session.get(WEATHER_API_URL, params=params) as resp:
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        logger.error(f"Weather API returned status {resp.status}: {error_text[:500]}")
+                        raise WeatherAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+
+                    content_type = resp.headers.get("Content-Type", "")
+                    if "json" not in content_type:
+                        text_data = await resp.text()
+                        logger.debug(f"Weather API returned text format: {text_data[:500]}")
+                        return {"type": "text", "data": text_data}
+
+                    data = await resp.json()
+                    logger.debug(f"Weather API JSON response: {data}")
+
+                    return {"type": "json", "data": data, "city": city}
+
+            except aiohttp.ClientError as e:
+                logger.error(f"Weather network error: {e}")
+                raise WeatherAPIError(f"网络请求失败: {str(e)}", status_code=0) from e
+            except asyncio.TimeoutError:
+                logger.error("Weather request timeout")
+                raise WeatherAPIError("API 请求超时，请稍后再试", status_code=0)
+
+
+class HitokotoAPIError(Exception):
+    def __init__(self, message: str, status_code: int = 0):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class WeatherAPIError(Exception):
+    def __init__(self, message: str, status_code: int = 0):
+        super().__init__(message)
+        self.status_code = status_code
+
+
 class PixivAPIError(Exception):
     def __init__(self, message: str, status_code: int = 0):
         super().__init__(message)
@@ -234,11 +416,171 @@ class PixivPlugin(Star):
         self._request_timeout = int(config.get("request_timeout", 15))
 
         self._api_client = PixivAPIClient(timeout=self._request_timeout)
+        self._hitokoto_client = HitokotoAPIClient(timeout=self._request_timeout)
+        self._weather_client = WeatherAPIClient(timeout=self._request_timeout)
 
         logger.info(
             f"PixivPlugin initialized: r18={self._default_r18}, num={self._default_num}, "
             f"size={self._default_size}, proxy={self._image_proxy}, excludeAI={self._exclude_ai}"
         )
+
+    @filter.command("hitokoto")
+    async def hitokoto_command(self, event: AstrMessageEvent):
+        user_name = event.get_sender_name()
+        message_str = event.message_str.strip()
+
+        logger.debug(f"[Hitokoto] 收到消息: '{message_str}' from {user_name}")
+
+        if self._is_help_command(message_str):
+            logger.info(f"[Hitokoto] Help command triggered by {user_name}")
+            yield event.plain_result(HITOKOTO_HELP_TEXT)
+            return
+
+        try:
+            category = self._parse_hitokoto_params(message_str)
+            logger.info(f"[Hitokoto] Fetching for user {user_name}, category={category}")
+
+            result = await self._hitokoto_client.fetch_hitokoto(category=category)
+
+            response_text = self._format_hitokoto_response(result)
+            logger.info(f"[Hitokoto] Successfully fetched hitokoto for {user_name}")
+            yield event.plain_result(response_text)
+
+        except HitokotoAPIError as e:
+            logger.error(f"[Hitokoto] API error for user {user_name}: {e}")
+            error_msg = f"❌ 获取一言失败\n📝 错误信息：{str(e)}"
+            if e.status_code:
+                error_msg += f"\n🔢 状态码：{e.status_code}"
+            error_msg += "\n💡 请稍后重试或发送 /hitokoto help 查看帮助"
+            yield event.plain_result(error_msg)
+        except Exception as e:
+            logger.error(f"[Hitokoto] Unexpected error for user {user_name}: {e}", exc_info=True)
+            yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试")
+
+    def _parse_hitokoto_params(self, message: str) -> Optional[str]:
+        cleaned = re.sub(r'^[/!！]\s*hitokoto\s*', '', message.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^hitokoto\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+        cleaned = cleaned.strip()
+
+        if not cleaned or cleaned.lower() in ('help', '-h', '--help', '帮助'):
+            return None
+
+        category = cleaned.lower()
+        if category in HITOKOTO_CATEGORIES:
+            return category
+        return None
+
+    def _format_hitokoto_response(self, result: Dict[str, Any]) -> str:
+        text = result.get("text", "")
+        source = result.get("from", "未知来源")
+        category = result.get("category_name", "未知")
+
+        response_parts = [
+            f"✨ 每日一言",
+            f"",
+            f"「{text}」",
+            f"",
+            f"—— {source}",
+            f"📂 分类：{category}",
+        ]
+
+        return "\n".join(response_parts)
+
+    @filter.command("weather")
+    async def weather_command(self, event: AstrMessageEvent):
+        user_name = event.get_sender_name()
+        message_str = event.message_str.strip()
+
+        logger.debug(f"[Weather] 收到消息: '{message_str}' from {user_name}")
+
+        if self._is_help_command(message_str):
+            logger.info(f"[Weather] Help command triggered by {user_name}")
+            yield event.plain_result(WEATHER_HELP_TEXT)
+            return
+
+        try:
+            city = self._parse_weather_params(message_str)
+            if not city:
+                yield event.plain_result("❌ 请指定城市名称\n💡 用法：/weather 广州市\n💡 发送 /weather help 查看帮助")
+                return
+
+            logger.info(f"[Weather] Fetching weather for user {user_name}, city={city}")
+
+            result = await self._weather_client.fetch_weather(city)
+
+            response_text = self._format_weather_response(result)
+            logger.info(f"[Weather] Successfully fetched weather for {user_name}, city={city}")
+            yield event.plain_result(response_text)
+
+        except WeatherAPIError as e:
+            logger.error(f"[Weather] API error for user {user_name}: {e}")
+            error_msg = f"❌ 查询天气失败\n📝 错误信息：{str(e)}"
+            if e.status_code:
+                error_msg += f"\n🔢 状态码：{e.status_code}"
+            error_msg += "\n💡 请稍后重试或检查城市名称是否正确"
+            yield event.plain_result(error_msg)
+        except Exception as e:
+            logger.error(f"[Weather] Unexpected error for user {user_name}: {e}", exc_info=True)
+            yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试")
+
+    def _parse_weather_params(self, message: str) -> Optional[str]:
+        cleaned = re.sub(r'^[/!！]\s*weather\s*', '', message.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^weather\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+        cleaned = cleaned.strip()
+
+        if not cleaned or cleaned.lower() in ('help', '-h', '--help', '帮助'):
+            return None
+
+        return cleaned if cleaned else None
+
+    def _format_weather_response(self, result: Dict[str, Any]) -> str:
+        response_type = result.get("type", "text")
+
+        if response_type == "text":
+            text_data = result.get("data", "")
+            return f"🌤️ 天气查询\n\n{text_data}"
+
+        data = result.get("data", {})
+        city = result.get("city", "未知城市")
+
+        if isinstance(data, dict):
+            response_parts = [f"🌤️ {city} 天气预报"]
+
+            if "city" in data:
+                response_parts.append(f"\n📍 城市：{data['city']}")
+
+            if "update_time" in data:
+                response_parts.append(f"⏰ 更新时间：{data['update_time']}")
+
+            if "forecast" in data and isinstance(data["forecast"], list):
+                response_parts.append("\n📅 未来天气预报：")
+                for forecast in data["forecast"][:3]:
+                    date = forecast.get("date", "")
+                    weather = forecast.get("weather", "")
+                    temp = forecast.get("temperature", "")
+                    wind = forecast.get("wind", "")
+
+                    day_info = f"\n📆 {date}" if date else ""
+                    weather_info = f"☁️ 天气：{weather}" if weather else ""
+                    temp_info = f"🌡️ 温度：{temp}" if temp else ""
+                    wind_info = f"💨 风力：{wind}" if wind else ""
+
+                    response_parts.append(f"{day_info}  {weather_info}  {temp_info}  {wind_info}")
+
+            elif "weather" in data or "temperature" in data:
+                weather = data.get("weather", "")
+                temperature = data.get("temperature", "")
+                wind = data.get("wind", "")
+                humidity = data.get("humidity", "")
+
+                response_parts.append(f"\n☁️ 天气状况：{weather}" if weather else "")
+                response_parts.append(f"🌡️ 温度：{temperature}" if temperature else "")
+                response_parts.append(f"💨 风力：{wind}" if wind else "")
+                response_parts.append(f"💧 湿度：{humidity}" if humidity else "")
+
+            return "\n".join([p for p in response_parts if p])
+
+        return f"🌤️ {city} 天气信息\n\n{str(data)}"
 
     @filter.command("pixiv")
     async def pixiv_command(self, event: AstrMessageEvent):
