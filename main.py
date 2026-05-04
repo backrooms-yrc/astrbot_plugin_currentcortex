@@ -12,6 +12,7 @@ from astrbot.api import logger, AstrBotConfig
 API_BASE_URL = "https://api.bileizhen.top/api/pixiv"
 HITOKOTO_API_URL = "https://api.bileizhen.top/api/one"
 WEATHER_API_URL = "https://api.bileizhen.top/api/weather"
+FEMBOY_API_URL = "https://api.bileizhen.top/api/femboy"
 PIXIV_ARTWORK_URL = "https://www.pixiv.net/artworks/{}"
 
 HITOKOTO_CATEGORIES = {
@@ -135,6 +136,34 @@ WEATHER_HELP_TEXT = """🌤️ 天气查询 使用说明
   • 每次查询都会实时获取最新数据，无缓存
   • 数据来源于第三方API，仅供参考
   • 如遇问题可发送 /weather help 查看帮助"""
+
+
+FEMBOY_HELP_TEXT = """👗 男娘图片 使用说明
+
+📌 基本命令
+  /femboy              获取一张随机男娘图片（WebP 格式）
+  /femboy help         显示此帮助信息
+
+📌 功能特点
+  • 随机返回南梁（男娘）主题图片
+  • 图片格式为 WebP，加载速度快
+  • 显示图片来源与备注信息
+  • 无需任何参数，开箱即用
+
+📌 使用示例
+  基础用法：
+    /femboy                  获取随机男娘图片
+    /femboy help             显示帮助
+
+📌 返回信息
+  • 图片内容（WebP 格式）
+  • 图片来源信息
+  • 备注说明（如有）
+
+⚠️ 注意事项
+  • 图片来源于社区上传，仅供娱乐
+  • 每次调用都会实时获取随机图片
+  • 如遇问题可发送 /femboy help 查看帮助"""
 
 
 class PixivAPIClient:
@@ -399,6 +428,60 @@ class WeatherAPIClient:
                 raise WeatherAPIError("API 请求超时，请稍后再试", status_code=0)
 
 
+class FemboyAPIClient:
+    def __init__(self, timeout: int = 15):
+        self._timeout = aiohttp.ClientTimeout(total=timeout)
+        self._headers = {
+            "User-Agent": "AstrBot-Femboy-Plugin/1.0",
+            "Accept": "application/json, image/*",
+        }
+
+    async def fetch_femboy_image(self) -> Dict[str, Any]:
+        logger.debug("Fetching random femboy image")
+
+        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+            try:
+                async with session.get(FEMBOY_API_URL) as resp:
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        logger.error(f"Femboy API returned status {resp.status}: {error_text[:500]}")
+                        raise FemboyAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+
+                    content_type = resp.headers.get("Content-Type", "")
+
+                    if "image" in content_type:
+                        image_url = str(resp.url)
+                        logger.info(f"Received direct image response: {image_url}")
+                        return {"type": "redirect", "url": image_url}
+
+                    data = await resp.json()
+                    logger.debug(f"Femboy API JSON response: {data}")
+
+                    if not isinstance(data, dict):
+                        logger.warning(f"Unexpected femboy API response format: {type(data)}")
+                        raise FemboyAPIError("API 返回数据格式异常")
+
+                    if "url" not in data:
+                        logger.warning(f"Femboy API missing url field: {data}")
+                        raise FemboyAPIError("API 返回数据缺少图片链接")
+
+                    return {
+                        "type": "json",
+                        "data": {
+                            "url": data.get("url", ""),
+                            "from": data.get("from", "未知来源"),
+                            "note": data.get("note", ""),
+                        }
+                    }
+
+            except aiohttp.ClientError as e:
+                logger.error(f"Femboy network error: {e}")
+                raise FemboyAPIError(f"网络请求失败: {str(e)}", status_code=0) from e
+            except asyncio.TimeoutError:
+                logger.error("Femboy request timeout")
+                raise FemboyAPIError("API 请求超时，请稍后再试", status_code=0)
+
+
 class HitokotoAPIError(Exception):
     def __init__(self, message: str, status_code: int = 0):
         super().__init__(message)
@@ -406,6 +489,12 @@ class HitokotoAPIError(Exception):
 
 
 class WeatherAPIError(Exception):
+    def __init__(self, message: str, status_code: int = 0):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class FemboyAPIError(Exception):
     def __init__(self, message: str, status_code: int = 0):
         super().__init__(message)
         self.status_code = status_code
@@ -437,6 +526,7 @@ class PixivPlugin(Star):
         self._api_client = PixivAPIClient(timeout=self._request_timeout)
         self._hitokoto_client = HitokotoAPIClient(timeout=self._request_timeout)
         self._weather_client = WeatherAPIClient(timeout=self._request_timeout)
+        self._femboy_client = FemboyAPIClient(timeout=self._request_timeout)
 
         logger.info(
             f"PixivPlugin initialized: r18={self._default_r18}, num={self._default_num}, "
@@ -652,6 +742,69 @@ class PixivPlugin(Star):
 
         logger.info(f"[Weather] Formatted response with {len(response_parts)} parts for city: {city}")
         return final_response
+
+    @filter.command("femboy")
+    async def femboy_command(self, event: AstrMessageEvent):
+        user_name = event.get_sender_name()
+        message_str = event.message_str.strip()
+
+        logger.debug(f"[Femboy] 收到消息: '{message_str}' from {user_name}")
+
+        if self._is_help_command(message_str):
+            logger.info(f"[Femboy] Help command triggered by {user_name}")
+            yield event.plain_result(FEMBOY_HELP_TEXT)
+            return
+
+        try:
+            logger.info(f"[Femboy] Fetching image for user {user_name}")
+
+            result = await self._femboy_client.fetch_femboy_image()
+
+            response_items = await self._process_femboy_response(result, event)
+            for item in response_items:
+                yield item
+
+        except FemboyAPIError as e:
+            logger.error(f"[Femboy] API error for user {user_name}: {e}")
+            error_msg = f"❌ 获取男娘图片失败\n📝 错误信息：{str(e)}"
+            if e.status_code:
+                error_msg += f"\n🔢 状态码：{e.status_code}"
+            error_msg += "\n💡 请稍后重试或发送 /femboy help 查看帮助"
+            yield event.plain_result(error_msg)
+        except Exception as e:
+            logger.error(f"[Femboy] Unexpected error for user {user_name}: {e}", exc_info=True)
+            yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试")
+
+    async def _process_femboy_response(
+        self, result: Dict[str, Any], event: AstrMessageEvent
+    ) -> List[Any]:
+        response_type = result.get("type")
+
+        if response_type == "redirect":
+            url = result.get("url", "")
+            caption = "👗 随机男娘图片"
+            return [event.plain_result(caption), event.image_result(url)]
+
+        if response_type == "json":
+            data = result.get("data", {})
+            image_url = data.get("url", "")
+            source = data.get("from", "未知来源")
+            note = data.get("note", "")
+
+            if not image_url:
+                return [event.plain_result("⚠️ 未能获取到图片链接\n💡 请稍后重试")]
+
+            response_parts = ["👗 随机男娘图片"]
+            if source and source != "未知来源":
+                response_parts.append(f"📸 来源：{source}")
+            if note:
+                response_parts.append(f"📝 备注：{note}")
+
+            caption = "\n".join(response_parts)
+            return [event.plain_result(caption), event.image_result(image_url)]
+
+        logger.warning(f"[Femboy] Unknown response type: {response_type}")
+        return [event.plain_result("⚠️ API 返回了未知格式的数据，请联系管理员")]
 
     @filter.command("pixiv")
     async def pixiv_command(self, event: AstrMessageEvent):

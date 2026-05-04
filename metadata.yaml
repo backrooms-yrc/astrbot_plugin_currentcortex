@@ -1,6 +1,6 @@
 name: astrbot_plugin_pixiv
-display_name: Pixiv 随机图片
-desc: Pixiv 随机图片插件 - 支持通过 /pixiv 指令获取随机 Pixiv 图片（含 R18 内容），支持标签筛选、关键词搜索、多图获取等功能
+display_name: Pixiv 综合插件
+desc: Pixiv 随机图片插件 - 支持通过 /pixiv 指令获取随机 Pixiv 图片（含 R18 内容），支持标签筛选、关键词搜索、多图获取、每日一言、天气查询及男娘图片等功能
 author: AstrBot Community
-version: v1.0.0
+version: v1.1.0
 repo: https://github.com/user/astrbot_plugin_pixiv
