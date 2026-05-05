@@ -148,7 +148,7 @@ FEMBOY_HELP_TEXT = """👗 男娘图片 使用说明
   • 随机返回南梁（男娘）主题图片
   • 图片格式为 WebP，加载速度快
   • 显示图片来源与备注信息
-  • 无需任何参数，开箱即用
+  • 支持自定义 API 密钥配置
 
 📌 使用示例
   基础用法：
@@ -160,9 +160,16 @@ FEMBOY_HELP_TEXT = """👗 男娘图片 使用说明
   • 图片来源信息
   • 备注说明（如有）
 
+⚙️ 配置要求
+  ⚠️ 使用前必须配置 API 密钥：
+  1. 打开插件配置面板
+  2. 填写「femboy_api_key」字段（您的 x-api-key）
+  3. 保存配置并重启插件
+
 ⚠️ 注意事项
   • 图片来源于社区上传，仅供娱乐
   • 每次调用都会实时获取随机图片
+  • 需要有效的 API 密钥才能使用此功能
   • 如遇问题可发送 /femboy help 查看帮助"""
 
 
@@ -429,11 +436,15 @@ class WeatherAPIClient:
 
 
 class FemboyAPIClient:
-    def __init__(self, timeout: int = 15):
+    def __init__(self, api_key: str = "", timeout: int = 15):
+        if not api_key or not api_key.strip():
+            raise ValueError("API 密钥不能为空，请在插件配置中填写 femboy_api_key")
+
         self._timeout = aiohttp.ClientTimeout(total=timeout)
         self._headers = {
             "User-Agent": "AstrBot-Femboy-Plugin/1.0",
             "Accept": "application/json, image/*",
+            "x-api-key": api_key.strip(),
         }
 
     async def fetch_femboy_image(self) -> Dict[str, Any]:
@@ -522,11 +533,26 @@ class PixivPlugin(Star):
         self._image_proxy = config.get("image_proxy", "pixiv.bileizhen.top")
         self._exclude_ai = config.get("exclude_ai", False)
         self._request_timeout = int(config.get("request_timeout", 15))
+        self._femboy_api_key = config.get("femboy_api_key", "").strip()
+
+        if not self._femboy_api_key:
+            logger.warning("⚠️ 未配置男娘图片 API 密钥 (femboy_api_key)，/femboy 命令将无法使用")
+            logger.warning("请在插件配置面板中填写 femboy_api_key 字段")
+            self._femboy_client = None
+        else:
+            try:
+                self._femboy_client = FemboyAPIClient(
+                    api_key=self._femboy_api_key,
+                    timeout=self._request_timeout
+                )
+                logger.info("✅ 男娘图片 API 客户端初始化成功")
+            except ValueError as e:
+                logger.error(f"❌ 男娘图片 API 客户端初始化失败: {e}")
+                self._femboy_client = None
 
         self._api_client = PixivAPIClient(timeout=self._request_timeout)
         self._hitokoto_client = HitokotoAPIClient(timeout=self._request_timeout)
         self._weather_client = WeatherAPIClient(timeout=self._request_timeout)
-        self._femboy_client = FemboyAPIClient(timeout=self._request_timeout)
 
         logger.info(
             f"PixivPlugin initialized: r18={self._default_r18}, num={self._default_num}, "
@@ -753,6 +779,20 @@ class PixivPlugin(Star):
         if self._is_help_command(message_str):
             logger.info(f"[Femboy] Help command triggered by {user_name}")
             yield event.plain_result(FEMBOY_HELP_TEXT)
+            return
+
+        if not self._femboy_client:
+            logger.warning(f"[Femboy] API client not initialized for user {user_name}")
+            yield event.plain_result(
+                "❌ 男娘图片功能未启用\n\n"
+                "📝 原因：未配置 API 密钥\n"
+                "💡 解决方法：\n"
+                "   1. 打开插件配置面板\n"
+                "   2. 找到「男娘图片 API 密钥 (femboy_api_key)」字段\n"
+                "   3. 填写您的 x-api-key\n"
+                "   4. 保存配置并重启插件\n\n"
+                "⚠️ 配置完成后即可使用 /femboy 命令"
+            )
             return
 
         try:

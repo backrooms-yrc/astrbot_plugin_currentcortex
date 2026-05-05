@@ -34,5 +34,12 @@
         "description": "API 请求超时时间（秒）",
         "type": "int",
         "default": 15
+    },
+    "femboy_api_key": {
+        "description": "男娘图片 API 密钥 (x-api-key)",
+        "type": "string",
+        "hint": "用于访问男娘图片API的认证密钥，必填项",
+        "default": "",
+        "required": true
     }
 }
