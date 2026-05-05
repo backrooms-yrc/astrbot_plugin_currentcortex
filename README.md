@@ -1,4 +1,4 @@
-# AstrBot Pixiv 综合插件
+# AstrBot Pixiv 综合插件（回退版）
 
 基于 [LeiZ API](https://api.bileizhen.top) 开发的多功能 AstrBot 插件，提供 **Pixiv 随机图片获取**、**每日一言**、**天气查询** 及 **男娘图片获取** 等丰富功能。
 
@@ -49,25 +49,25 @@ pip install aiohttp>=3.8.0
 
 #### 基本指令
 
-| 指令 | 说明 |
-|------|------|
-| `/pixiv` | 获取一张随机全年龄图片 |
-| `/pixiv help` | 显示帮助信息 |
+| 指令            | 说明          |
+| ------------- | ----------- |
+| `/pixiv`      | 获取一张随机全年龄图片 |
+| `/pixiv help` | 显示帮助信息      |
 
 #### 参数说明
 
 使用 `key:value` 格式指定参数，多个参数用空格分隔：
 
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `r18:` | int | 0 | R18 模式：0=全年龄，1=仅R18，2=混合 |
-| `tag:` | string | - | 标签筛选，多个标签用 `\|` 分隔（OR 匹配） |
-| `keyword:` | string | - | 标题/作者/标签模糊搜索 |
-| `num:` | int | 1 | 获取数量（1-20） |
-| `size:` | string | regular | 图片尺寸：original/regular/small/thumb/mini |
-| `excludeAI:` | bool | false | 是否排除 AI 生成作品 |
-| `uid:` | int | - | 指定作者 UID |
-| `ratio:` | string | - | 长宽比筛选，如 `gt1.2lt1.8` |
+| 参数           | 类型     | 默认值     | 说明                                     |
+| ------------ | ------ | ------- | -------------------------------------- |
+| `r18:`       | int    | 0       | R18 模式：0=全年龄，1=仅R18，2=混合               |
+| `tag:`       | string | -       | 标签筛选，多个标签用 `\|` 分隔（OR 匹配）              |
+| `keyword:`   | string | -       | 标题/作者/标签模糊搜索                           |
+| `num:`       | int    | 1       | 获取数量（1-20）                             |
+| `size:`      | string | regular | 图片尺寸：original/regular/small/thumb/mini |
+| `excludeAI:` | bool   | false   | 是否排除 AI 生成作品                           |
+| `uid:`       | int    | -       | 指定作者 UID                               |
+| `ratio:`     | string | -       | 长宽比筛选，如 `gt1.2lt1.8`                   |
 
 #### 使用示例
 
@@ -104,7 +104,7 @@ pip install aiohttp>=3.8.0
 [图片]
 ```
 
----
+***
 
 ### 2️⃣ 每日一言 (`/hitokoto`)
 
@@ -112,22 +112,22 @@ pip install aiohttp>=3.8.0
 
 #### 基本指令
 
-| 指令 | 说明 |
-|------|------|
-| `/hitokoto` | 获取一条随机一言（默认全部分类） |
-| `/hitokoto <分类>` | 获取指定分类的一言 |
-| `/hitokoto help` | 显示帮助信息 |
+| 指令               | 说明               |
+| ---------------- | ---------------- |
+| `/hitokoto`      | 获取一条随机一言（默认全部分类） |
+| `/hitokoto <分类>` | 获取指定分类的一言        |
+| `/hitokoto help` | 显示帮助信息           |
 
 #### 分类选项
 
-| 代码 | 分类 | 代码 | 分类 |
-|------|------|------|------|
-| a | 动画 | g | 其他 |
-| b | 漫画 | h | 影视 |
-| c | 游戏 | i | 诗词 |
-| d | 文学 | j | 网易云 |
-| e | 原创 | k | 哲学 |
-| f | 来自网络 | l | 抖机灵 |
+| 代码 | 分类   | 代码 | 分类  |
+| -- | ---- | -- | --- |
+| a  | 动画   | g  | 其他  |
+| b  | 漫画   | h  | 影视  |
+| c  | 游戏   | i  | 诗词  |
+| d  | 文学   | j  | 网易云 |
+| e  | 原创   | k  | 哲学  |
+| f  | 来自网络 | l  | 抖机灵 |
 
 #### 使用示例
 
@@ -150,7 +150,7 @@ pip install aiohttp>=3.8.0
 📂 分类：影视
 ```
 
----
+***
 
 ### 3️⃣ 天气查询 (`/weather`)
 
@@ -158,10 +158,10 @@ pip install aiohttp>=3.8.0
 
 #### 基本指令
 
-| 指令 | 说明 |
-|------|------|
+| 指令               | 说明        |
+| ---------------- | --------- |
 | `/weather <城市名>` | 查询指定城市的天气 |
-| `/weather help` | 显示帮助信息 |
+| `/weather help`  | 显示帮助信息    |
 
 #### 使用示例
 
@@ -200,7 +200,7 @@ pip install aiohttp>=3.8.0
    💧 湿度：68%
 ```
 
----
+***
 
 ### 4️⃣ 男娘图片 (`/femboy`) ⭐ 新功能
 
@@ -208,10 +208,10 @@ pip install aiohttp>=3.8.0
 
 #### 基本指令
 
-| 指令 | 说明 |
-|------|------|
-| `/femboy` | 获取一张随机男娘图片（WebP 格式） |
-| `/femboy help` | 显示帮助信息 |
+| 指令             | 说明                  |
+| -------------- | ------------------- |
+| `/femboy`      | 获取一张随机男娘图片（WebP 格式） |
+| `/femboy help` | 显示帮助信息              |
 
 #### 功能特点
 
@@ -248,6 +248,7 @@ pip install aiohttp>=3.8.0
   - `note`: 备注说明
 
 **响应示例**:
+
 ```json
 {
   "url": "https://api.example.com/api/femboy/image/xxxx.webp",
@@ -256,30 +257,31 @@ pip install aiohttp>=3.8.0
 }
 ```
 
----
+***
 
 ## ⚙️ 配置说明
 
 在 AstrBot 管理面板中可配置以下参数（仅影响 Pixiv 功能）：
 
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `default_r18` | int | 0 | 默认 R18 模式（0=全年龄, 1=仅R18, 2=混合） |
-| `default_num` | int | 1 | 默认每次获取的图片数量（1-20） |
-| `image_proxy` | string | pixiv.bileizhen.top | 图片反代域名 |
-| `default_size` | string | regular | 默认图片尺寸（original/regular/small/thumb/mini） |
-| `exclude_ai` | bool | false | 默认是否排除 AI 生成作品 |
-| `request_timeout` | int | 15 | API 请求超时时间（秒） |
+| 配置项               | 类型     | 默认值                 | 说明                                        |
+| ----------------- | ------ | ------------------- | ----------------------------------------- |
+| `default_r18`     | int    | 0                   | 默认 R18 模式（0=全年龄, 1=仅R18, 2=混合）            |
+| `default_num`     | int    | 1                   | 默认每次获取的图片数量（1-20）                         |
+| `image_proxy`     | string | pixiv.bileizhen.top | 图片反代域名                                    |
+| `default_size`    | string | regular             | 默认图片尺寸（original/regular/small/thumb/mini） |
+| `exclude_ai`      | bool   | false               | 默认是否排除 AI 生成作品                            |
+| `request_timeout` | int    | 15                  | API 请求超时时间（秒）                             |
 
 ### 配置界面路径
 
-AstrBot 管理面板 → 插件管理 → astrbot_plugin_pixiv → 配置
+AstrBot 管理面板 → 插件管理 → astrbot\_plugin\_pixiv → 配置
 
 ## ❓ 常见问题解答 (FAQ)
 
 ### Q1: 安装后插件无法加载？
 
 **A:** 请检查：
+
 1. Python 版本是否 >= 3.10
 2. 是否已安装依赖：`pip install aiohttp>=3.8.0`
 3. AstrBot 版本是否 >= 3.4.0
@@ -288,13 +290,15 @@ AstrBot 管理面板 → 插件管理 → astrbot_plugin_pixiv → 配置
 ### Q2: Pixiv 图片无法显示？
 
 **A:** 可能原因：
+
 1. **反代域名不可用**：尝试更换 `image_proxy` 配置项
 2. **网络连接问题**：检查服务器是否能访问外网
 3. **API 服务异常**：稍后重试或联系 API 提供商
 
 ### Q3: 如何获取 R18 内容？
 
-**A:** 
+**A:**
+
 1. 在配置中将 `default_r18` 设置为 1 或 2
 2. 或在命令中使用参数：`/pixiv r18:1`
 
@@ -310,7 +314,8 @@ AstrBot 管理面板 → 插件管理 → astrbot_plugin_pixiv → 配置
 
 ### Q6: 如何排除 AI 生成的 Pixiv 作品？
 
-**A:** 
+**A:**
+
 1. 全局排除：在配置中设置 `exclude_ai` 为 `true`
 2. 单次排除：在命令中使用 `excludeAI:true`
    ```bash
@@ -319,7 +324,8 @@ AstrBot 管理面板 → 插件管理 → astrbot_plugin_pixiv → 配置
 
 ### Q7: 请求超时怎么办？
 
-**A:** 
+**A:**
+
 1. 在配置中增加 `request_timeout` 的值（单位：秒）
 2. 检查网络连接状况
 3. 如果频繁超时，可能是 API 服务繁忙，建议稍后重试
@@ -327,6 +333,7 @@ AstrBot 管理面板 → 插件管理 → astrbot_plugin_pixiv → 配置
 ### Q8: 可以同时使用多个功能吗？
 
 **A:** 可以！所有功能都是独立的，可以在同一对话中交替使用：
+
 ```bash
 /pixiv tag:白丝 num:3    # 获取 Pixiv 图片
 /hitokoto a              # 获取动画一言
@@ -340,7 +347,8 @@ AstrBot 管理面板 → 插件管理 → astrbot_plugin_pixiv → 配置
 
 ### Q10: 如何反馈 Bug 或建议功能？
 
-**A:** 
+**A:**
+
 1. 在 GitHub 仓库提交 Issue
 2. 加入 AstrBot 社区讨论
 3. 联系插件开发者
@@ -349,14 +357,14 @@ AstrBot 管理面板 → 插件管理 → astrbot_plugin_pixiv → 配置
 
 插件提供了完善的错误处理机制，当遇到问题时会显示友好的错误提示：
 
-| 错误类型 | 可能原因 | 解决方案 |
-|----------|----------|----------|
-| 网络错误 | 网络连接失败 | 检查网络连接 |
-| 请求超时 | API 响应慢 | 增加 timeout 配置或稍后重试 |
-| HTTP 错误 | API 服务异常 | 检查 API 服务状态 |
-| 参数错误 | 命令格式不正确 | 发送 `/xxx help` 查看帮助 |
-| 无结果 | 未找到匹配内容 | 更换搜索参数 |
-| 数据格式异常 | API 返回异常数据 | 联系管理员或稍后重试 |
+| 错误类型    | 可能原因       | 解决方案                |
+| ------- | ---------- | ------------------- |
+| 网络错误    | 网络连接失败     | 检查网络连接              |
+| 请求超时    | API 响应慢    | 增加 timeout 配置或稍后重试  |
+| HTTP 错误 | API 服务异常   | 检查 API 服务状态         |
+| 参数错误    | 命令格式不正确    | 发送 `/xxx help` 查看帮助 |
+| 无结果     | 未找到匹配内容    | 更换搜索参数              |
+| 数据格式异常  | API 返回异常数据 | 联系管理员或稍后重试          |
 
 ## 📊 项目结构
 
@@ -399,8 +407,8 @@ MIT License
 - [AstrBot](https://github.com/AstrBot) - 强大的聊天机器人框架
 - 所有贡献者和社区成员
 
----
+***
 
-**最后更新**: 2025-05-05  
-**版本**: v1.1.0  
+**最后更新**: 2025-05-05\
+**版本**: v1.1.0\
 **维护者**: AstrBot Community
