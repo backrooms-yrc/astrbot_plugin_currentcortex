@@ -1,8 +1,6 @@
-# AstrBot Pixiv 综合插件（回退版）
+# AstrBot Pixiv 综合插件
 
-基于 [LeiZ API](https://api.bileizhen.top) 开发的多功能 AstrBot 插件，提供 **Pixiv 随机图片获取**、**每日一言**、**天气查询** 及 **男娘图片获取** 等丰富功能。
-
-⚠️注意：新版本功能异常，此版本为最后一个可用版本。如果您安装的插件无法使用，请重新拉取此仓库。
+基于 [LeiZ API](https://api.bileizhen.top) 开发的多功能 AstrBot 插件，提供 **Pixiv 随机图片获取**、**每日一言**、**天气查询** 及 **男娘图片获取** 等功能。
 
 ## 📋 项目概述
 
@@ -10,10 +8,10 @@
 
 ### ✨ 核心特性
 
-- **🎨 Pixiv 随机图片**：一键获取随机 Pixiv 图片，支持 R18 内容、标签筛选、关键词搜索等高级功能
-- **✨ 每日一言**：获取随机一言（支持动画、漫画、游戏、文学等多分类）
+- **🎨 Pixiv 随机图片**：获取随机 Pixiv 图片，支持 R18 内容、标签筛选、关键词搜索、指定作者等
+- **✨ 每日一言**：获取随机一言（支持动画、漫画、游戏、文学等 12 种分类）
 - **🌤️ 天气查询**：实时查询城市天气信息及未来 3 天天气预报
-- **👗 男娘图片**：随机获取南梁主题图片（WebP 格式）
+- **👗 男娘图片**：随机获取男娘主题图片（需配置 API 密钥）
 - **⚡ 异步高性能**：基于 aiohttp 的异步请求，响应迅速
 - **🛡️ 完善错误处理**：网络异常、API 错误、参数错误等均有友好提示
 - **⚙️ 灵活配置**：支持在 AstrBot 管理面板中自定义默认参数
@@ -28,7 +26,7 @@
 
 ```bash
 cd AstrBot/data/plugins
-git clone https://github.com/user/astrbot_plugin_pixiv.git
+git clone https://github.com/backrooms-yrc/astrbot_plugin_pixiv.git
 ```
 
 #### 安装依赖
@@ -51,29 +49,37 @@ pip install aiohttp>=3.8.0
 
 #### 基本指令
 
-| 指令            | 说明          |
-| ------------- | ----------- |
-| `/pixiv`      | 获取一张随机全年龄图片 |
-| `/pixiv help` | 显示帮助信息      |
+| 指令 | 说明 |
+| --- | --- |
+| `/pixiv` | 获取一张随机全年龄图片 |
+| `/pixiv help` | 显示帮助信息 |
 
 #### 参数说明
 
 使用 `key:value` 格式指定参数，多个参数用空格分隔：
 
-| 参数           | 类型     | 默认值     | 说明                                     |
-| ------------ | ------ | ------- | -------------------------------------- |
-| `r18:`       | int    | 0       | R18 模式：0=全年龄，1=仅R18，2=混合               |
-| `tag:`       | string | -       | 标签筛选，多个标签用 `\|` 分隔（OR 匹配）              |
-| `keyword:`   | string | -       | 标题/作者/标签模糊搜索                           |
-| `num:`       | int    | 1       | 获取数量（1-20）                             |
-| `size:`      | string | regular | 图片尺寸：original/regular/small/thumb/mini |
-| `excludeAI:` | bool   | false   | 是否排除 AI 生成作品                           |
-| `uid:`       | int    | -       | 指定作者 UID                               |
-| `ratio:`     | string | -       | 长宽比筛选，如 `gt1.2lt1.8`                   |
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `r18:` | int | 0 | R18 模式：0=全年龄，1=仅R18，2=混合 |
+| `tag:` | string | - | 标签筛选，多个标签用 `\|` 分隔（OR 匹配），多个 tag 参数为 AND 匹配 |
+| `keyword:` | string | - | 标题/作者/标签模糊搜索 |
+| `num:` | int | 1 | 获取数量（1-20） |
+| `size:` | string | regular | 图片尺寸：original/regular/small/thumb/mini |
+| `excludeAI:` | bool | false | 是否排除 AI 生成作品 |
+| `uid:` | int | - | 指定作者 UID |
+| `ratio:` | string | - | 长宽比筛选，如 `gt1.2lt1.8` |
+
+#### 快捷语法
+
+| 快捷词 | 等同于 |
+| --- | --- |
+| `r18` | `r18:1` |
+| `mixed` | `r18:2` |
+| `safe` / `sfw` | `r18:0` |
 
 #### 使用示例
 
-```bash
+```
 # 基础用法
 /pixiv                          # 随机全年龄图片
 /pixiv r18:1                    # 随机 R18 图片
@@ -89,9 +95,9 @@ pip install aiohttp>=3.8.0
 /pixiv r18:2 tag:白丝 keyword:初音ミク num:3 size:original
 
 # 快捷语法
-/pixiv r18        # 等同于 r18:1
-/pixiv mixed      # 等同于 r18:2
-/pixiv safe       # 等同于 r18:0
+/pixiv r18                      # 等同于 r18:1
+/pixiv mixed                    # 等同于 r18:2
+/pixiv safe                     # 等同于 r18:0
 ```
 
 #### 返回结果示例
@@ -106,7 +112,7 @@ pip install aiohttp>=3.8.0
 [图片]
 ```
 
-***
+---
 
 ### 2️⃣ 每日一言 (`/hitokoto`)
 
@@ -114,31 +120,31 @@ pip install aiohttp>=3.8.0
 
 #### 基本指令
 
-| 指令               | 说明               |
-| ---------------- | ---------------- |
-| `/hitokoto`      | 获取一条随机一言（默认全部分类） |
-| `/hitokoto <分类>` | 获取指定分类的一言        |
-| `/hitokoto help` | 显示帮助信息           |
+| 指令 | 说明 |
+| --- | --- |
+| `/hitokoto` | 获取一条随机一言（默认全部分类） |
+| `/hitokoto <分类代码>` | 获取指定分类的一言 |
+| `/hitokoto help` | 显示帮助信息 |
 
 #### 分类选项
 
-| 代码 | 分类   | 代码 | 分类  |
-| -- | ---- | -- | --- |
-| a  | 动画   | g  | 其他  |
-| b  | 漫画   | h  | 影视  |
-| c  | 游戏   | i  | 诗词  |
-| d  | 文学   | j  | 网易云 |
-| e  | 原创   | k  | 哲学  |
-| f  | 来自网络 | l  | 抖机灵 |
+| 代码 | 分类 | 代码 | 分类 |
+| --- | --- | --- | --- |
+| a | 动画 | g | 其他 |
+| b | 漫画 | h | 影视 |
+| c | 游戏 | i | 诗词 |
+| d | 文学 | j | 网易云 |
+| e | 原创 | k | 哲学 |
+| f | 来自网络 | l | 抖机灵 |
 
 #### 使用示例
 
-```bash
+```
 /hitokoto                  # 随机获取一言
 /hitokoto a               # 获取动画类一言
 /hitokoto d               # 获取文学类一言
 /hitokoto i               # 获取诗词类一言
-/hitokoto help             # 显示帮助
+/hitokoto help            # 显示帮助
 ```
 
 #### 返回结果示例
@@ -152,7 +158,7 @@ pip install aiohttp>=3.8.0
 📂 分类：影视
 ```
 
-***
+---
 
 ### 3️⃣ 天气查询 (`/weather`)
 
@@ -160,14 +166,14 @@ pip install aiohttp>=3.8.0
 
 #### 基本指令
 
-| 指令               | 说明        |
-| ---------------- | --------- |
+| 指令 | 说明 |
+| --- | --- |
 | `/weather <城市名>` | 查询指定城市的天气 |
-| `/weather help`  | 显示帮助信息    |
+| `/weather help` | 显示帮助信息 |
 
 #### 使用示例
 
-```bash
+```
 /weather 广州市           # 查询广州市天气
 /weather 北京             # 查询北京市天气
 /weather 上海             # 查询上海市天气
@@ -202,30 +208,28 @@ pip install aiohttp>=3.8.0
    💧 湿度：68%
 ```
 
-***
+---
 
-### 4️⃣ 男娘图片 (`/femboy`) ⭐ 新功能
+### 4️⃣ 男娘图片 (`/femboy`)
 
-通过 LeiZ Femboy API 随机获取南梁（男娘）主题图片，无需任何参数，开箱即用。
+通过 LeiZ Femboy API 随机获取男娘主题图片。
+
+> ⚠️ **使用前必须配置 API 密钥**，详见下方配置说明。
 
 #### 基本指令
 
-| 指令             | 说明                  |
-| -------------- | ------------------- |
-| `/femboy`      | 获取一张随机男娘图片（WebP 格式） |
-| `/femboy help` | 显示帮助信息              |
+| 指令 | 说明 |
+| --- | --- |
+| `/femboy` | 获取一张随机男娘图片（WebP 格式） |
+| `/femboy help` | 显示帮助信息 |
 
-#### 功能特点
+#### 配置要求
 
-- ✅ **随机返回**南梁（男娘）主题图片
-- ✅ **WebP 格式**，加载速度快，节省带宽
-- ✅ **显示来源**与备注信息
-- ✅ **无需参数**，简单易用
-- ✅ **实时获取**，每次调用都是新图片
+使用此功能前，需要在插件配置面板中填写 `femboy_api_key`（x-api-key）。未配置时调用命令会提示错误。
 
 #### 使用示例
 
-```bash
+```
 /femboy                  # 获取随机男娘图片
 /femboy help             # 显示帮助
 ```
@@ -239,134 +243,80 @@ pip install aiohttp>=3.8.0
 [图片]
 ```
 
-#### API 技术细节
-
-- **API 端点**: `GET https://api.bileizhen.top/api/femboy`
-- **请求方式**: GET（无需参数）
-- **响应格式**: JSON
-- **核心字段**:
-  - `url`: 图片 URL（WebP 格式）
-  - `from`:图片来源信息
-  - `note`: 备注说明
-
-**响应示例**:
-
-```json
-{
-  "url": "https://api.example.com/api/femboy/image/xxxx.webp",
-  "from": "网络收集",
-  "note": "示例备注"
-}
-```
-
-***
+---
 
 ## ⚙️ 配置说明
 
-在 AstrBot 管理面板中可配置以下参数（仅影响 Pixiv 功能）：
+在 AstrBot 管理面板中可配置以下参数：
 
-| 配置项               | 类型     | 默认值                 | 说明                                        |
-| ----------------- | ------ | ------------------- | ----------------------------------------- |
-| `default_r18`     | int    | 0                   | 默认 R18 模式（0=全年龄, 1=仅R18, 2=混合）            |
-| `default_num`     | int    | 1                   | 默认每次获取的图片数量（1-20）                         |
-| `image_proxy`     | string | pixiv.bileizhen.top | 图片反代域名                                    |
-| `default_size`    | string | regular             | 默认图片尺寸（original/regular/small/thumb/mini） |
-| `exclude_ai`      | bool   | false               | 默认是否排除 AI 生成作品                            |
-| `request_timeout` | int    | 15                  | API 请求超时时间（秒）                             |
+**路径**：AstrBot 管理面板 → 插件管理 → astrbot\_plugin\_pixiv → 配置
 
-### 配置界面路径
+### Pixiv 相关配置
 
-AstrBot 管理面板 → 插件管理 → astrbot\_plugin\_pixiv → 配置
+| 配置项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `default_r18` | int | 0 | 默认 R18 模式（0=全年龄, 1=仅R18, 2=混合） |
+| `default_num` | int | 1 | 默认每次获取的图片数量（1-20） |
+| `image_proxy` | string | pixiv.bileizhen.top | 图片反代域名 |
+| `default_size` | string | regular | 默认图片尺寸（original/regular/small/thumb/mini） |
+| `exclude_ai` | bool | false | 默认是否排除 AI 生成作品 |
 
-## ❓ 常见问题解答 (FAQ)
+### 通用配置
 
-### Q1: 安装后插件无法加载？
+| 配置项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `request_timeout` | int | 15 | API 请求超时时间（秒），影响所有功能 |
+| `femboy_api_key` | string | （空） | 男娘图片 API 密钥（x-api-key），**必填**才能使用 `/femboy` |
 
-**A:** 请检查：
+## ❓ 常见问题
 
+### Q: 安装后插件无法加载？
+
+请检查：
 1. Python 版本是否 >= 3.10
 2. 是否已安装依赖：`pip install aiohttp>=3.8.0`
 3. AstrBot 版本是否 >= 3.4.0
 4. 查看 AstrBot 日志中的错误信息
 
-### Q2: Pixiv 图片无法显示？
+### Q: Pixiv 图片无法显示？
 
-**A:** 可能原因：
-
+可能原因：
 1. **反代域名不可用**：尝试更换 `image_proxy` 配置项
 2. **网络连接问题**：检查服务器是否能访问外网
-3. **API 服务异常**：稍后重试或联系 API 提供商
+3. **API 服务异常**：稍后重试
 
-### Q3: 如何获取 R18 内容？
+### Q: `/femboy` 提示功能未启用？
 
-**A:**
+需要在插件配置面板中填写 `femboy_api_key` 字段（您的 x-api-key），保存配置后重启插件即可。
 
-1. 在配置中将 `default_r18` 设置为 1 或 2
-2. 或在命令中使用参数：`/pixiv r18:1`
+### Q: 如何排除 AI 生成的 Pixiv 作品？
 
-**⚠️ 注意：R18 内容仅供成年用户使用，请遵守相关法律法规**
+两种方式：
+1. **全局排除**：在配置中设置 `exclude_ai` 为 `true`
+2. **单次排除**：在命令中使用 `excludeAI:true`，如 `/pixiv tag:萝莉 excludeAI:true`
 
-### Q4: 男娘图片功能需要额外配置吗？
-
-**A:** 不需要！`/femboy` 命令即插即用，无需任何配置或参数。
-
-### Q5: 天气查询支持哪些城市？
-
-**A:** 支持中国主要城市及部分国际城市，建议使用中文城市名称（如"广州市"、"北京市"）。如遇不支持的城市，会返回错误提示。
-
-### Q6: 如何排除 AI 生成的 Pixiv 作品？
-
-**A:**
-
-1. 全局排除：在配置中设置 `exclude_ai` 为 `true`
-2. 单次排除：在命令中使用 `excludeAI:true`
-   ```bash
-   /pixiv tag:萝莉 excludeAI:true
-   ```
-
-### Q7: 请求超时怎么办？
-
-**A:**
+### Q: 请求超时怎么办？
 
 1. 在配置中增加 `request_timeout` 的值（单位：秒）
 2. 检查网络连接状况
 3. 如果频繁超时，可能是 API 服务繁忙，建议稍后重试
 
-### Q8: 可以同时使用多个功能吗？
+### Q: 天气查询支持哪些城市？
 
-**A:** 可以！所有功能都是独立的，可以在同一对话中交替使用：
-
-```bash
-/pixiv tag:白丝 num:3    # 获取 Pixiv 图片
-/hitokoto a              # 获取动画一言
-/weather 广州            # 查询广州天气
-/femboy                  # 获取男娘图片
-```
-
-### Q9: 插件的更新频率如何？
-
-**A:** 本插件会持续维护和更新，建议定期检查更新以获取最新功能和修复。
-
-### Q10: 如何反馈 Bug 或建议功能？
-
-**A:**
-
-1. 在 GitHub 仓库提交 Issue
-2. 加入 AstrBot 社区讨论
-3. 联系插件开发者
+支持中国主要城市，建议使用中文城市名称（如"广州市"、"北京"）。城市名称最长 50 个字符。
 
 ## 🔧 错误处理
 
-插件提供了完善的错误处理机制，当遇到问题时会显示友好的错误提示：
+插件对各类异常均有友好提示：
 
-| 错误类型    | 可能原因       | 解决方案                |
-| ------- | ---------- | ------------------- |
-| 网络错误    | 网络连接失败     | 检查网络连接              |
-| 请求超时    | API 响应慢    | 增加 timeout 配置或稍后重试  |
-| HTTP 错误 | API 服务异常   | 检查 API 服务状态         |
-| 参数错误    | 命令格式不正确    | 发送 `/xxx help` 查看帮助 |
-| 无结果     | 未找到匹配内容    | 更换搜索参数              |
-| 数据格式异常  | API 返回异常数据 | 联系管理员或稍后重试          |
+| 错误类型 | 可能原因 | 解决方案 |
+| --- | --- | --- |
+| 网络错误 | 网络连接失败 | 检查网络连接 |
+| 请求超时 | API 响应慢 | 增加 timeout 配置或稍后重试 |
+| HTTP 错误 | API 服务异常 | 检查 API 服务状态 |
+| 参数错误 | 命令格式不正确 | 发送 `/xxx help` 查看帮助 |
+| 无结果 | 未找到匹配内容 | 更换搜索参数 |
+| 数据格式异常 | API 返回异常数据 | 稍后重试 |
 
 ## 📊 项目结构
 
@@ -376,28 +326,28 @@ astrbot_plugin_pixiv/
 ├── metadata.yaml        # 插件元数据
 ├── _conf_schema.json    # 配置模式定义
 ├── requirements.txt     # Python 依赖
-├── README.md           # 项目文档
-└── .gitignore          # Git 忽略规则
+├── README.md            # 项目文档
+└── .gitignore           # Git 忽略规则
 ```
 
 ## 🛠️ 技术架构
 
 ### 核心模块
 
-- **PixivAPIClient**: Pixiv API 客户端，负责图片获取和数据处理
-- **HitokotoAPIClient**: 一言 API 客户端，负责一言内容获取
-- **WeatherAPIClient**: 天气 API 客户端，负责天气数据获取
-- **FemboyAPIClient**: 男娘图片 API 客户端，负责随机图片获取
-- **CommandParser**: 命令解析器，处理用户输入的参数
-- **PixivPlugin(Star)**: 主插件类，集成所有功能并注册命令
+- **PixivAPIClient**：Pixiv API 客户端，支持 GET/POST 请求，处理重定向和 JSON 响应
+- **HitokotoAPIClient**：一言 API 客户端，支持分类筛选
+- **WeatherAPIClient**：天气 API 客户端，解析当前天气和未来预报
+- **FemboyAPIClient**：男娘图片 API 客户端，需 x-api-key 认证
+- **CommandParser**：命令解析器，支持 `key:value` 格式参数和快捷语法
+- **PixivPlugin(Star)**：主插件类，集成所有功能并注册命令
 
 ### 设计特点
 
-- **异步架构**：基于 asyncio 和 aiohttp，高性能非阻塞 I/O
-- **模块化设计**：各功能独立封装，易于维护和扩展
+- **异步架构**：基于 asyncio 和 aiohttp，非阻塞 I/O
+- **单文件设计**：所有功能集中在 `main.py`，部署简单
 - **统一接口**：所有 API 客户端遵循相同的设计模式
 - **完善日志**：详细的调试和错误日志，便于排查问题
-- **健壮性**：全面的异常处理和边界情况考虑
+- **健壮性**：全面的异常处理和参数校验
 
 ## 📄 开源协议
 
@@ -405,12 +355,10 @@ MIT License
 
 ## 🙏 致谢
 
-- [LeiZ API](https://api.bileizhen.top) - 提供 Pixiv、一言、天气、男娘图片等 API 服务
-- [AstrBot](https://github.com/AstrBot) - 强大的聊天机器人框架
-- 所有贡献者和社区成员
+- [LeiZ API](https://api.bileizhen.top) — 提供 Pixiv、一言、天气、男娘图片等 API 服务
+- [AstrBot](https://github.com/AstrBot) — 聊天机器人框架
 
-***
+---
 
-**最后更新**: 2025-05-05\
-**版本**: v1.1.0\
-**维护者**: AstrBot Community
+**版本**：v1.1.0
+**仓库**：[GitHub](https://github.com/backrooms-yrc/astrbot_plugin_pixiv)
