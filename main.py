@@ -8,26 +8,9 @@ from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger, AstrBotConfig
 
-# 尝试导入 Record 消息段（用于发送语音消息/QQ语音条）
-_RECORD_AVAILABLE = False
-Record = None
-try:
-    from astrbot.api.message_components import Record
-    _RECORD_AVAILABLE = True
-except ImportError:
-    pass
-if not _RECORD_AVAILABLE:
-    try:
-        from astrbot.core.message.components import Record
-        _RECORD_AVAILABLE = True
-    except ImportError:
-        pass
-if not _RECORD_AVAILABLE:
-    try:
-        from nakuru.entities.components import Record
-        _RECORD_AVAILABLE = True
-    except ImportError:
-        pass
+import os
+import tempfile
+import astrbot.api.message_components as Comp
 
 
 API_BASE_URL = "https://api.bileizhen.top/api/pixiv"
@@ -1019,7 +1002,7 @@ class PixivPlugin(Star):
                 song_id = id_match.group(1)
                 logger.info(f"[Music] Fetching song by ID {song_id} for user {user_name}")
                 song_data = await self._netease_client.get_song(song_id)
-                response_items = self._format_song_response(song_data, event)
+                response_items = await self._format_song_response(song_data, event)
                 for item in response_items:
                     yield item
                 return
@@ -1051,7 +1034,7 @@ class PixivPlugin(Star):
                 return
 
             song_data = await self._netease_client.get_song(song_id)
-            response_items = self._format_song_response(song_data, event)
+            response_items = await self._format_song_response(song_data, event)
             for item in response_items:
                 yield item
 
@@ -1076,7 +1059,7 @@ class PixivPlugin(Star):
 
         return cleaned
 
-    def _format_song_response(self, song_data: Dict[str, Any], event: AstrMessageEvent) -> List[Any]:
+    async def _format_song_response(self, song_data: Dict[str, Any], event: AstrMessageEvent) -> List[Any]:
         name = song_data.get("name", "未知歌曲")
         artists = song_data.get("artists", "未知艺术家")
         album = song_data.get("album", "")
@@ -1117,19 +1100,56 @@ class PixivPlugin(Star):
         if pic_url:
             results.append(event.image_result(pic_url))
 
-        # 如果有播放链接且 Record 消息段可用，发送语音消息（在QQ中会自动解析为语音条）
-        if url and Record is not None and _RECORD_AVAILABLE:
+        # 如果有播放链接，尝试下载音频并通过 Comp.Record 发送语音条
+        if url:
             try:
-                record_msg = Record(url=url)
-                if hasattr(event, 'chain_result'):
-                    results.append(event.chain_result([record_msg]))
-                    logger.info(f"[Music] 已添加语音消息: {name}")
-                else:
-                    logger.debug("[Music] event 不支持 chain_result，跳过语音发送")
+                local_path = await self._download_audio_to_temp(url, name)
+                if local_path:
+                    record_comp = Comp.Record(file=local_path, url=local_path)
+                    results.append(event.chain_result([record_comp]))
+                    logger.info(f"[Music] 已添加语音消息: {name} -> {local_path}")
             except Exception as e:
-                logger.warning(f"[Music] 发送语音消息失败: {e}，跳过语音发送")
+                logger.warning(f"[Music] 发送语音消息失败: {e}，仅发送文本链接")
 
         return results
+
+    async def _download_audio_to_temp(self, url: str, name: str) -> Optional[str]:
+        """下载音频文件到临时目录，返回本地文件路径"""
+        try:
+            # 确定文件扩展名
+            ext = ".mp3"
+            if ".flac" in url.lower():
+                ext = ".flac"
+            elif ".wav" in url.lower():
+                ext = ".wav"
+            elif ".m4a" in url.lower():
+                ext = ".m4a"
+
+            # 创建临时目录
+            temp_dir = os.path.join(tempfile.gettempdir(), "astrbot_music")
+            os.makedirs(temp_dir, exist_ok=True)
+
+            # 生成安全的文件名
+            safe_name = re.sub(r'[^\w\-.]', '_', name)[:50]
+            temp_path = os.path.join(temp_dir, f"{safe_name}{ext}")
+
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url) as resp:
+                    if resp.status != 200:
+                        logger.warning(f"[Music] 下载音频失败: HTTP {resp.status}")
+                        return None
+
+                    with open(temp_path, 'wb') as f:
+                        async for chunk in resp.content.iter_chunked(8192):
+                            f.write(chunk)
+
+            logger.debug(f"[Music] 音频已下载到: {temp_path}")
+            return temp_path
+
+        except Exception as e:
+            logger.warning(f"[Music] 下载音频异常: {e}")
+            return None
 
     def _format_search_results(self, songs: List[Dict[str, Any]], query: str) -> str:
         parts = [f"🔍 搜索「{query}」结果：\n"]
