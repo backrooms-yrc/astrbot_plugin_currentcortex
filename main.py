@@ -13,6 +13,8 @@ API_BASE_URL = "https://api.bileizhen.top/api/pixiv"
 HITOKOTO_API_URL = "https://api.bileizhen.top/api/one"
 WEATHER_API_URL = "https://api.bileizhen.top/api/weather"
 FEMBOY_API_URL = "https://api.bileizhen.top/api/femboy"
+NETEASE_API_URL = "https://api.bileizhen.top/api/netease"
+NETEASE_SEARCH_URL = "https://api.bileizhen.top/api/netease/search"
 PIXIV_ARTWORK_URL = "https://www.pixiv.net/artworks/{}"
 
 HITOKOTO_CATEGORIES = {
@@ -136,6 +138,38 @@ WEATHER_HELP_TEXT = """🌤️ 天气查询 使用说明
   • 每次查询都会实时获取最新数据，无缓存
   • 数据来源于第三方API，仅供参考
   • 如遇问题可发送 /weather help 查看帮助"""
+
+
+MUSIC_HELP_TEXT = """🎵 网易云音乐 使用说明
+
+📌 基本命令
+  /music <歌曲名>       搜索并获取歌曲信息（点歌）
+  /music id:<歌曲ID>    通过歌曲ID获取详细信息
+  /music search <关键词> 搜索歌曲列表
+  /music help           显示此帮助信息
+
+📌 使用示例
+  点歌（搜索并返回第一首）：
+    /music 孤勇者              搜索并获取「孤勇者」
+    /music 周杰伦 晴天         搜索「周杰伦 晴天」
+
+  通过ID获取：
+    /music id:1901371647       获取指定ID的歌曲信息
+
+  搜索歌曲列表：
+    /music search 陈奕迅       搜索陈奕迅相关歌曲列表
+
+📌 返回信息
+  • 歌曲名称、艺术家、专辑
+  • 专辑封面图片
+  • 音质信息（码率、格式）
+  • 播放链接
+
+⚠️ 注意事项
+  • 部分VIP歌曲可能无法获取播放链接
+  • 播放链接有时效性，请及时使用
+  • 数据来源于网易云音乐，仅供个人试听
+  • 如遇问题可发送 /music help 查看帮助"""
 
 
 FEMBOY_HELP_TEXT = """👗 男娘图片 使用说明
@@ -493,6 +527,99 @@ class FemboyAPIClient:
                 raise FemboyAPIError("API 请求超时，请稍后再试", status_code=0)
 
 
+class NeteaseAPIClient:
+    def __init__(self, timeout: int = 15):
+        self._timeout = aiohttp.ClientTimeout(total=timeout)
+        self._headers = {
+            "User-Agent": "AstrBot-Music-Plugin/1.0",
+            "Accept": "application/json",
+        }
+
+    async def get_song(self, song_id: str) -> Dict[str, Any]:
+        """通过歌曲ID获取歌曲信息和播放链接"""
+        if not song_id or not song_id.strip():
+            raise NeteaseAPIError("歌曲ID不能为空")
+
+        params = {"id": song_id.strip()}
+        logger.debug(f"[Netease] Fetching song by id: {song_id}")
+
+        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+            try:
+                async with session.get(NETEASE_API_URL, params=params) as resp:
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        logger.error(f"[Netease] API returned status {resp.status}: {error_text[:500]}")
+                        raise NeteaseAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+
+                    data = await resp.json()
+                    logger.debug(f"[Netease] Song response: {data}")
+
+                    if not isinstance(data, dict):
+                        raise NeteaseAPIError("API 返回数据格式异常")
+
+                    if not data.get("success"):
+                        msg = data.get("message", "未知错误")
+                        raise NeteaseAPIError(f"获取歌曲失败: {msg}")
+
+                    song_data = data.get("data", {})
+                    if not song_data:
+                        raise NeteaseAPIError("API 返回歌曲数据为空")
+
+                    return song_data
+
+            except aiohttp.ClientError as e:
+                logger.error(f"[Netease] Network error: {e}")
+                raise NeteaseAPIError(f"网络请求失败: {str(e)}", status_code=0) from e
+            except asyncio.TimeoutError:
+                logger.error("[Netease] Request timeout")
+                raise NeteaseAPIError("API 请求超时，请稍后再试", status_code=0)
+
+    async def search_songs(self, query: str) -> List[Dict[str, Any]]:
+        """通过关键词搜索歌曲"""
+        if not query or not query.strip():
+            raise NeteaseAPIError("搜索关键词不能为空")
+
+        params = {"q": query.strip()}
+        logger.debug(f"[Netease] Searching songs: {query}")
+
+        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+            try:
+                async with session.get(NETEASE_SEARCH_URL, params=params) as resp:
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        logger.error(f"[Netease] Search API returned status {resp.status}: {error_text[:500]}")
+                        raise NeteaseAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+
+                    data = await resp.json()
+                    logger.debug(f"[Netease] Search response keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
+
+                    if not isinstance(data, dict):
+                        raise NeteaseAPIError("API 返回数据格式异常")
+
+                    if not data.get("success"):
+                        msg = data.get("message", "未知错误")
+                        raise NeteaseAPIError(f"搜索失败: {msg}")
+
+                    songs = data.get("data", [])
+                    if not isinstance(songs, list):
+                        raise NeteaseAPIError("API 返回搜索结果格式异常")
+
+                    return songs
+
+            except aiohttp.ClientError as e:
+                logger.error(f"[Netease] Search network error: {e}")
+                raise NeteaseAPIError(f"网络请求失败: {str(e)}", status_code=0) from e
+            except asyncio.TimeoutError:
+                logger.error("[Netease] Search request timeout")
+                raise NeteaseAPIError("API 请求超时，请稍后再试", status_code=0)
+
+
+class NeteaseAPIError(Exception):
+    def __init__(self, message: str, status_code: int = 0):
+        super().__init__(message)
+        self.status_code = status_code
+
+
 class HitokotoAPIError(Exception):
     def __init__(self, message: str, status_code: int = 0):
         super().__init__(message)
@@ -553,6 +680,7 @@ class PixivPlugin(Star):
         self._api_client = PixivAPIClient(timeout=self._request_timeout)
         self._hitokoto_client = HitokotoAPIClient(timeout=self._request_timeout)
         self._weather_client = WeatherAPIClient(timeout=self._request_timeout)
+        self._netease_client = NeteaseAPIClient(timeout=self._request_timeout)
 
         logger.info(
             f"PixivPlugin initialized: r18={self._default_r18}, num={self._default_num}, "
@@ -845,6 +973,143 @@ class PixivPlugin(Star):
 
         logger.warning(f"[Femboy] Unknown response type: {response_type}")
         return [event.plain_result("⚠️ API 返回了未知格式的数据，请联系管理员")]
+
+    @filter.command("music")
+    async def music_command(self, event: AstrMessageEvent):
+        user_name = event.get_sender_name()
+        message_str = event.message_str.strip()
+
+        logger.debug(f"[Music] 收到消息: '{message_str}' from {user_name}")
+
+        if self._is_help_command(message_str):
+            logger.info(f"[Music] Help command triggered by {user_name}")
+            yield event.plain_result(MUSIC_HELP_TEXT)
+            return
+
+        try:
+            query = self._parse_music_params(message_str)
+            if not query:
+                yield event.plain_result("❌ 请输入歌曲名或ID\n💡 用法：/music 歌曲名\n💡 发送 /music help 查看帮助")
+                return
+
+            # 通过ID获取歌曲
+            id_match = re.match(r'^id\s*[:：]\s*(\d+)$', query, re.IGNORECASE)
+            if id_match:
+                song_id = id_match.group(1)
+                logger.info(f"[Music] Fetching song by ID {song_id} for user {user_name}")
+                song_data = await self._netease_client.get_song(song_id)
+                response_items = self._format_song_response(song_data, event)
+                for item in response_items:
+                    yield item
+                return
+
+            # 搜索模式：仅列出搜索结果
+            search_match = re.match(r'^search\s+(.+)$', query, re.IGNORECASE)
+            if search_match:
+                search_query = search_match.group(1).strip()
+                logger.info(f"[Music] Searching songs '{search_query}' for user {user_name}")
+                songs = await self._netease_client.search_songs(search_query)
+                if not songs:
+                    yield event.plain_result(f"😕 未找到与「{search_query}」相关的歌曲\n💡 请尝试其他关键词")
+                    return
+                response_text = self._format_search_results(songs, search_query)
+                yield event.plain_result(response_text)
+                return
+
+            # 点歌模式：搜索并获取第一首歌的详细信息
+            logger.info(f"[Music] Quick play '{query}' for user {user_name}")
+            songs = await self._netease_client.search_songs(query)
+            if not songs:
+                yield event.plain_result(f"😕 未找到与「{query}」相关的歌曲\n💡 请尝试其他关键词")
+                return
+
+            first_song = songs[0]
+            song_id = str(first_song.get("id", ""))
+            if not song_id:
+                yield event.plain_result("⚠️ 搜索结果异常，未能获取歌曲ID")
+                return
+
+            song_data = await self._netease_client.get_song(song_id)
+            response_items = self._format_song_response(song_data, event)
+            for item in response_items:
+                yield item
+
+        except NeteaseAPIError as e:
+            logger.error(f"[Music] API error for user {user_name}: {e}")
+            error_msg = f"❌ 获取音乐失败\n📝 错误信息：{str(e)}"
+            if e.status_code:
+                error_msg += f"\n🔢 状态码：{e.status_code}"
+            error_msg += "\n💡 请稍后重试或发送 /music help 查看帮助"
+            yield event.plain_result(error_msg)
+        except Exception as e:
+            logger.error(f"[Music] Unexpected error for user {user_name}: {e}", exc_info=True)
+            yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试")
+
+    def _parse_music_params(self, message: str) -> Optional[str]:
+        cleaned = re.sub(r'^[/!！]\s*music\s*', '', message.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^music\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+        cleaned = cleaned.strip()
+
+        if not cleaned or cleaned.lower() in ('help', '-h', '--help', '帮助'):
+            return None
+
+        return cleaned
+
+    def _format_song_response(self, song_data: Dict[str, Any], event: AstrMessageEvent) -> List[Any]:
+        name = song_data.get("name", "未知歌曲")
+        artists = song_data.get("artists", "未知艺术家")
+        album = song_data.get("album", "")
+        pic_url = song_data.get("pic", "")
+        url = song_data.get("url", "")
+        level = song_data.get("level", "")
+        bitrate = song_data.get("bitrate", 0)
+        file_type = song_data.get("type", "")
+        size = song_data.get("size", 0)
+
+        parts = [f"🎵 {name}", f"👤 艺术家：{artists}"]
+        if album:
+            parts.append(f"💿 专辑：{album}")
+
+        quality_parts = []
+        if level:
+            level_map = {"standard": "标准", "higher": "较高", "exhigh": "极高", "lossless": "无损", "hires": "Hi-Res"}
+            quality_parts.append(level_map.get(level, level))
+        if file_type:
+            quality_parts.append(file_type.upper())
+        if bitrate:
+            quality_parts.append(f"{bitrate // 1000}kbps")
+        if quality_parts:
+            parts.append(f"🎧 音质：{' / '.join(quality_parts)}")
+
+        if size:
+            size_mb = size / (1024 * 1024)
+            parts.append(f"📦 大小：{size_mb:.1f}MB")
+
+        if url:
+            parts.append(f"🔗 播放链接：{url}")
+        else:
+            parts.append("⚠️ 无法获取播放链接（可能需要VIP权限）")
+
+        caption = "\n".join(parts)
+        results = [event.plain_result(caption)]
+
+        if pic_url:
+            results.append(event.image_result(pic_url))
+
+        return results
+
+    def _format_search_results(self, songs: List[Dict[str, Any]], query: str) -> str:
+        parts = [f"🔍 搜索「{query}」结果：\n"]
+        for i, song in enumerate(songs[:10], 1):
+            name = song.get("name", "未知")
+            artists = song.get("artists", "未知")
+            song_id = song.get("id", "")
+            parts.append(f"  {i}. {name} - {artists}")
+            if song_id:
+                parts.append(f"     ID: {song_id}")
+
+        parts.append(f"\n💡 使用 /music id:<歌曲ID> 获取详细信息和播放链接")
+        return "\n".join(parts)
 
     @filter.command("pixiv")
     async def pixiv_command(self, event: AstrMessageEvent):
