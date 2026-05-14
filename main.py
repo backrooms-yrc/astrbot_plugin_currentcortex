@@ -8,6 +8,27 @@ from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger, AstrBotConfig
 
+# 尝试导入 Record 消息段（用于发送语音消息/QQ语音条）
+_RECORD_AVAILABLE = False
+Record = None
+try:
+    from astrbot.api.message_components import Record
+    _RECORD_AVAILABLE = True
+except ImportError:
+    pass
+if not _RECORD_AVAILABLE:
+    try:
+        from astrbot.core.message.components import Record
+        _RECORD_AVAILABLE = True
+    except ImportError:
+        pass
+if not _RECORD_AVAILABLE:
+    try:
+        from nakuru.entities.components import Record
+        _RECORD_AVAILABLE = True
+    except ImportError:
+        pass
+
 
 API_BASE_URL = "https://api.bileizhen.top/api/pixiv"
 HITOKOTO_API_URL = "https://api.bileizhen.top/api/one"
@@ -1095,6 +1116,18 @@ class PixivPlugin(Star):
 
         if pic_url:
             results.append(event.image_result(pic_url))
+
+        # 如果有播放链接且 Record 消息段可用，发送语音消息（在QQ中会自动解析为语音条）
+        if url and Record is not None and _RECORD_AVAILABLE:
+            try:
+                record_msg = Record(url=url)
+                if hasattr(event, 'chain_result'):
+                    results.append(event.chain_result([record_msg]))
+                    logger.info(f"[Music] 已添加语音消息: {name}")
+                else:
+                    logger.debug("[Music] event 不支持 chain_result，跳过语音发送")
+            except Exception as e:
+                logger.warning(f"[Music] 发送语音消息失败: {e}，跳过语音发送")
 
         return results
 
