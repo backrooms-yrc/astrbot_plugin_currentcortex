@@ -137,6 +137,8 @@ class DGLabClient:
                     data = json.loads(raw)
                 except Exception:
                     continue
+                if not isinstance(data, dict):
+                    continue
                 await self._handle_packet(data)
         except Exception as e:
             self.state.last_error = f"recv_loop: {e!r}"

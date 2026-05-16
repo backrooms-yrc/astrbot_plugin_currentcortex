@@ -462,6 +462,10 @@ class WeatherAPIClient:
                         logger.warning(f"Weather API returned empty data: {data}")
                         raise WeatherAPIError("API 返回数据为空")
 
+                    if not isinstance(weather_data, dict):
+                        logger.warning(f"Weather API returned non-dict data: {type(weather_data).__name__}")
+                        raise WeatherAPIError("API 返回数据格式异常")
+
                     return {
                         "type": "json",
                         "data": weather_data,
@@ -573,6 +577,9 @@ class NeteaseAPIClient:
                     if not song_data:
                         raise NeteaseAPIError("API 返回歌曲数据为空")
 
+                    if not isinstance(song_data, dict):
+                        raise NeteaseAPIError("API 返回歌曲数据格式异常")
+
                     return song_data
 
             except aiohttp.ClientError as e:
@@ -664,11 +671,11 @@ class PixivPlugin(Star):
 
         self._default_r18 = int(config.get("default_r18", 0))
         self._default_num = max(1, min(20, int(config.get("default_num", 1))))
-        self._default_size = config.get("default_size", "regular")
-        self._image_proxy = config.get("image_proxy", "pixiv.bileizhen.top")
-        self._exclude_ai = config.get("exclude_ai", False)
+        self._default_size = str(config.get("default_size", "regular"))
+        self._image_proxy = str(config.get("image_proxy", "pixiv.bileizhen.top"))
+        self._exclude_ai = bool(config.get("exclude_ai", False))
         self._request_timeout = int(config.get("request_timeout", 15))
-        self._femboy_api_key = config.get("femboy_api_key", "").strip()
+        self._femboy_api_key = str(config.get("femboy_api_key", "")).strip()
 
         if not self._femboy_api_key:
             logger.warning("⚠️ 未配置男娘图片 API 密钥 (femboy_api_key)，/femboy 命令将无法使用")
@@ -1371,20 +1378,22 @@ class PixivPlugin(Star):
 
     def _extract_items(self, data: Any) -> List[Dict[str, Any]]:
         if isinstance(data, list):
-            return data
+            return [item for item in data if isinstance(item, dict)]
         if isinstance(data, dict):
             for key in ("data", "illusts", "illustrations", "items", "results"):
                 if key in data and isinstance(data[key], list):
-                    return data[key]
+                    return [item for item in data[key] if isinstance(item, dict)]
             if "illust" in data and isinstance(data["illust"], dict):
                 return [data["illust"]]
             if any(isinstance(v, (list, dict)) for v in data.values()):
                 for v in data.values():
                     if isinstance(v, list) and v and isinstance(v[0], dict):
-                        return v
+                        return [item for item in v if isinstance(item, dict)]
         return []
 
     def _extract_image_url(self, item: Dict[str, Any]) -> Optional[str]:
+        if not isinstance(item, dict):
+            return None
         if isinstance(item.get("urls"), dict):
             urls = item["urls"]
             preferred_order = ["regular", "original", "small", "thumb", "mini"]
@@ -1395,8 +1404,8 @@ class PixivPlugin(Star):
             val = item.get(key)
             if val and isinstance(val, str) and val.startswith("http"):
                 return val
-        if item.get("pid"):
-            pid = item["pid"]
+        pid = item.get("pid")
+        if pid:
             return f"https://{self._image_proxy}/{pid}.jpg"
         return None
 
@@ -1404,6 +1413,9 @@ class PixivPlugin(Star):
         self, item: Dict[str, Any], r18_label: str, idx: int = 0, total: int = 1
     ) -> str:
         parts = []
+
+        if not isinstance(item, dict):
+            return "⚠️ 数据格式异常"
 
         if total > 1 and idx > 0:
             parts.append(f"📷 [{idx}/{total}]")
