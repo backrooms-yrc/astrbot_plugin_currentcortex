@@ -20,9 +20,13 @@
 """
 
 import re
+import os
 import asyncio
-from typing import Optional, Tuple
+import tempfile
+from typing import Optional, Tuple, List, Union
 from datetime import datetime
+
+import qrcode
 
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api import logger
@@ -219,6 +223,9 @@ class DGLabCommandHandler:
             )
             self._store.set_binding(binding)
             
+            # 生成二维码图片
+            qr_img_path = self._generate_qr_image(qr_content, user_id)
+            
             response_parts = [
                 f"🔗 DG-LAB 设备绑定",
                 f"",
@@ -227,18 +234,39 @@ class DGLabCommandHandler:
                 f"🆔 客户端ID: {state.client_id[:8]}...",
                 f"",
                 f"📱 请使用 DG-LAB APP 扫描下方二维码完成绑定",
-                f"",
-                f"📲 二维码内容:",
-                f"`{qr_content}`",
-                f"",
                 f"⏳ 等待APP扫码绑定中...",
                 f"💡 绑定成功后将自动通知您",
             ]
             
-            return "\n".join(response_parts)
+            return [
+                event.plain_result("\n".join(response_parts)),
+                event.image_result(qr_img_path),
+            ]
             
         except Exception as e:
             raise DGLabCommandError(f"连接失败: {str(e)}", suggestion="请检查服务器地址是否正确")
+    
+    def _generate_qr_image(self, qr_content: str, user_id: str) -> str:
+        """将二维码内容生成为图片文件，返回文件路径"""
+        qr_dir = os.path.join("data", "dglab_qrcodes")
+        os.makedirs(qr_dir, exist_ok=True)
+        
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(qr_content)
+        qr.make(fit=True)
+        
+        img = qr.make_image(fill_color="black", back_color="white")
+        
+        file_path = os.path.join(qr_dir, f"qr_{user_id}.png")
+        img.save(file_path)
+        logger.info(f"[DGLab] 二维码图片已生成: {file_path}")
+        
+        return os.path.abspath(file_path)
     
     async def _cmd_unbind(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
         """解绑设备命令"""
