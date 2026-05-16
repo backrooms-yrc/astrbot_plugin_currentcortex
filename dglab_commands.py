@@ -177,6 +177,7 @@ class DGLabCommandHandler:
     async def _cmd_bind(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
         """绑定设备命令"""
         server_url = args.strip() if args.strip() else None
+        user_specified_url = bool(server_url)
         
         if not server_url:
             binding = self._store.get_binding(user_id)
@@ -234,7 +235,10 @@ class DGLabCommandHandler:
                 f"🔗 DG-LAB 设备绑定",
                 f"",
                 f"👤 用户: {user_name}",
-                f"🖥️  服务器: {server_url}",
+            ]
+            if user_specified_url:
+                response_parts.append(f"🖥️  服务器: {server_url}")
+            response_parts += [
                 f"🆔 客户端ID: {state.client_id[:8]}...",
                 f"",
                 f"📱 请使用 DG-LAB APP 扫描下方二维码完成绑定",
