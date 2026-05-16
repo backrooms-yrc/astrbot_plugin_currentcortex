@@ -7,6 +7,8 @@ from typing import Dict, Optional
 from dataclasses import dataclass, asdict
 from datetime import datetime
 
+from astrbot.api import logger
+
 
 @dataclass
 class DeviceBinding:
@@ -122,7 +124,3 @@ class DeviceStore:
         """检查用户是否已绑定"""
         with self._lock:
             return user_id in self._bindings
-
-
-# 延迟导入logger（避免循环依赖）
-from astrbot.api import logger
