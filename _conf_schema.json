@@ -1,61 +1,51 @@
-[
-  {
-    "key": "default_r18",
+{
+  "default_r18": {
     "description": "默认 R18 等级（0=全年龄, 1=R18, 2=混合）",
     "type": "int",
     "default": 0
   },
-  {
-    "key": "default_num",
+  "default_num": {
     "description": "默认获取图片数量（1-20）",
     "type": "int",
     "default": 1
   },
-  {
-    "key": "default_size",
+  "default_size": {
     "description": "默认图片尺寸（original/regular/small/thumb/mini）",
     "type": "string",
     "default": "regular"
   },
-  {
-    "key": "image_proxy",
+  "image_proxy": {
     "description": "图片代理域名",
     "type": "string",
     "default": "pixiv.bileizhen.top"
   },
-  {
-    "key": "exclude_ai",
+  "exclude_ai": {
     "description": "是否默认排除 AI 生成的作品",
     "type": "bool",
     "default": false
   },
-  {
-    "key": "request_timeout",
+  "request_timeout": {
     "description": "API 请求超时时间（秒）",
     "type": "int",
     "default": 15
   },
-  {
-    "key": "femboy_api_key",
+  "femboy_api_key": {
     "description": "男娘图片 API 密钥 (x-api-key)，留空则禁用 /femboy 命令",
     "type": "string",
     "default": ""
   },
-  {
-    "key": "api_base_url",
+  "api_base_url": {
     "description": "API 基础 URL，留空则使用默认值",
     "type": "string",
     "default": ""
   },
-  {
-    "key": "tag_blacklist",
+  "tag_blacklist": {
     "description": "标签黑名单，包含这些标签的作品将被过滤（逗号分隔）",
-    "type": "string",
-    "default": ""
+    "type": "list",
+    "default": []
   },
-  {
-    "key": "dglab",
-    "description": "DG-LAB Socket V2 集成配置（JSON 对象，包含 server_url/heartbeat_interval/auto_connect）",
+  "dglab": {
+    "description": "DG-LAB Socket V2 集成配置",
     "type": "object",
     "default": {
       "server_url": "",
@@ -63,4 +53,4 @@
       "auto_connect": false
     }
   }
-]
+}
