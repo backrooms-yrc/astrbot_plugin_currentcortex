@@ -1,5 +1,4 @@
 aiohttp
 Pillow
 qrcode[pil]
-pydglab-ws
 websockets>=10.0
