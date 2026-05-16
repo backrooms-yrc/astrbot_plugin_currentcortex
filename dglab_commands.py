@@ -347,8 +347,8 @@ class DGLabCommandHandler:
                 parts.append(f"📡 连接状态: {status_emoji} {conn_status.value}")
                 
                 if status_info:
-                    parts.append(f"⏱️  连接时长: {status_info['connected_seconds']}秒")
-                    parts.append(f"😴 空闲时长: {status_info['idle_seconds']}秒")
+                    parts.append(f"⏱️  连接时长: {status_info.get('connected_seconds', 0)}秒")
+                    parts.append(f"😴 空闲时长: {status_info.get('idle_seconds', 0)}秒")
         else:
             parts.extend([
                 "",
@@ -388,11 +388,11 @@ class DGLabCommandHandler:
         if status_info:
             parts.extend([
                 f"=== 连接信息 ===",
-                f"状态: {status_info['status']}",
-                f"已绑定: {'是' if status_info['is_bound'] else '否'}",
-                f"连接时长: {status_info['connected_seconds']}秒 ({status_info['connected_seconds'] // 60}分钟)",
-                f"空闲时长: {status_info['idle_seconds']}秒",
-                f"错误次数: {status_info['error_count']}",
+                f"状态: {status_info.get('status', '未知')}",
+                f"已绑定: {'是' if status_info.get('is_bound', False) else '否'}",
+                f"连接时长: {status_info.get('connected_seconds', 0)}秒 ({status_info.get('connected_seconds', 0) // 60}分钟)",
+                f"空闲时长: {status_info.get('idle_seconds', 0)}秒",
+                f"错误次数: {status_info.get('error_count', 0)}",
             ])
         
         return "\n".join(parts)

@@ -46,18 +46,43 @@ class DeviceStore:
         if not os.path.exists(self._file_path):
             logger.info(f"[DGLab] 绑定数据文件不存在，将创建新文件: {self._file_path}")
             return
-        
+
         try:
             with open(self._file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            
+
+            # 类型安全验证：确保加载的数据是字典
+            if not isinstance(data, dict):
+                logger.warning(
+                    f"[DGLab] ⚠️ 绑定数据文件格式异常: 期望 dict，实际为 {type(data).__name__}，"
+                    f"将重置为空数据"
+                )
+                self._bindings = {}
+                return
+
             with self._lock:
-                self._bindings = {
-                    user_id: DeviceBinding(**binding_data)
-                    for user_id, binding_data in data.items()
-                }
+                self._bindings = {}
+                for user_id, binding_data in data.items():
+                    # 验证每个绑定数据项是否为字典类型
+                    if not isinstance(binding_data, dict):
+                        logger.warning(
+                            f"[DGLab] ⚠️ 用户 {user_id} 的绑定数据格式异常: "
+                            f"期望 dict，实际为 {type(binding_data).__name__}，已跳过"
+                        )
+                        continue
+
+                    try:
+                        self._bindings[user_id] = DeviceBinding(**binding_data)
+                    except Exception as e:
+                        logger.error(
+                            f"[DGLab] ❌ 用户 {user_id} 的绑定数据解析失败: {e}，已跳过"
+                        )
+
             logger.info(f"[DGLab] 已加载 {len(self._bindings)} 条设备绑定记录")
-            
+
+        except json.JSONDecodeError as e:
+            logger.error(f"[DGLab] ❌ 绑定数据文件 JSON 解析失败（可能文件损坏）: {e}")
+            self._bindings = {}
         except Exception as e:
             logger.error(f"[DGLab] 加载绑定数据失败: {e}")
             self._bindings = {}
