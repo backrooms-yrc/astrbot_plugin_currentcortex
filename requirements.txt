@@ -1,1 +1,5 @@
-aiohttp>=3.8.0
+aiohttp
+Pillow
+qrcode[pil]
+pydglab-ws
+websockets>=10.0

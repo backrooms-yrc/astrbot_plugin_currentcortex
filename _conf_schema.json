@@ -1,45 +1,39 @@
 {
-    "default_r18": {
-        "description": "默认 R18 模式",
-        "type": "int",
-        "hint": "0=全年龄，1=仅R18，2=混合模式",
-        "default": 0,
-        "options": [0, 1, 2]
+  "description": "Pixiv 插件配置",
+  "type": "object",
+  "properties": {
+    "api_base_url": {
+      "description": "API 基础 URL，留空则使用默认值",
+      "type": "string",
+      "default": ""
     },
-    "default_num": {
-        "description": "默认每次获取的图片数量",
-        "type": "int",
-        "hint": "范围 1-20",
-        "default": 1
+    "tag_blacklist": {
+      "description": "标签黑名单，包含这些标签的作品将被过滤",
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
     },
-    "image_proxy": {
-        "description": "图片反代域名",
-        "type": "string",
-        "hint": "默认为 pixiv.bileizhen.top，可改为其他代理域名",
-        "default": "pixiv.bileizhen.top"
-    },
-    "default_size": {
-        "description": "默认图片尺寸",
-        "type": "string",
-        "hint": "original / regular / small / thumb / mini",
-        "default": "regular",
-        "options": ["original", "regular", "small", "thumb", "mini"]
-    },
-    "exclude_ai": {
-        "description": "是否排除 AI 生成作品",
-        "type": "bool",
-        "default": false
-    },
-    "request_timeout": {
-        "description": "API 请求超时时间（秒）",
-        "type": "int",
-        "default": 15
-    },
-    "femboy_api_key": {
-        "description": "男娘图片 API 密钥 (x-api-key)",
-        "type": "string",
-        "hint": "用于访问男娘图片API的认证密钥，必填项",
-        "default": "",
-        "required": true
+    "dglab": {
+      "description": "DG-LAB Socket V2 集成配置",
+      "type": "object",
+      "properties": {
+        "server_url": {
+          "description": "DG-LAB 中转服务器地址 (例如 ws://host:port 或 wss://host:port，不要带 clientId 路径)",
+          "type": "string",
+          "default": ""
+        },
+        "heartbeat_interval": {
+          "description": "心跳间隔(秒)",
+          "type": "number",
+          "default": 60
+        },
+        "auto_connect": {
+          "description": "启动时自动连接",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "default": {}
     }
+  }
 }

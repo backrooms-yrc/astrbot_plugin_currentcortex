@@ -12,6 +12,10 @@ import os
 import tempfile
 import astrbot.api.message_components as Comp
 
+from dglab_device_store import DeviceStore
+from dglab_connection_pool import DeviceConnectionPool
+from dglab_commands import DGLabCommandHandler
+
 
 API_BASE_URL = "https://api.bileizhen.top/api/pixiv"
 HITOKOTO_API_URL = "https://api.bileizhen.top/api/one"
@@ -685,6 +689,30 @@ class PixivPlugin(Star):
         self._hitokoto_client = HitokotoAPIClient(timeout=self._request_timeout)
         self._weather_client = WeatherAPIClient(timeout=self._request_timeout)
         self._netease_client = NeteaseAPIClient(timeout=self._request_timeout)
+
+        dglab_config = config.get("dglab", {})
+        server_url = dglab_config.get("server_url", "").strip()
+        heartbeat_interval = float(dglab_config.get("heartbeat_interval", 60))
+        auto_connect = dglab_config.get("auto_connect", False)
+
+        self._device_store = DeviceStore(data_dir="data")
+        self._connection_pool = DeviceConnectionPool(
+            device_store=self._device_store,
+            max_connections=50,
+            idle_timeout=300,
+            operation_timeout=10.0,
+        )
+        self._dglab_handler = DGLabCommandHandler(
+            connection_pool=self._connection_pool,
+            device_store=self._device_store,
+        )
+
+        if server_url:
+            logger.info(f"✅ DG-LAB模块已初始化 (server={server_url}, auto_connect={auto_connect})")
+        else:
+            logger.info("ℹ️ DG-LAB模块已就绪（未配置服务器地址，用户需手动指定）")
+
+        asyncio.create_task(self._connection_pool.start())
 
         logger.info(
             f"PixivPlugin initialized: r18={self._default_r18}, num={self._default_num}, "
@@ -1415,3 +1443,22 @@ class PixivPlugin(Star):
 
     async def terminate(self):
         logger.info("PixivPlugin is being terminated")
+        if hasattr(self, '_connection_pool'):
+            await self._connection_pool.stop()
+            logger.info("✅ DG-LAB连接池已停止")
+
+    @filter.command("dglab")
+    async def dglab_command(self, event: AstrMessageEvent):
+        """DG-LAB设备管理命令入口"""
+        message_str = event.message_str.strip()
+        
+        try:
+            async for result in self._dglab_handler.handle_command(event, message_str):
+                yield result
+        except Exception as e:
+            logger.error(f"[DGLab] 命令处理异常: {e}", exc_info=True)
+            yield event.plain_result(
+                f"❌ DG-LAB命令执行失败\n"
+                f"📝 错误: {str(e)}\n"
+                f"💡 发送 /dglab help 查看帮助"
+            )

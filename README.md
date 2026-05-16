@@ -1,10 +1,10 @@
 # AstrBot Pixiv 综合插件
 
-基于 [LeiZ API](https://api.bileizhen.top) 开发的多功能 AstrBot 插件，提供 **Pixiv 随机图片获取**、**每日一言**、**天气查询**、**男娘图片获取** 及 **网易云音乐点歌** 等功能。
+基于 [LeiZ API](https://api.bileizhen.top) 开发的多功能 AstrBot 插件，提供 **Pixiv 随机图片获取**、**每日一言**、**天气查询**、**男娘图片获取**、**网易云音乐点歌** 及 **DG-LAB 设备管理** 等功能。
 
 ## 📋 项目概述
 
-本插件是一个集成了多种实用功能的 AstrBot 插件，专为提升聊天机器人交互体验而设计。通过简洁的命令接口，用户可以轻松获取各类内容和服务。
+本插件是一个集成了多种实用功能的 AstrBot 插件，专为提升聊天机器人交互体验而设计。通过简洁的命令接口，用户可以轻松获取各类内容和服务，并支持对 DG-LAB 设备进行完整的生命周期管理。
 
 ### ✨ 核心特性
 
@@ -13,9 +13,11 @@
 - **🌤️ 天气查询**：实时查询城市天气信息及未来 3 天天气预报
 - **👗 男娘图片**：随机获取男娘主题图片（需配置 API 密钥）
 - **🎵 网易云音乐**：点歌、搜索歌曲、获取播放链接和歌曲详情
+- **🔌 DG-LAB 设备管理**：完整的 DG-LAB Socket V2 设备控制，包括绑定/解绑、强度调节、波形发送等
 - **⚡ 异步高性能**：基于 aiohttp 的异步请求，响应迅速
 - **🛡️ 完善错误处理**：网络异常、API 错误、参数错误等均有友好提示
 - **⚙️ 灵活配置**：支持在 AstrBot 管理面板中自定义默认参数
+- **👥 多用户隔离**：DG-LAB 模块支持多用户并发使用，操作完全隔离
 
 ## 📦 安装方法
 
@@ -33,14 +35,17 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_pixiv.git
 #### 安装依赖
 
 ```bash
-pip install aiohttp>=3.8.0
+pip install aiohttp>=3.8.0 websockets>=10.0
 ```
+
+> ⚠️ **DG-LAB 功能需要 `websockets` 库**，请确保已安装。
 
 ### 系统要求
 
 - **AstrBot** >= 3.4.0
 - **Python** >= 3.10
 - **aiohttp** >= 3.8.0
+- **websockets** >= 10.0（DG-LAB 功能必需）
 
 ## 🎯 功能介绍
 
@@ -325,6 +330,126 @@ pip install aiohttp>=3.8.0
 
 ---
 
+### 6️⃣ DG-LAB 设备管理 (`/dglab`)
+
+通过 DG-LAB Socket V2 协议实现对郊狼脉冲主机的完整控制，支持设备绑定、强度调节、输出控制等功能。
+
+> ⚠️ **此功能需要运行 DG-LAB 中转服务器**（详见下方配置说明）。
+
+#### 基本指令
+
+| 指令 | 说明 |
+| --- | --- |
+| `/dglab bind [服务器地址]` | 绑定设备（生成二维码供 APP 扫描） |
+| `/dglab unbind` | 解绑当前设备 |
+| `/dglab strength <A\|B> <0-200>` | 设置通道强度值 |
+| `/dglab up <A\|B> [步进]` | 增加强度（默认+5） |
+| `/dglab down <A\|B> [步进]` | 减少强度（默认-5） |
+| `/dglab stop [A\|B]` | 停止输出（不指定则停止全部） |
+| `/dglab clear <A\|B>` | 清空波形队列 |
+| `/dglab status` | 查看绑定状态和连接状态 |
+| `/dglab info` | 查看详细设备信息 |
+| `/dglab help` | 显示帮助信息 |
+
+#### 使用流程
+
+```
+1. 绑定设备
+   /dglab bind ws://192.168.1.100:9999
+   
+2. 使用 DG-LAB APP 扫描二维码完成绑定
+
+3. 控制设备
+   /dglab strength A 50     # 设置A通道强度为50
+   /dglab up B 10           # B通道强度增加10
+   /dglab stop              # 停止所有输出
+
+4. 查看状态
+   /dglab status            # 查看连接状态
+
+5. 解绑设备（可选）
+   /dglab unbind            # 解绑当前设备
+```
+
+#### 参数说明
+
+**强度控制参数：**
+
+| 参数 | 类型 | 范围 | 说明 |
+| --- | --- | --- | --- |
+| `通道` | string | A 或 B | A/B 双通道独立控制 |
+| `强度值` | int | 0-200 | 目标强度值（0=关闭，200=最大） |
+| `步进值` | int | 1-200 | 每次调整的幅度（默认5） |
+
+**绑定参数：**
+
+| 参数 | 类型 | 说明 | 示例 |
+| --- | --- | --- | --- |
+| `服务器地址` | string | DG-LAB 中转服务器地址 | `ws://192.168.1.100:9999` |
+
+> 💡 **提示**：如果配置了默认服务器地址，`/dglab bind` 可省略地址参数。
+
+#### 返回结果示例
+
+**绑定成功：**
+```
+🔗 DG-LAB 设备绑定
+
+👤 用户: TestUser
+🖥️  服务器: ws://192.168.1.100:9999
+🆔 客户端ID: a1b2c3d4...
+📱 请使用 DG-LAB APP 扫描下方二维码完成绑定
+
+📲 二维码内容:
+`https://www.dungeon-lab.com/app-download.php#DGLAB-SOCKET#ws://192.168.1.100:9999/a1b2c3d4...`
+
+⏳ 等待APP扫码绑定中...
+💡 绑定成功后将自动通知您
+```
+
+**查看状态：**
+```
+📊 DG-LAB 设备状态
+
+🔗 绑定状态: ✅ 已绑定
+🖥️  服务器: ws://192.168.1.100:9999
+🆔 客户端ID: a1b2c3d4e5f6...
+🕐 绑定时间: 2025-01-15 10:30:00
+🔄 最后活跃: 2025-01-15 14:25:30
+📡 连接状态: 🟢 bound
+⏱️  连接时长: 14340 秒 (239 分钟)
+😴 空闲时长: 120 秒
+
+📈 系统活跃连接数: 3
+```
+
+#### 高级特性
+
+**多用户隔离：**
+- 每个用户拥有独立的设备连接和绑定关系
+- 用户间操作完全隔离，互不影响
+- 支持最多 50 个并发连接
+
+**自动重连与容错：**
+- 操作失败时自动重试（最多 2 次）
+- 连接断开时尝试重新建立
+- 空闲超过 5 分钟的连接自动清理（释放资源）
+
+**安全机制：**
+- 所有输入参数严格校验（范围、格式、类型）
+- 操作超时保护（防止长时间阻塞）
+- 强度值限制在安全范围内 (0-200)
+
+#### 注意事项
+
+- ⚠️ **强度值范围**：必须在 0-200 之间，请根据个人耐受度调整
+- ⚠️ **APP 要求**：仅支持 **郊狼脉冲主机 3.0**
+- ⚠️ **网络要求**：确保服务器可访问，建议使用局域网或公网服务器
+- ⚠️ **二维码有效期**：绑定二维码在会话期间有效，超时需重新生成
+- ⚠️ **权限隔离**：您的设备仅您可控制，其他用户无法访问
+
+---
+
 ## ⚙️ 配置说明
 
 在 AstrBot 管理面板中可配置以下参数：
@@ -347,6 +472,42 @@ pip install aiohttp>=3.8.0
 | --- | --- | --- | --- |
 | `request_timeout` | int | 15 | API 请求超时时间（秒），影响所有功能 |
 | `femboy_api_key` | string | （空） | 男娘图片 API 密钥（x-api-key），**必填**才能使用 `/femboy` |
+
+### DG-LAB 配置
+
+> ⚠️ **使用 DG-LAB 功能前，必须先部署并运行 [DG-LAB Socket V2 中转服务器](https://github.com/DG-LAB-OPENSOURCE/DG-LAB-OPENSOURCE)**。
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `dglab.server_url` | string | （空） | DG-LAB 中转服务器地址（如 `ws://192.168.1.100:9999`） |
+| `dglab.heartbeat_interval` | int | 60 | 心跳间隔（秒），建议 30-120 |
+| `dglab.auto_connect` | bool | false | 是否在插件启动时自动连接（一般设为 false） |
+
+#### 配置示例
+
+```json
+{
+  "dglab": {
+    "server_url": "ws://your-server:9999",
+    "heartbeat_interval": 60,
+    "auto_connect": false
+  }
+}
+```
+
+#### 部署中转服务器
+
+1. **获取服务器代码**：访问 [DG-LAB-OPENSOURCE](https://github.com/DG-LAB-OPENSOURCE/DG-LAB-OPENSOURCE)
+2. **安装依赖并启动**：
+   ```bash
+   cd socket/v2/backend
+   npm install
+   npm start
+   ```
+3. **默认端口**：`9999`（可通过 `.env` 文件修改）
+4. **网络要求**：确保服务器可被 AstrBot 和 DG-LAB APP 访问
+
+> 💡 **提示**：局域网部署使用 `ws://`，公网部署建议使用 `wss://`（更安全）。
 
 ## ❓ 常见问题
 
@@ -385,6 +546,34 @@ pip install aiohttp>=3.8.0
 
 支持中国主要城市，建议使用中文城市名称（如"广州市"、"北京"）。城市名称最长 50 个字符。
 
+### Q: DG-LAB 功能无法使用？
+
+请检查：
+1. **是否安装依赖**：`pip install websockets>=10.0`
+2. **是否配置服务器地址**：在插件配置中填写 `dglab.server_url`
+3. **中转服务器是否运行**：确保 DG-LAB Socket V2 服务器已启动并可访问
+4. **网络连通性**：AstrBot 服务器能否连接到中转服务器
+5. **查看日志**：检查 AstrBot 日志中的 `[DGLab]` 相关错误信息
+
+### Q: DG-LAB 绑定失败？
+
+可能原因：
+1. **APP 未扫码**：二维码生成后需在有效期内用 APP 扫描
+2. **服务器地址错误**：确认地址格式正确（如 `ws://host:port`）
+3. **网络不通**：检查防火墙和网络配置
+4. **APP 版本过低**：确保使用支持 Socket V2 的 APP 版本
+
+### Q: 多人同时使用会冲突吗？
+
+不会。每个用户拥有独立的设备绑定和连接，操作完全隔离。系统支持最多 50 个并发连接。
+
+### Q: DG-LAB 连接断开怎么办？
+
+1. 系统会自动尝试重连（最多 2 次）
+2. 如果仍失败，使用 `/dglab unbind` 解绑后重新 `/dglab bind`
+3. 检查中转服务器是否正常运行
+4. 使用 `/dglab status` 查看当前连接状态
+
 ## 🔧 错误处理
 
 插件对各类异常均有友好提示：
@@ -402,33 +591,50 @@ pip install aiohttp>=3.8.0
 
 ```
 astrbot_plugin_pixiv/
-├── main.py              # 主程序文件（包含所有功能实现）
-├── metadata.yaml        # 插件元数据
-├── _conf_schema.json    # 配置模式定义
-├── requirements.txt     # Python 依赖
-├── README.md            # 项目文档
-└── .gitignore           # Git 忽略规则
+├── main.py                      # 主程序文件（包含所有功能实现及插件入口）
+├── dglab_client.py              # DG-LAB Socket V2 WebSocket 客户端封装
+├── dglab_device_store.py        # DG-LAB 设备绑定关系持久化存储
+├── dglab_connection_pool.py     # DG-LAB 连接池与状态管理
+├── dglab_commands.py            # DG-LAB 命令处理器（参数解析、校验、执行）
+├── test_dglab_integration.py    # DG-LAB 模块集成测试脚本
+├── metadata.yaml                # 插件元数据
+├── _conf_schema.json            # 配置模式定义
+├── requirements.txt             # Python 依赖
+├── README.md                    # 项目文档
+└── .gitignore                   # Git 忽略规则
 ```
 
 ## 🛠️ 技术架构
 
 ### 核心模块
 
+**Pixiv 相关：**
 - **PixivAPIClient**：Pixiv API 客户端，支持 GET/POST 请求，处理重定向和 JSON 响应
 - **HitokotoAPIClient**：一言 API 客户端，支持分类筛选
 - **WeatherAPIClient**：天气 API 客户端，解析当前天气和未来预报
 - **FemboyAPIClient**：男娘图片 API 客户端，需 x-api-key 认证
 - **NeteaseAPIClient**：网易云音乐 API 客户端，支持歌曲获取和搜索
 - **CommandParser**：命令解析器，支持 `key:value` 格式参数和快捷语法
-- **PixivPlugin(Star)**：主插件类，集成所有功能并注册命令
+
+**DG-LAB 设备管理：**
+- **DGLabClient** ([dglab_client.py](dglab_client.py))：WebSocket 客户端封装，实现连接管理、消息收发、心跳保活
+- **DeviceStore** ([dglab_device_store.py](dglab_device_store.py))：用户-设备绑定关系持久化存储（JSON 文件），线程安全
+- **DeviceConnectionPool** ([dglab_connection_pool.py](dglab_connection_pool.py))：连接池管理器，支持多用户并发、连接复用、自动重连、空闲清理、超时保护
+- **DGLabCommandHandler** ([dglab_commands.py](dglab_commands.py))：命令处理器，负责参数解析、合法性校验、操作执行、结果格式化
+
+**主插件：**
+- **PixivPlugin(Star)** ([main.py](main.py))：主插件类，集成所有功能并注册命令
 
 ### 设计特点
 
-- **异步架构**：基于 asyncio 和 aiohttp，非阻塞 I/O
-- **单文件设计**：所有功能集中在 `main.py`，部署简单
+- **异步架构**：基于 asyncio 和 aiohttp/websockets，非阻塞 I/O
+- **模块化设计**：DG-LAB 功能独立为 4 个模块，职责清晰，便于维护
 - **统一接口**：所有 API 客户端遵循相同的设计模式
 - **完善日志**：详细的调试和错误日志，便于排查问题
 - **健壮性**：全面的异常处理和参数校验
+- **数据持久化**：DG-LAB 绑定数据存储在 `data/dglab_bindings.json`（符合 AstrBot 规范）
+- **资源管理**：连接池自动清理空闲连接，防止资源泄漏
+- **多租户隔离**：每个用户独立连接，操作互不干扰
 
 ## 📄 开源协议
 
@@ -438,8 +644,11 @@ MIT License
 
 - [LeiZ API](https://api.bileizhen.top) — 提供 Pixiv、一言、天气、男娘图片、网易云音乐等 API 服务
 - [AstrBot](https://github.com/AstrBot) — 聊天机器人框架
+- [DG-LAB-OPENSOURCE](https://github.com/DG-LAB-OPENSOURCE/DG-LAB-OPENSOURCE) — DG-LAB Socket V2 协议与中转服务器
 
 ---
 
-**版本**：v1.2.0
+**版本**：v1.2.0  
+**更新日期**：2025-01-15  
+**新增功能**：DG-LAB 设备管理（完整生命周期控制）  
 **仓库**：[GitHub](https://github.com/backrooms-yrc/astrbot_plugin_pixiv)
