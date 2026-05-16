@@ -724,6 +724,7 @@ class PixivPlugin(Star):
         self._dglab_handler = DGLabCommandHandler(
             connection_pool=self._connection_pool,
             device_store=self._device_store,
+            default_server_url=server_url,
         )
 
         if server_url:

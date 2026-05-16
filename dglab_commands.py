@@ -83,9 +83,10 @@ class DGLabCommandHandler:
   
 💡 提示: 所有操作均有权限隔离，您的设备仅您可控制"""
     
-    def __init__(self, connection_pool, device_store):
+    def __init__(self, connection_pool, device_store, default_server_url: str = ""):
         self._pool = connection_pool
         self._store = device_store
+        self._default_server_url = default_server_url
     
     async def handle_command(self, event: AstrMessageEvent, message: str):
         """处理DG-LAB命令（统一入口）"""
@@ -182,6 +183,9 @@ class DGLabCommandHandler:
             if binding and binding.server_url:
                 server_url = binding.server_url
                 logger.info(f"[DGLab] 使用上次绑定的服务器地址: {server_url}")
+            elif self._default_server_url:
+                server_url = self._default_server_url
+                logger.info(f"[DGLab] 使用配置文件默认服务器地址: {server_url}")
             else:
                 raise DGLabCommandError(
                     "未指定服务器地址",
