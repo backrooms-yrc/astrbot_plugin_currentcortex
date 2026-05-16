@@ -240,8 +240,8 @@ class DeviceConnectionPool:
         
         await self.execute_with_retry(user_id, _send)
         
-        mode_desc = {0: "减少", 1: "增加", 2: "设置为"}[mode]
-        channel_name = {1: "A", 2: "B"}[channel]
+        mode_desc = {0: "减少", 1: "增加", 2: "设置为"}.get(mode, f"未知模式({mode})")
+        channel_name = {1: "A", 2: "B"}.get(channel, f"未知通道({channel})")
         
         return f"✅ 已{mode_desc}{channel_name}通道强度为 {value}"
     
@@ -288,7 +288,7 @@ class DeviceConnectionPool:
             return command
         
         await self.execute_with_retry(user_id, _send)
-        channel_name = {1: "A", 2: "B"}[channel]
+        channel_name = {1: "A", 2: "B"}.get(channel, f"未知通道({channel})")
         return f"✅ 已清空{channel_name}通道波形队列"
     
     async def stop_all(self, user_id: str) -> str:
