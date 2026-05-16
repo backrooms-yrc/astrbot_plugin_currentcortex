@@ -697,16 +697,22 @@ class PixivPlugin(Star):
         self._weather_client = WeatherAPIClient(timeout=self._request_timeout)
         self._netease_client = NeteaseAPIClient(timeout=self._request_timeout)
 
-        dglab_config_raw = config.get("dglab", {})
-        if not isinstance(dglab_config_raw, dict):
-            logger.warning(f"⚠️ dglab 配置项类型异常: {type(dglab_config_raw).__name__}，期望 dict，使用默认值")
-            dglab_config = {}
-        else:
+        dglab_config_raw = config.get("dglab", "")
+        dglab_config = {}
+        if isinstance(dglab_config_raw, dict):
             dglab_config = dglab_config_raw
+        elif isinstance(dglab_config_raw, str) and dglab_config_raw.strip():
+            import json as _json
+            try:
+                parsed = _json.loads(dglab_config_raw)
+                if isinstance(parsed, dict):
+                    dglab_config = parsed
+            except (ValueError, TypeError):
+                logger.warning("dglab config parse failed, using defaults")
 
-        server_url = dglab_config.get("server_url", "").strip() if isinstance(dglab_config, dict) else ""
-        heartbeat_interval = float(dglab_config.get("heartbeat_interval", 60)) if isinstance(dglab_config, dict) else 60.0
-        auto_connect = bool(dglab_config.get("auto_connect", False)) if isinstance(dglab_config, dict) else False
+        server_url = dglab_config.get("server_url", "").strip()
+        heartbeat_interval = float(dglab_config.get("heartbeat_interval", 60))
+        auto_connect = bool(dglab_config.get("auto_connect", False))
 
         self._device_store = DeviceStore(data_dir="data")
         self._connection_pool = DeviceConnectionPool(

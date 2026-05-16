@@ -34,23 +34,9 @@
     "type": "string",
     "default": ""
   },
-  "api_base_url": {
-    "description": "API 基础 URL，留空则使用默认值",
+  "dglab": {
+    "description": "DG-LAB Socket V2 集成配置（JSON格式: {\"server_url\":\"\", \"heartbeat_interval\":60, \"auto_connect\":false}）",
     "type": "string",
     "default": ""
-  },
-  "tag_blacklist": {
-    "description": "标签黑名单，包含这些标签的作品将被过滤（逗号分隔）",
-    "type": "list",
-    "default": []
-  },
-  "dglab": {
-    "description": "DG-LAB Socket V2 集成配置",
-    "type": "object",
-    "default": {
-      "server_url": "",
-      "heartbeat_interval": 60,
-      "auto_connect": false
-    }
   }
 }
