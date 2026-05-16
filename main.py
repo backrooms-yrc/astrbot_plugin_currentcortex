@@ -12,9 +12,9 @@ import os
 import tempfile
 import astrbot.api.message_components as Comp
 
-from dglab_device_store import DeviceStore
-from dglab_connection_pool import DeviceConnectionPool
-from dglab_commands import DGLabCommandHandler
+from .dglab_device_store import DeviceStore
+from .dglab_connection_pool import DeviceConnectionPool
+from .dglab_commands import DGLabCommandHandler
 
 
 API_BASE_URL = "https://api.bileizhen.top/api/pixiv"

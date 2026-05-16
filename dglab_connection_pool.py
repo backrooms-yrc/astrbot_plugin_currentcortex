@@ -18,8 +18,8 @@ from datetime import datetime
 
 from astrbot.api import logger
 
-from dglab_client import DGLabClient, DGLabState
-from dglab_device_store import DeviceStore, DeviceBinding
+from .dglab_client import DGLabClient, DGLabState
+from .dglab_device_store import DeviceStore, DeviceBinding
 
 
 class ConnectionStatus(Enum):
