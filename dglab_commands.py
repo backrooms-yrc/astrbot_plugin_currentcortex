@@ -27,6 +27,8 @@ from datetime import datetime
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api import logger
 
+from .dglab_device_store import DeviceBinding
+
 
 class DGLabCommandError(Exception):
     """DG-LAB命令错误"""
