@@ -20,6 +20,7 @@ class DeviceBinding:
     bound_time: str        # 绑定时间 (ISO格式)
     last_active: str       # 最后活跃时间 (ISO格式)
     nickname: str = ""     # 用户昵称（可选）
+    shared: bool = False   # 是否允许他人操控（False=仅本人可控）
 
 
 class DeviceStore:
@@ -120,20 +121,25 @@ class DeviceStore:
     
     def remove_binding(self, user_id: str) -> bool:
         """移除用户绑定"""
+        removed = False
         with self._lock:
             if user_id in self._bindings:
                 del self._bindings[user_id]
-                self._save()
-                logger.info(f"[DGLab] 用户 {user_id} 已解绑设备")
-                return True
-        return False
+                removed = True
+        if removed:
+            self._save()
+            logger.info(f"[DGLab] 用户 {user_id} 已解绑设备")
+        return removed
     
     def update_last_active(self, user_id: str):
         """更新最后活跃时间"""
+        updated = False
         with self._lock:
             if user_id in self._bindings:
                 self._bindings[user_id].last_active = datetime.now().isoformat()
-                self._save()
+                updated = True
+        if updated:
+            self._save()
     
     def list_all_bindings(self) -> Dict[str, DeviceBinding]:
         """获取所有绑定（管理员用）"""
@@ -149,3 +155,12 @@ class DeviceStore:
         """检查用户是否已绑定"""
         with self._lock:
             return user_id in self._bindings
+
+    def set_shared(self, user_id: str, shared: bool) -> bool:
+        """设置用户设备的共享状态，返回是否成功"""
+        with self._lock:
+            if user_id not in self._bindings:
+                return False
+            self._bindings[user_id].shared = shared
+        self._save()
+        return True

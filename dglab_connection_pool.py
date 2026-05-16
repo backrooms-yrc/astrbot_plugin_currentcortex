@@ -102,7 +102,7 @@ class DeviceConnectionPool:
         logger.info("[DGLab] 连接池已停止，所有连接已关闭")
     
     async def get_or_create_connection(
-        self, 
+        self,
         user_id: str,
         server_url: str,
         client_id: Optional[str] = None,
@@ -110,18 +110,24 @@ class DeviceConnectionPool:
     ) -> Tuple[DGLabClient, ConnectionStatus]:
         """获取或创建用户连接（带超时保护）"""
         async with self._global_lock:
-            if len(self._connections) >= self._max_connections:
-                raise RuntimeError(f"连接池已达上限 ({self._max_connections})，请稍后重试")
-            
             if user_id in self._connections:
                 conn_info = self._connections[user_id]
                 conn_info.last_used_at = time.time()
-                
+
                 if conn_info.status == ConnectionStatus.BOUND:
+                    return conn_info.client, conn_info.status
+                elif conn_info.status == ConnectionStatus.CONNECTED:
+                    return conn_info.client, conn_info.status
+                elif conn_info.status == ConnectionStatus.CONNECTING:
                     return conn_info.client, conn_info.status
                 elif conn_info.status == ConnectionStatus.ERROR:
                     await self._close_connection(user_id)
-            
+                else:
+                    await self._close_connection(user_id)
+
+            if len(self._connections) >= self._max_connections:
+                raise RuntimeError(f"连接池已达上限 ({self._max_connections})，请稍后重试")
+
             client = DGLabClient(heartbeat_interval=heartbeat_interval)
             conn_info = ConnectionInfo(
                 user_id=user_id,

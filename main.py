@@ -1,5 +1,6 @@
 import re
 import asyncio
+import time
 from typing import Any, Dict, List, Optional
 
 import aiohttp
@@ -732,7 +733,13 @@ class PixivPlugin(Star):
         else:
             logger.info("ℹ️ DG-LAB模块已就绪（未配置服务器地址，用户需手动指定）")
 
-        asyncio.create_task(self._connection_pool.start())
+        try:
+            asyncio.get_running_loop()
+            asyncio.create_task(self._connection_pool.start())
+        except RuntimeError:
+            self._pool_started = False
+        else:
+            self._pool_started = True
 
         logger.info(
             f"PixivPlugin initialized: r18={self._default_r18}, num={self._default_num}, "
@@ -1164,7 +1171,6 @@ class PixivPlugin(Star):
     async def _download_audio_to_temp(self, url: str, name: str) -> Optional[str]:
         """下载音频文件到临时目录，返回本地文件路径"""
         try:
-            # 确定文件扩展名
             ext = ".mp3"
             if ".flac" in url.lower():
                 ext = ".flac"
@@ -1173,11 +1179,11 @@ class PixivPlugin(Star):
             elif ".m4a" in url.lower():
                 ext = ".m4a"
 
-            # 创建临时目录
             temp_dir = os.path.join(tempfile.gettempdir(), "astrbot_music")
             os.makedirs(temp_dir, exist_ok=True)
 
-            # 生成安全的文件名
+            self._cleanup_old_audio_files(temp_dir)
+
             safe_name = re.sub(r'[^\w\-.]', '_', name)[:50]
             temp_path = os.path.join(temp_dir, f"{safe_name}{ext}")
 
@@ -1198,6 +1204,19 @@ class PixivPlugin(Star):
         except Exception as e:
             logger.warning(f"[Music] 下载音频异常: {e}")
             return None
+
+    @staticmethod
+    def _cleanup_old_audio_files(temp_dir: str, max_age_seconds: int = 3600):
+        """清理超过max_age_seconds的旧音频文件"""
+        try:
+            now = time.time()
+            for filename in os.listdir(temp_dir):
+                filepath = os.path.join(temp_dir, filename)
+                if os.path.isfile(filepath):
+                    if now - os.path.getmtime(filepath) > max_age_seconds:
+                        os.remove(filepath)
+        except Exception:
+            pass
 
     def _format_search_results(self, songs: List[Dict[str, Any]], query: str) -> str:
         parts = [f"🔍 搜索「{query}」结果：\n"]
@@ -1475,6 +1494,10 @@ class PixivPlugin(Star):
     @filter.command("dglab")
     async def dglab_command(self, event: AstrMessageEvent):
         """DG-LAB设备管理命令入口"""
+        if not getattr(self, '_pool_started', False):
+            await self._connection_pool.start()
+            self._pool_started = True
+
         message_str = event.message_str.strip()
         
         try:

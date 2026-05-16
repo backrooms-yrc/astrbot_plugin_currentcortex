@@ -59,6 +59,7 @@ class DGLabClient:
         self._recv_task: Optional[asyncio.Task] = None
         self._hb_task: Optional[asyncio.Task] = None
         self._lock = asyncio.Lock()
+        self._server_ack = asyncio.Event()
 
     # ---------- 连接管理 ----------
     async def connect(self, server_url: str, client_id: Optional[str] = None) -> DGLabState:
@@ -79,6 +80,7 @@ class DGLabClient:
         self.state.bound = False
         self.state.connected = True
         self.state.last_error = ""
+        self._server_ack.clear()
         # 启动后台任务
         self._recv_task = asyncio.create_task(self._recv_loop())
         self._hb_task = asyncio.create_task(self._heartbeat_loop())
@@ -90,9 +92,8 @@ class DGLabClient:
         return self.state
 
     async def _wait_until_first_bind(self):
-        while self.state.connected and not self.state.client_id:
-            await asyncio.sleep(0.05)
-        # client_id 已经在 connect 时设置, 这里只是占位; 真正的 200 绑定在 APP 扫码后
+        # 等待服务器下发首个 bind 报文确认 clientId 已注册
+        await self._server_ack.wait()
 
     async def close(self):
         async with self._lock:
@@ -155,9 +156,10 @@ class DGLabClient:
             if cid:
                 self.state.client_id = cid
             if msg == "targetId":
-                # 服务器刚分配 clientId, 等待 APP 扫码
+                # 服务器确认 clientId 已注册, 等待 APP 扫码
                 self.state.target_id = ""
                 self.state.bound = False
+                self._server_ack.set()
             elif msg == "200":
                 self.state.target_id = tid
                 self.state.bound = True

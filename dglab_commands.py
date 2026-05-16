@@ -71,6 +71,11 @@ class DGLabCommandHandler:
   /dglab stop [A|B]          停止输出（不指定则停止全部）
   /dglab clear <A|B>         清空波形队列
 
+📌 权限管理
+  /dglab permission          查看权限隔离状态
+  /dglab permission off      关闭隔离（允许他人操控你的设备）
+  /dglab permission on       开启隔离（仅本人可控，默认）
+
 📌 状态查询
   /dglab status              查看绑定和连接状态
   /dglab info                查看详细设备信息
@@ -79,9 +84,11 @@ class DGLabCommandHandler:
   • 强度值范围: 0-200，请根据个人耐受度调整
   • A/B通道分别对应不同的脉冲输出
   • 绑定后可保持长时间在线，超时自动断开
+  • 操控他人设备: /dglab strength @用户ID A 50
   • 如遇问题发送 /dglab help 查看帮助
   
-💡 提示: 所有操作均有权限隔离，您的设备仅您可控制"""
+💡 提示: 默认开启权限隔离，仅本人可控制自己的设备
+   使用 /dglab permission off 可允许他人操控"""
     
     def __init__(self, connection_pool, device_store, default_server_url: str = ""):
         self._pool = connection_pool
@@ -146,12 +153,15 @@ class DGLabCommandHandler:
         user_id: str,
         user_name: str,
         event: AstrMessageEvent,
-    ) -> str:
+    ) -> Union[str, List]:
         """分发命令到对应的处理方法"""
         
         handlers = {
             "bind": self._cmd_bind,
             "unbind": self._cmd_unbind,
+            "permission": self._cmd_permission,
+            "perm": self._cmd_permission,
+            "shared": self._cmd_permission,
             "strength": self._cmd_strength,
             "set": self._cmd_strength,
             "up": self._cmd_strength_up,
@@ -209,50 +219,57 @@ class DGLabCommandHandler:
                 user_id=user_id,
                 server_url=server_url,
             )
-            
-            state = client.state
-            qr_content = state.qr_content
-            
-            if not qr_content:
-                raise DGLabCommandError("生成二维码失败", suggestion="请检查服务器是否正常运行")
-            
-            now = datetime.now().isoformat()
-            binding = DeviceBinding(
-                user_id=user_id,
-                client_id=state.client_id,
-                target_id="",
-                server_url=server_url,
-                bound_time=now,
-                last_active=now,
-                nickname=user_name,
-            )
-            self._store.set_binding(binding)
-            
-            # 生成二维码图片
-            qr_img_path = self._generate_qr_image(qr_content, user_id)
-            
-            response_parts = [
-                f"🔗 DG-LAB 设备绑定",
-                f"",
-                f"👤 用户: {user_name}",
-            ]
-            if user_specified_url:
-                response_parts.append(f"🖥️  服务器: {server_url}")
-            response_parts += [
-                f"🆔 客户端ID: {state.client_id[:8]}...",
-                f"",
-                f"📱 请使用 DG-LAB APP 扫描下方二维码完成绑定",
-                f"⏳ 等待APP扫码绑定中...",
-                f"💡 绑定成功后将自动通知您",
-            ]
-            
-            return [
-                event.plain_result("\n".join(response_parts)),
-                event.image_result(qr_img_path),
-            ]
-            
+        except DGLabCommandError:
+            raise
         except Exception as e:
             raise DGLabCommandError(f"连接失败: {str(e)}", suggestion="请检查服务器地址是否正确")
+
+        state = client.state
+
+        if state.last_error:
+            raise DGLabCommandError(
+                f"服务器未确认连接: {state.last_error}",
+                suggestion="请检查服务器是否正常运行"
+            )
+
+        qr_content = state.qr_content
+
+        if not qr_content:
+            raise DGLabCommandError("生成二维码失败", suggestion="请检查服务器是否正常运行")
+
+        now = datetime.now().isoformat()
+        binding = DeviceBinding(
+            user_id=user_id,
+            client_id=state.client_id,
+            target_id="",
+            server_url=server_url,
+            bound_time=now,
+            last_active=now,
+            nickname=user_name,
+        )
+        self._store.set_binding(binding)
+
+        qr_img_path = self._generate_qr_image(qr_content, user_id)
+
+        response_parts = [
+            f"🔗 DG-LAB 设备绑定",
+            f"",
+            f"👤 用户: {user_name}",
+        ]
+        if user_specified_url:
+            response_parts.append(f"🖥️  服务器: {server_url}")
+        response_parts += [
+            f"🆔 客户端ID: {state.client_id[:8]}...",
+            f"",
+            f"📱 请使用 DG-LAB APP 扫描下方二维码完成绑定",
+            f"⏳ 等待APP扫码绑定中...",
+            f"💡 绑定成功后将自动通知您",
+        ]
+
+        return [
+            event.plain_result("\n".join(response_parts)),
+            event.image_result(qr_img_path),
+        ]
     
     def _generate_qr_image(self, qr_content: str, user_id: str) -> str:
         """将二维码内容生成为图片文件，返回文件路径"""
@@ -276,6 +293,43 @@ class DGLabCommandHandler:
         
         return os.path.abspath(file_path)
     
+    async def _cmd_permission(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
+        """权限隔离开关: /dglab permission [on|off]"""
+        binding = self._store.get_binding(user_id)
+        if not binding:
+            raise DGLabCommandError("当前未绑定设备", suggestion="请先使用 /dglab bind 绑定设备")
+        
+        arg = args.strip().lower()
+        
+        if arg in ("off", "open", "开", "关闭隔离", "0"):
+            self._store.set_shared(user_id, True)
+            return (
+                "🔓 权限隔离已关闭\n"
+                f"👤 用户: {user_name}\n"
+                "📢 现在其他用户可以操控你的设备\n"
+                "💡 使用 /dglab permission on 重新开启隔离"
+            )
+        elif arg in ("on", "close", "关", "开启隔离", "1"):
+            self._store.set_shared(user_id, False)
+            return (
+                "🔒 权限隔离已开启\n"
+                f"👤 用户: {user_name}\n"
+                "🛡️ 仅你本人可以操控你的设备"
+            )
+        else:
+            # 无参数时显示当前状态
+            status = "🔓 关闭（他人可操控）" if binding.shared else "🔒 开启（仅本人可控）"
+            return (
+                f"🛡️ 权限隔离状态\n"
+                f"\n"
+                f"👤 用户: {user_name}\n"
+                f"📋 当前状态: {status}\n"
+                f"\n"
+                f"💡 用法:\n"
+                f"  /dglab permission off  关闭隔离（允许他人操控）\n"
+                f"  /dglab permission on   开启隔离（仅本人可控）"
+            )
+    
     async def _cmd_unbind(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
         """解绑设备命令"""
         binding = self._store.get_binding(user_id)
@@ -293,11 +347,12 @@ class DGLabCommandHandler:
         )
     
     async def _cmd_strength(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
-        """设置强度命令: /dglab strength <A|B> <0-200>"""
-        channel, value = self._parse_strength_args(args)
+        """设置强度命令: /dglab strength [@user] <A|B> <0-200>"""
+        target_id, remaining = self._resolve_target(args, user_id)
+        channel, value = self._parse_strength_args(remaining)
         
         result = await self._pool.send_strength_command(
-            user_id=user_id,
+            user_id=target_id,
             channel=channel,
             mode=2,
             value=value,
@@ -306,11 +361,12 @@ class DGLabCommandHandler:
         return result
     
     async def _cmd_strength_up(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
-        """增加强度命令: /dglab up <A|B> [step]"""
-        channel, step = self._parse_strength_adjust_args(args, default_step=5)
+        """增加强度命令: /dglab up [@user] <A|B> [step]"""
+        target_id, remaining = self._resolve_target(args, user_id)
+        channel, step = self._parse_strength_adjust_args(remaining, default_step=5)
         
         result = await self._pool.send_strength_command(
-            user_id=user_id,
+            user_id=target_id,
             channel=channel,
             mode=1,
             value=step,
@@ -319,11 +375,12 @@ class DGLabCommandHandler:
         return result
     
     async def _cmd_strength_down(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
-        """减少强度命令: /dglab down <A|B> [step]"""
-        channel, step = self._parse_strength_adjust_args(args, default_step=5)
+        """减少强度命令: /dglab down [@user] <A|B> [step]"""
+        target_id, remaining = self._resolve_target(args, user_id)
+        channel, step = self._parse_strength_adjust_args(remaining, default_step=5)
         
         result = await self._pool.send_strength_command(
-            user_id=user_id,
+            user_id=target_id,
             channel=channel,
             mode=0,
             value=step,
@@ -332,25 +389,27 @@ class DGLabCommandHandler:
         return result
     
     async def _cmd_stop(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
-        """停止输出命令: /dglab stop [A|B]"""
-        channel_str = args.strip().upper()
+        """停止输出命令: /dglab stop [@user] [A|B]"""
+        target_id, remaining = self._resolve_target(args, user_id)
+        channel_str = remaining.strip().upper()
         
         if not channel_str:
-            result = await self._pool.stop_all(user_id)
+            result = await self._pool.stop_all(target_id)
             return f"🛑 已停止所有输出\n{result}"
         
         channel = self._parse_channel(channel_str)
-        result = await self._pool.clear_channel(user_id, channel)
+        result = await self._pool.clear_channel(target_id, channel)
         return f"🛑 {result}"
     
     async def _cmd_clear(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
-        """清空波形队列: /dglab clear <A|B>"""
-        channel_str = args.strip().upper()
+        """清空波形队列: /dglab clear [@user] <A|B>"""
+        target_id, remaining = self._resolve_target(args, user_id)
+        channel_str = remaining.strip().upper()
         if not channel_str:
             raise DGLabCommandError("必须指定通道", suggestion="用法: /dglab clear A 或 /dglab clear B")
         
         channel = self._parse_channel(channel_str)
-        result = await self._pool.clear_channel(user_id, channel)
+        result = await self._pool.clear_channel(target_id, channel)
         return result
     
     async def _cmd_status(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
@@ -434,6 +493,43 @@ class DGLabCommandHandler:
             ])
         
         return "\n".join(parts)
+    
+    def _resolve_target(self, args: str, caller_id: str) -> tuple:
+        """解析操控目标用户，返回 (target_user_id, remaining_args)。
+        
+        如果 args 以 @user_id 开头，则尝试操控该用户的设备（需权限检查）。
+        否则操控自己的设备。
+        """
+        stripped = args.strip()
+        target_id = caller_id
+        remaining = stripped
+        
+        # 检查是否指定了目标用户: @user_id 参数
+        if stripped.startswith("@"):
+            parts = stripped.split(None, 1)
+            target_id = parts[0][1:]  # 去掉 @ 前缀
+            remaining = parts[1] if len(parts) > 1 else ""
+        
+        if target_id == caller_id:
+            # 操控自己的设备，无需权限检查
+            binding = self._store.get_binding(caller_id)
+            if not binding:
+                raise DGLabCommandError("你尚未绑定设备", suggestion="请先使用 /dglab bind 绑定设备")
+            return target_id, remaining
+        
+        # 操控他人设备，检查权限
+        binding = self._store.get_binding(target_id)
+        if not binding:
+            raise DGLabCommandError(
+                f"目标用户 {target_id} 未绑定设备",
+                suggestion="该用户需要先绑定设备"
+            )
+        if not binding.shared:
+            raise DGLabCommandError(
+                "权限不足，该用户已开启权限隔离",
+                suggestion="目标用户需先执行 /dglab permission off 允许他人操控"
+            )
+        return target_id, remaining
     
     def _extract_user_id(self, event: AstrMessageEvent) -> str:
         """提取用户唯一标识"""
