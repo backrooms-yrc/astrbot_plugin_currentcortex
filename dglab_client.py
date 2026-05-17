@@ -96,11 +96,22 @@ class DGLabClient:
         await self._server_ack.wait()
 
     async def close(self):
+        """关闭连接并清理所有后台任务。"""
         async with self._lock:
+            tasks_to_cancel = []
             for t in (self._recv_task, self._hb_task):
                 if t and not t.done():
                     t.cancel()
+                    tasks_to_cancel.append(t)
             self._recv_task = self._hb_task = None
+
+            # 等待任务真正结束，避免资源泄漏
+            for t in tasks_to_cancel:
+                try:
+                    await t
+                except (asyncio.CancelledError, Exception):
+                    pass
+
             if self._ws is not None:
                 try:
                     await self._ws.close()
@@ -141,6 +152,8 @@ class DGLabClient:
                 if not isinstance(data, dict):
                     continue
                 await self._handle_packet(data)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             self.state.last_error = f"recv_loop: {e!r}"
         finally:
@@ -180,9 +193,11 @@ class DGLabClient:
                 pass
 
     async def _heartbeat_loop(self):
+        """定期发送心跳，连接断开或被取消时退出。"""
         try:
-            while self.state.connected:
+            while True:
                 await asyncio.sleep(self.heartbeat_interval)
+                # 连接已断开则退出
                 if not self.state.connected:
                     break
                 try:
@@ -192,3 +207,4 @@ class DGLabClient:
                     break
         except asyncio.CancelledError:
             pass
+
