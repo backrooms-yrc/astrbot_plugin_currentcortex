@@ -726,12 +726,12 @@ class JMComicAPIClient:
         if not comic_id or not comic_id.strip():
             raise JMComicAPIError("漫画ID不能为空")
 
-        params = {"id": comic_id.strip()}
+        comic_id = comic_id.strip()
         logger.debug(f"[JMComic] Fetching detail: id={comic_id}")
 
         async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
             try:
-                async with session.get(f"{JMCOMIC_API_BASE}/detail", params=params) as resp:
+                async with session.get(f"{JMCOMIC_API_BASE}/album/{comic_id}") as resp:
                     if resp.status != 200:
                         error_text = await resp.text()
                         logger.error(f"[JMComic] Detail API returned status {resp.status}: {error_text[:500]}")
@@ -759,12 +759,13 @@ class JMComicAPIClient:
         if not chapter_id or not chapter_id.strip():
             raise JMComicAPIError("章节ID不能为空")
 
-        params = {"id": chapter_id.strip()}
+        chapter_id = chapter_id.strip()
+        params = {"chapter": "all"}
         logger.debug(f"[JMComic] Fetching chapter: id={chapter_id}")
 
         async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
             try:
-                async with session.get(f"{JMCOMIC_API_BASE}/chapter", params=params) as resp:
+                async with session.get(f"{JMCOMIC_API_BASE}/images/{chapter_id}", params=params) as resp:
                     if resp.status != 200:
                         error_text = await resp.text()
                         logger.error(f"[JMComic] Chapter API returned status {resp.status}: {error_text[:500]}")
@@ -1787,17 +1788,29 @@ class PixivPlugin(Star):
             return "⚠️ 未获取到漫画详情数据"
 
         title = data.get("title", "未知标题")
-        author = data.get("author", "未知作者")
+        author_raw = data.get("author", "未知作者")
+        if isinstance(author_raw, list):
+            author = " / ".join(author_raw) if author_raw else "未知作者"
+        else:
+            author = str(author_raw)
         description = data.get("description", "")
         tags = data.get("tags", [])
-        chapters = data.get("chapters", [])
         comic_id = data.get("id", "")
+        total_views = data.get("total_views", "")
+        likes = data.get("likes", "")
+        series = data.get("series", [])
+        related_list = data.get("related_list", [])
 
         parts = [f"📖 漫画详情"]
         if comic_id:
             parts.append(f"🆔 ID：{comic_id}")
         parts.append(f"📕 标题：{title}")
         parts.append(f"👤 作者：{author}")
+
+        if total_views:
+            parts.append(f"👁️ 浏览：{total_views}")
+        if likes:
+            parts.append(f"❤️ 喜欢：{likes}")
 
         if description:
             desc_short = description[:200] + ("..." if len(description) > 200 else "")
@@ -1813,19 +1826,19 @@ class PixivPlugin(Star):
                         tag_names.append(str(t))
                 parts.append(f"🏷️ 标签：{' / '.join(tag_names)}")
 
-        if chapters:
-            if isinstance(chapters, list):
-                parts.append(f"\n📑 章节列表（共{len(chapters)}章）：")
-                for i, ch in enumerate(chapters[:15], 1):
-                    if isinstance(ch, dict):
-                        ch_id = ch.get("id", "")
-                        ch_title = ch.get("title", f"第{i}章")
-                        parts.append(f"  {i}. 【{ch_id}】{ch_title}")
-                    else:
-                        parts.append(f"  {i}. {ch}")
-                if len(chapters) > 15:
-                    parts.append(f"  ... 还有 {len(chapters) - 15} 章")
-                parts.append(f"\n💡 使用 /jm chapter <章节ID> 获取图片")
+        if series and isinstance(series, list):
+            parts.append(f"\n📑 系列（共{len(series)}部）：")
+            for i, s in enumerate(series[:10], 1):
+                if isinstance(s, dict):
+                    s_id = s.get("id", "")
+                    s_name = s.get("name", f"第{i}部")
+                    parts.append(f"  {i}. 【{s_id}】{s_name}")
+                else:
+                    parts.append(f"  {i}. {s}")
+            if len(series) > 10:
+                parts.append(f"  ... 还有 {len(series) - 10} 部")
+
+        parts.append(f"\n💡 使用 /jm chapter {comic_id} 获取章节图片")
 
         return "\n".join(parts)
 
@@ -1851,7 +1864,13 @@ class PixivPlugin(Star):
         # 构建合并转发消息节点
         nodes = []
         for i, img in enumerate(images[:max_show]):
-            img_url = img if isinstance(img, str) else img.get("url", "") if isinstance(img, dict) else ""
+            if isinstance(img, str):
+                img_url = img
+            elif isinstance(img, dict):
+                # 优先使用 decoded_url（已解密的图片），其次 url
+                img_url = img.get("decoded_url", "") or img.get("url", "")
+            else:
+                img_url = ""
             if img_url:
                 node_content = [
                     Comp.Plain(text=f"第{i + 1}/{total}张"),
