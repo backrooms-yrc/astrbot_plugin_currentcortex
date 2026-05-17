@@ -24,6 +24,7 @@ WEATHER_API_URL = "https://api.bileizhen.top/api/weather"
 FEMBOY_API_URL = "https://api.bileizhen.top/api/femboy"
 NETEASE_API_URL = "https://api.bileizhen.top/api/netease"
 NETEASE_SEARCH_URL = "https://api.bileizhen.top/api/netease/search"
+JMCOMIC_API_BASE = "https://api.bileizhen.top/api/jmcomic"
 PIXIV_ARTWORK_URL = "https://www.pixiv.net/artworks/{}"
 
 HITOKOTO_CATEGORIES = {
@@ -214,6 +215,47 @@ FEMBOY_HELP_TEXT = """👗 男娘图片 使用说明
   • 每次调用都会实时获取随机图片
   • 需要有效的 API 密钥才能使用此功能
   • 如遇问题可发送 /femboy help 查看帮助"""
+
+JMCOMIC_HELP_TEXT = """📚 JMComic 漫画 使用说明
+
+📌 基本命令
+  /jm search <关键词>     搜索漫画
+  /jm detail <漫画ID>     获取漫画详情
+  /jm chapter <章节ID>    获取章节图片列表
+  /jm help               显示此帮助信息
+
+📌 搜索参数
+  /jm search <关键词> [page:<页码>]
+  • 关键词：搜索漫画标题、作者等
+  • page：页码，默认为 1
+
+📌 使用示例
+  搜索漫画：
+    /jm search 原神              搜索「原神」相关漫画
+    /jm search 萝莉 page:2       搜索第2页结果
+
+  查看详情：
+    /jm detail 413828            获取漫画ID为413828的详情
+
+  获取章节图片：
+    /jm chapter 413828           获取章节ID为413828的图片列表
+
+📌 返回信息
+  搜索结果：
+    • 漫画ID、标题、作者
+    • 分类信息
+
+  漫画详情：
+    • 标题、作者、描述
+    • 章节列表
+
+  章节图片：
+    • 图片URL列表（可直接查看）
+
+⚠️ 注意事项
+  • 内容来源于第三方，请遵守相关法律法规
+  • API 响应可能较慢，请耐心等待
+  • 如遇问题可发送 /jm help 查看帮助"""
 
 
 class PixivAPIClient:
@@ -630,6 +672,118 @@ class NeteaseAPIClient:
                 raise NeteaseAPIError("API 请求超时，请稍后再试", status_code=0)
 
 
+
+
+class JMComicAPIClient:
+    """JMComic 漫画 API 客户端"""
+
+    def __init__(self, timeout: int = 30):
+        self._timeout = aiohttp.ClientTimeout(total=timeout)
+        self._headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json",
+        }
+
+    async def search(self, query: str, page: int = 1) -> Dict[str, Any]:
+        """搜索漫画"""
+        if not query or not query.strip():
+            raise JMComicAPIError("搜索关键词不能为空")
+
+        params = {"query": query.strip(), "page": page}
+        logger.debug(f"[JMComic] Searching: query={query}, page={page}")
+
+        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+            try:
+                async with session.get(f"{JMCOMIC_API_BASE}/search", params=params) as resp:
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        logger.error(f"[JMComic] Search API returned status {resp.status}: {error_text[:500]}")
+                        raise JMComicAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+
+                    data = await resp.json()
+                    if not isinstance(data, dict):
+                        raise JMComicAPIError("API 返回数据格式异常")
+
+                    if not data.get("success"):
+                        msg = data.get("message", "未知错误")
+                        raise JMComicAPIError(f"搜索失败: {msg}")
+
+                    return data.get("data", {})
+
+            except aiohttp.ClientError as e:
+                logger.error(f"[JMComic] Search network error: {e}")
+                raise JMComicAPIError(f"网络请求失败: {str(e)}", status_code=0) from e
+            except asyncio.TimeoutError:
+                logger.error("[JMComic] Search request timeout")
+                raise JMComicAPIError("API 请求超时，请稍后再试", status_code=0)
+
+    async def get_detail(self, comic_id: str) -> Dict[str, Any]:
+        """获取漫画详情"""
+        if not comic_id or not comic_id.strip():
+            raise JMComicAPIError("漫画ID不能为空")
+
+        params = {"id": comic_id.strip()}
+        logger.debug(f"[JMComic] Fetching detail: id={comic_id}")
+
+        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+            try:
+                async with session.get(f"{JMCOMIC_API_BASE}/detail", params=params) as resp:
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        logger.error(f"[JMComic] Detail API returned status {resp.status}: {error_text[:500]}")
+                        raise JMComicAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+
+                    data = await resp.json()
+                    if not isinstance(data, dict):
+                        raise JMComicAPIError("API 返回数据格式异常")
+
+                    if not data.get("success"):
+                        msg = data.get("message", "未知错误")
+                        raise JMComicAPIError(f"获取详情失败: {msg}")
+
+                    return data.get("data", {})
+
+            except aiohttp.ClientError as e:
+                logger.error(f"[JMComic] Detail network error: {e}")
+                raise JMComicAPIError(f"网络请求失败: {str(e)}", status_code=0) from e
+            except asyncio.TimeoutError:
+                logger.error("[JMComic] Detail request timeout")
+                raise JMComicAPIError("API 请求超时，请稍后再试", status_code=0)
+
+    async def get_chapter(self, chapter_id: str) -> Dict[str, Any]:
+        """获取章节图片列表"""
+        if not chapter_id or not chapter_id.strip():
+            raise JMComicAPIError("章节ID不能为空")
+
+        params = {"id": chapter_id.strip()}
+        logger.debug(f"[JMComic] Fetching chapter: id={chapter_id}")
+
+        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+            try:
+                async with session.get(f"{JMCOMIC_API_BASE}/chapter", params=params) as resp:
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        logger.error(f"[JMComic] Chapter API returned status {resp.status}: {error_text[:500]}")
+                        raise JMComicAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+
+                    data = await resp.json()
+                    if not isinstance(data, dict):
+                        raise JMComicAPIError("API 返回数据格式异常")
+
+                    if not data.get("success"):
+                        msg = data.get("message", "未知错误")
+                        raise JMComicAPIError(f"获取章节失败: {msg}")
+
+                    return data.get("data", {})
+
+            except aiohttp.ClientError as e:
+                logger.error(f"[JMComic] Chapter network error: {e}")
+                raise JMComicAPIError(f"网络请求失败: {str(e)}", status_code=0) from e
+            except asyncio.TimeoutError:
+                logger.error("[JMComic] Chapter request timeout")
+                raise JMComicAPIError("API 请求超时，请稍后再试", status_code=0)
+
+
 class NeteaseAPIError(Exception):
     def __init__(self, message: str, status_code: int = 0):
         super().__init__(message)
@@ -655,6 +809,11 @@ class FemboyAPIError(Exception):
 
 
 class PixivAPIError(Exception):
+    def __init__(self, message: str, status_code: int = 0):
+        super().__init__(message)
+        self.status_code = status_code
+
+class JMComicAPIError(Exception):
     def __init__(self, message: str, status_code: int = 0):
         super().__init__(message)
         self.status_code = status_code
@@ -697,6 +856,7 @@ class PixivPlugin(Star):
         self._hitokoto_client = HitokotoAPIClient(timeout=self._request_timeout)
         self._weather_client = WeatherAPIClient(timeout=self._request_timeout)
         self._netease_client = NeteaseAPIClient(timeout=self._request_timeout)
+        self._jmcomic_client = JMComicAPIClient(timeout=self._request_timeout)
 
         dglab_config_raw = config.get("dglab", "")
         dglab_config = {}
@@ -1484,6 +1644,222 @@ class PixivPlugin(Star):
         if r18 == 2:
             return "🔞 [混合模式] 可能包含 R-18 内容"
         return ""
+
+
+    @filter.command("jm")
+    async def jm_command(self, event: AstrMessageEvent):
+        """JMComic 漫画命令入口"""
+        user_name = event.get_sender_name()
+        message_str = event.message_str.strip()
+
+        logger.debug(f"[JMComic] 收到消息: '{message_str}' from {user_name}")
+
+        if self._is_help_command(message_str):
+            logger.info(f"[JMComic] Help command triggered by {user_name}")
+            yield event.plain_result(JMCOMIC_HELP_TEXT)
+            return
+
+        try:
+            action, params = self._parse_jm_params(message_str)
+
+            if action == "search":
+                query = params.get("query", "")
+                page = params.get("page", 1)
+                if not query:
+                    yield event.plain_result("❌ 请输入搜索关键词\n💡 用法：/jm search 关键词\n💡 发送 /jm help 查看帮助")
+                    return
+
+                logger.info(f"[JMComic] Searching '{query}' page={page} for user {user_name}")
+                data = await self._jmcomic_client.search(query, page)
+                response_text = self._format_jm_search_results(data, query, page)
+                yield event.plain_result(response_text)
+
+            elif action == "detail":
+                comic_id = params.get("id", "")
+                if not comic_id:
+                    yield event.plain_result("❌ 请输入漫画ID\n💡 用法：/jm detail 漫画ID\n💡 发送 /jm help 查看帮助")
+                    return
+
+                logger.info(f"[JMComic] Fetching detail for id={comic_id}, user={user_name}")
+                data = await self._jmcomic_client.get_detail(comic_id)
+                response_text = self._format_jm_detail(data)
+                yield event.plain_result(response_text)
+
+            elif action == "chapter":
+                chapter_id = params.get("id", "")
+                if not chapter_id:
+                    yield event.plain_result("❌ 请输入章节ID\n💡 用法：/jm chapter 章节ID\n💡 发送 /jm help 查看帮助")
+                    return
+
+                logger.info(f"[JMComic] Fetching chapter id={chapter_id}, user={user_name}")
+                data = await self._jmcomic_client.get_chapter(chapter_id)
+                response_items = self._format_jm_chapter(data, event)
+                for item in response_items:
+                    yield item
+
+            else:
+                yield event.plain_result("❌ 未知子命令\n💡 可用命令：search / detail / chapter\n💡 发送 /jm help 查看帮助")
+
+        except JMComicAPIError as e:
+            logger.error(f"[JMComic] API error for user {user_name}: {e}")
+            error_msg = f"❌ JMComic 请求失败\n📝 错误信息：{str(e)}"
+            if e.status_code:
+                error_msg += f"\n🔢 状态码：{e.status_code}"
+            error_msg += "\n💡 请稍后重试或发送 /jm help 查看帮助"
+            yield event.plain_result(error_msg)
+        except Exception as e:
+            logger.error(f"[JMComic] Unexpected error for user {user_name}: {e}", exc_info=True)
+            yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试")
+
+    def _parse_jm_params(self, message: str) -> tuple:
+        """解析 /jm 命令参数，返回 (action, params)"""
+        cleaned = re.sub(r'^[/!！]\s*jm\s*', '', message.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^jm\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+        cleaned = cleaned.strip()
+
+        if not cleaned or cleaned.lower() in ('help', '-h', '--help', '帮助'):
+            return ("help", {})
+
+        # 解析子命令
+        parts = cleaned.split(None, 1)
+        action = parts[0].lower()
+        rest = parts[1] if len(parts) > 1 else ""
+
+        if action == "search":
+            # 解析 page 参数
+            page = 1
+            page_match = re.search(r'page\s*[:：]\s*(\d+)', rest, re.IGNORECASE)
+            if page_match:
+                page = max(1, int(page_match.group(1)))
+                rest = rest[:page_match.start()] + rest[page_match.end():]
+
+            query = rest.strip()
+            return ("search", {"query": query, "page": page})
+
+        elif action == "detail":
+            comic_id = rest.strip()
+            return ("detail", {"id": comic_id})
+
+        elif action == "chapter":
+            chapter_id = rest.strip()
+            return ("chapter", {"id": chapter_id})
+
+        else:
+            # 如果第一个词不是已知子命令，当作搜索处理
+            return ("search", {"query": cleaned, "page": 1})
+
+    def _format_jm_search_results(self, data: Dict[str, Any], query: str, page: int) -> str:
+        """格式化搜索结果"""
+        results = data.get("results", [])
+        if not results:
+            return f"😕 未找到与「{query}」相关的漫画\n💡 请尝试其他关键词"
+
+        parts = [f"📚 搜索「{query}」结果（第{page}页）：\n"]
+        for i, item in enumerate(results[:20], 1):
+            comic_id = item.get("id", "")
+            title = item.get("title", "未知")
+            author = item.get("author", "N/A")
+            category = item.get("category", {})
+            cat_title = category.get("title", "") if isinstance(category, dict) else ""
+
+            parts.append(f"  {i}. 【{comic_id}】{title}")
+            info_parts = []
+            if author and author != "N/A":
+                info_parts.append(f"作者: {author}")
+            if cat_title:
+                info_parts.append(f"分类: {cat_title}")
+            if info_parts:
+                parts.append(f"     {' | '.join(info_parts)}")
+
+        parts.append(f"\n💡 使用 /jm detail <漫画ID> 查看详情")
+        if len(results) >= 20:
+            parts.append(f"💡 使用 /jm search {query} page:{page + 1} 查看下一页")
+
+        return "\n".join(parts)
+
+    def _format_jm_detail(self, data: Dict[str, Any]) -> str:
+        """格式化漫画详情"""
+        if not data:
+            return "⚠️ 未获取到漫画详情数据"
+
+        title = data.get("title", "未知标题")
+        author = data.get("author", "未知作者")
+        description = data.get("description", "")
+        tags = data.get("tags", [])
+        chapters = data.get("chapters", [])
+        comic_id = data.get("id", "")
+
+        parts = [f"📖 漫画详情"]
+        if comic_id:
+            parts.append(f"🆔 ID：{comic_id}")
+        parts.append(f"📕 标题：{title}")
+        parts.append(f"👤 作者：{author}")
+
+        if description:
+            desc_short = description[:200] + ("..." if len(description) > 200 else "")
+            parts.append(f"📝 简介：{desc_short}")
+
+        if tags:
+            if isinstance(tags, list):
+                tag_names = []
+                for t in tags[:10]:
+                    if isinstance(t, dict):
+                        tag_names.append(t.get("name", str(t)))
+                    else:
+                        tag_names.append(str(t))
+                parts.append(f"🏷️ 标签：{' / '.join(tag_names)}")
+
+        if chapters:
+            if isinstance(chapters, list):
+                parts.append(f"\n📑 章节列表（共{len(chapters)}章）：")
+                for i, ch in enumerate(chapters[:15], 1):
+                    if isinstance(ch, dict):
+                        ch_id = ch.get("id", "")
+                        ch_title = ch.get("title", f"第{i}章")
+                        parts.append(f"  {i}. 【{ch_id}】{ch_title}")
+                    else:
+                        parts.append(f"  {i}. {ch}")
+                if len(chapters) > 15:
+                    parts.append(f"  ... 还有 {len(chapters) - 15} 章")
+                parts.append(f"\n💡 使用 /jm chapter <章节ID> 获取图片")
+
+        return "\n".join(parts)
+
+    def _format_jm_chapter(self, data: Dict[str, Any], event: AstrMessageEvent) -> List[Any]:
+        """格式化章节图片列表"""
+        if not data:
+            return [event.plain_result("⚠️ 未获取到章节数据")]
+
+        images = data.get("images", [])
+        if not images and isinstance(data, dict):
+            # 尝试其他可能的字段名
+            for key in ("urls", "pages", "pics"):
+                if key in data and isinstance(data[key], list):
+                    images = data[key]
+                    break
+
+        if not images:
+            return [event.plain_result("⚠️ 该章节暂无图片数据")]
+
+        total = len(images)
+        parts = [f"🖼️ 章节图片（共{total}张）"]
+
+        # 只展示前几张图片的URL，避免消息过长
+        max_show = min(5, total)
+        parts.append(f"\n📸 展示前{max_show}张：")
+
+        results = [event.plain_result("\n".join(parts))]
+
+        for i, img in enumerate(images[:max_show]):
+            img_url = img if isinstance(img, str) else img.get("url", "") if isinstance(img, dict) else ""
+            if img_url:
+                results.append(event.image_result(img_url))
+
+        if total > max_show:
+            results.append(event.plain_result(f"\n... 还有 {total - max_show} 张图片\n💡 完整内容请通过其他方式查看"))
+
+        return results
+
 
     async def terminate(self):
         logger.info("PixivPlugin is being terminated")
