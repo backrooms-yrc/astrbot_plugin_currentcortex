@@ -1,4 +1,5 @@
 import re
+import random
 import asyncio
 import time
 from typing import Any, Dict, List, Optional
@@ -255,7 +256,10 @@ JMCOMIC_HELP_TEXT = """📚 JMComic 漫画 使用说明
 ⚠️ 注意事项
   • 内容来源于第三方，请遵守相关法律法规
   • API 响应可能较慢，请耐心等待
-  • 如遇问题可发送 /jm help 查看帮助"""
+  • 如遇问题可发送 /jm help 查看帮助
+
+📌 相关命令
+  /jmcommend             随机推荐一部漫画"""
 
 
 class PixivAPIClient:
@@ -1826,7 +1830,7 @@ class PixivPlugin(Star):
         return "\n".join(parts)
 
     def _format_jm_chapter(self, data: Dict[str, Any], event: AstrMessageEvent) -> List[Any]:
-        """格式化章节图片列表"""
+        """格式化章节图片列表，使用合并转发消息批量发送图片避免风控"""
         if not data:
             return [event.plain_result("⚠️ 未获取到章节数据")]
 
@@ -1842,24 +1846,119 @@ class PixivPlugin(Star):
             return [event.plain_result("⚠️ 该章节暂无图片数据")]
 
         total = len(images)
-        parts = [f"🖼️ 章节图片（共{total}张）"]
+        max_show = min(10, total)
 
-        # 只展示前几张图片的URL，避免消息过长
-        max_show = min(5, total)
-        parts.append(f"\n📸 展示前{max_show}张：")
-
-        results = [event.plain_result("\n".join(parts))]
-
+        # 构建合并转发消息节点
+        nodes = []
         for i, img in enumerate(images[:max_show]):
             img_url = img if isinstance(img, str) else img.get("url", "") if isinstance(img, dict) else ""
             if img_url:
-                results.append(event.image_result(img_url))
+                node_content = [
+                    Comp.Plain(text=f"第{i + 1}/{total}张"),
+                    Comp.Image(file=img_url),
+                ]
+                nodes.append(Comp.Node(content=node_content, name="JMComic", uin="0"))
 
+        if not nodes:
+            return [event.plain_result("⚠️ 未能解析章节图片链接")]
+
+        # 添加尾部提示节点
         if total > max_show:
-            results.append(event.plain_result(f"\n... 还有 {total - max_show} 张图片\n💡 完整内容请通过其他方式查看"))
+            tail_node = Comp.Node(
+                content=[Comp.Plain(text=f"本章共{total}张图片，当前展示前{max_show}张。")],
+                name="JMComic",
+                uin="0",
+            )
+            nodes.append(tail_node)
 
+        # 使用 Nodes 组件发送合并转发消息
+        forward_msg = Comp.Nodes(nodes=nodes)
+        results = [
+            event.plain_result(f"🖼️ 章节图片（共{total}张，展示前{max_show}张）"),
+            event.chain_result([forward_msg]),
+        ]
         return results
 
+
+
+    @filter.command("jmcommend")
+    async def jmcommend_command(self, event: AstrMessageEvent):
+        """JMComic 随机推荐漫画"""
+        user_name = event.get_sender_name()
+        logger.debug(f"[JMComic] 随机推荐请求 from {user_name}")
+
+        if self._is_help_command(event.message_str.strip()):
+            yield event.plain_result(
+                "📚 JMComic 随机推荐\n\n"
+                "📌 用法：/jmcommend\n"
+                "📌 功能：随机推荐一部漫画作品\n\n"
+                "💡 返回漫画的标题、作者、分类等信息\n"
+                "💡 使用 /jm detail <ID> 可查看详情"
+            )
+            return
+
+        try:
+            # 使用随机关键词搜索来获取随机漫画
+            random_keywords = [
+                "原神", "少女", "恋爱", "校园", "冒险",
+                "魔法", "日常", "百合", "奇幻", "都市",
+                "青春", "甜蜜", "治愈", "热血", "悬疑",
+            ]
+            keyword = random.choice(random_keywords)
+            page = random.randint(1, 3)
+
+            logger.info(f"[JMComic] Random recommend: keyword={keyword}, page={page}")
+            data = await self._jmcomic_client.search(keyword, page)
+
+            results = data.get("results", [])
+            if not results:
+                # 如果没结果，用默认关键词重试
+                data = await self._jmcomic_client.search("漫画", 1)
+                results = data.get("results", [])
+
+            if not results:
+                yield event.plain_result("😕 暂时无法获取推荐，请稍后再试")
+                return
+
+            # 随机选一部
+            comic = random.choice(results)
+            comic_id = comic.get("id", "")
+            title = comic.get("title", "未知标题")
+            author = comic.get("author", "未知作者")
+            category = comic.get("category", {})
+            cat_title = category.get("title", "未知分类") if isinstance(category, dict) else "未知分类"
+            tags = comic.get("tags", [])
+
+            parts = [
+                "📚 随机漫画推荐",
+                "",
+                f"📕 标题：{title}",
+                f"👤 作者：{author}",
+                f"📂 分类：{cat_title}",
+                f"🆔 ID：{comic_id}",
+            ]
+
+            if tags and isinstance(tags, list):
+                tag_names = [t.get("name", str(t)) if isinstance(t, dict) else str(t) for t in tags[:8]]
+                if tag_names:
+                    parts.append(f"🏷️ 标签：{' / '.join(tag_names)}")
+
+            parts.append("")
+            parts.append(f"💡 使用 /jm detail {comic_id} 查看详情")
+            parts.append(f"💡 使用 /jm chapter {comic_id} 查看图片")
+
+            yield event.plain_result("\n".join(parts))
+
+        except JMComicAPIError as e:
+            logger.error(f"[JMComic] Recommend API error: {e}")
+            error_msg = f"❌ 获取推荐失败\n📝 错误信息：{str(e)}"
+            if e.status_code:
+                error_msg += f"\n🔢 状态码：{e.status_code}"
+            error_msg += "\n💡 请稍后重试"
+            yield event.plain_result(error_msg)
+        except Exception as e:
+            logger.error(f"[JMComic] Recommend unexpected error: {e}", exc_info=True)
+            yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试")
 
     async def terminate(self):
         logger.info("PixivPlugin is being terminated")
