@@ -203,10 +203,10 @@ class DGLabCommandHandler:
                     suggestion="用法: /dglab bind ws://服务器地址:端口"
                 )
         
-        if not re.match(r'^wss?://[\w\.-]+:\d+$', server_url):
+        if not re.match(r'^wss?://[\w\.-]+(:\d+)?(/.*)?$', server_url):
             raise DGLabCommandError(
                 "服务器地址格式错误",
-                suggestion="正确格式: ws://host:port 或 wss://host:port"
+                suggestion="正确格式: ws://host:port 或 wss://host:port（端口可省略）"
             )
         
         existing_binding = self._store.get_binding(user_id)
