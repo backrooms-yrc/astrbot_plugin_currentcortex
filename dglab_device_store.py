@@ -140,6 +140,17 @@ class DeviceStore:
         if updated:
             self._save()
 
+    def update_target_id(self, user_id: str, target_id: str):
+        """更新绑定的目标ID（APP扫码后由回调写入）"""
+        updated = False
+        with self._lock:
+            if user_id in self._bindings:
+                self._bindings[user_id].target_id = target_id
+                self._bindings[user_id].last_active = datetime.now().isoformat()
+                updated = True
+        if updated:
+            self._save()
+
     def list_all_bindings(self) -> Dict[str, DeviceBinding]:
         """获取所有绑定（管理员用）"""
         with self._lock:

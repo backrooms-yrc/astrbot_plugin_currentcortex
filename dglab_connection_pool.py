@@ -155,6 +155,8 @@ class DeviceConnectionPool:
             if state.bound:
                 self._store.update_last_active(user_id)
 
+            client.state.on_message = self._make_state_sync_callback(user_id, conn_info)
+
             logger.info(f"[DGLab] 用户 {user_id} 连接成功 (status={conn_info.status.value})")
             return client, conn_info.status
 
@@ -163,6 +165,31 @@ class DeviceConnectionPool:
             conn_info.error_count += 1
             logger.error(f"[DGLab] 用户 {user_id} 连接失败: {e}")
             raise
+
+    def _make_state_sync_callback(self, user_id: str, conn_info: "ConnectionInfo"):
+        """创建状态同步回调，将客户端事件同步到连接池和持久化存储"""
+        async def _on_message(data: dict):
+            pkt_type = data.get("type")
+            msg = str(data.get("message", ""))
+            tid = data.get("targetId", "")
+
+            if pkt_type == "bind" and msg == "200":
+                conn_info.status = ConnectionStatus.BOUND
+                conn_info.last_used_at = time.time()
+                self._store.update_target_id(user_id, tid)
+                self._store.update_last_active(user_id)
+                logger.info(f"[DGLab] 用户 {user_id} APP已扫码绑定成功 (target={tid[:8]}...)")
+
+            elif pkt_type == "break":
+                conn_info.status = ConnectionStatus.CONNECTED
+                self._store.update_target_id(user_id, "")
+                logger.info(f"[DGLab] 用户 {user_id} APP已断开连接")
+
+            elif pkt_type == "error":
+                conn_info.error_count += 1
+                logger.warning(f"[DGLab] 用户 {user_id} 收到错误: {msg}")
+
+        return _on_message
 
     async def execute_with_retry(
         self,

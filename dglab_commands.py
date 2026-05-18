@@ -263,7 +263,7 @@ class DGLabCommandHandler:
             f"",
             f"📱 请使用 DG-LAB APP 扫描下方二维码完成绑定",
             f"⏳ 等待APP扫码绑定中...",
-            f"💡 绑定成功后将自动通知您",
+            f"💡 扫码后使用 /dglab status 确认连接状态",
         ]
 
         return [
