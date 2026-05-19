@@ -5,23 +5,19 @@
 - /dglab unbind              - 解绑当前设备
 - /dglab strength <A|B> <0-200> - 设置通道强度
 - /dglab up/down <A|B> [step]  - 增加/减少强度
+- /dglab pulse <A|B> <preset> [sec] - 发送波形
 - /dglab stop [A|B]           - 停止指定/所有通道
 - /dglab clear <A|B>          - 清空波形队列
+- /dglab feedback             - 查看设备实时强度反馈
 - /dglab status               - 查看绑定状态和连接状态
 - /dglab info                 - 查看详细设备信息
 - /dglab help                 - 显示帮助信息
-
-设计原则:
-1. 遵循Astrbot插件开发规范
-2. 完善的参数校验与异常处理
-3. 用户友好的错误反馈
-4. 操作隔离（多用户并发安全）
-5. 超时保护机制
 """
 
 import re
 import os
 import asyncio
+import time
 import tempfile
 from typing import Optional, Tuple, List, Union
 from datetime import datetime
@@ -39,6 +35,61 @@ class DGLabCommandError(Exception):
     def __init__(self, message: str, suggestion: str = ""):
         super().__init__(message)
         self.suggestion = suggestion
+
+
+# 预设波形数据（每条8字节HEX，代表100ms脉冲）
+WAVE_PRESETS = {
+    "breathe": {
+        "name": "呼吸",
+        "description": "缓慢渐强渐弱",
+        "data": [
+            "0A0A0A0A14141414", "0A0A0A0A1E1E1E1E", "0A0A0A0A28282828",
+            "0A0A0A0A32323232", "0A0A0A0A3C3C3C3C", "0A0A0A0A46464646",
+            "0A0A0A0A50505050", "0A0A0A0A5A5A5A5A", "0A0A0A0A64646464",
+            "0A0A0A0A5A5A5A5A", "0A0A0A0A50505050", "0A0A0A0A46464646",
+            "0A0A0A0A3C3C3C3C", "0A0A0A0A32323232", "0A0A0A0A28282828",
+            "0A0A0A0A1E1E1E1E", "0A0A0A0A14141414", "0A0A0A0A0A0A0A0A",
+        ],
+    },
+    "pulse": {
+        "name": "脉冲",
+        "description": "快速间歇脉冲",
+        "data": [
+            "0A0A0A0A64646464", "0A0A0A0A64646464", "0A0A0A0A64646464",
+            "0A0A0A0A00000000", "0A0A0A0A00000000", "0A0A0A0A00000000",
+            "0A0A0A0A64646464", "0A0A0A0A64646464", "0A0A0A0A64646464",
+            "0A0A0A0A00000000", "0A0A0A0A00000000", "0A0A0A0A00000000",
+        ],
+    },
+    "wave": {
+        "name": "波浪",
+        "description": "连续波浪起伏",
+        "data": [
+            "0A0A0A0A14141414", "0A0A0A0A28282828", "0A0A0A0A3C3C3C3C",
+            "0A0A0A0A50505050", "0A0A0A0A64646464", "0A0A0A0A64646464",
+            "0A0A0A0A50505050", "0A0A0A0A3C3C3C3C", "0A0A0A0A28282828",
+            "0A0A0A0A14141414",
+        ],
+    },
+    "tap": {
+        "name": "敲击",
+        "description": "短促有力的单次敲击",
+        "data": [
+            "0A0A0A0A64646464", "0A0A0A0A00000000", "0A0A0A0A00000000",
+            "0A0A0A0A00000000", "0A0A0A0A00000000",
+        ],
+    },
+    "storm": {
+        "name": "风暴",
+        "description": "高频持续输出",
+        "data": [
+            "0505050564646464", "0505050564646464", "0505050564646464",
+            "0505050564646464", "0505050564646464", "0505050564646464",
+            "0505050564646464", "0505050564646464", "0505050564646464",
+            "0505050564646464",
+        ],
+    },
+}
 
 
 class DGLabCommandHandler:
@@ -67,18 +118,26 @@ class DGLabCommandHandler:
   /dglab down <A|B> [步进]    减少强度（默认-5）
                             例: /dglab down B
 
+📌 波形控制
+  /dglab pulse <A|B> <预设名> [秒数]  发送波形（默认5秒）
+                            例: /dglab pulse A breathe 10
+  /dglab pulse <A|B> <HEX数据> [秒数] 发送自定义波形
+                            例: /dglab pulse B 0A0A0A0A64646464
+  可用预设: breathe(呼吸), pulse(脉冲), wave(波浪), tap(敲击), storm(风暴)
+
 📌 输出控制
   /dglab stop [A|B]          停止输出（不指定则停止全部）
   /dglab clear <A|B>         清空波形队列
+
+📌 状态与反馈
+  /dglab status              查看绑定和连接状态
+  /dglab info                查看详细设备信息
+  /dglab feedback            查看设备实时强度和反馈
 
 📌 权限管理
   /dglab permission          查看权限隔离状态
   /dglab permission off      关闭隔离（允许他人操控你的设备）
   /dglab permission on       开启隔离（仅本人可控，默认）
-
-📌 状态查询
-  /dglab status              查看绑定和连接状态
-  /dglab info                查看详细设备信息
 
 ⚠️ 注意事项
   • 强度值范围: 0-200，请根据个人耐受度调整
@@ -86,7 +145,7 @@ class DGLabCommandHandler:
   • 绑定后可保持长时间在线，超时自动断开
   • 操控他人设备: /dglab strength @用户ID A 50
   • 如遇问题发送 /dglab help 查看帮助
-  
+
 💡 提示: 默认开启权限隔离，仅本人可控制自己的设备
    使用 /dglab permission off 可允许他人操控"""
     
@@ -170,6 +229,9 @@ class DGLabCommandHandler:
             "-": self._cmd_strength_down,
             "stop": self._cmd_stop,
             "clear": self._cmd_clear,
+            "pulse": self._cmd_pulse,
+            "wave": self._cmd_pulse,
+            "feedback": self._cmd_feedback,
             "status": self._cmd_status,
             "info": self._cmd_info,
             "state": self._cmd_status,
@@ -179,7 +241,7 @@ class DGLabCommandHandler:
         if not handler:
             raise DGLabCommandError(
                 f"未知命令: {command}",
-                suggestion="可用命令: bind, unbind, strength, up, down, stop, clear, status, help"
+                suggestion="可用命令: bind, unbind, strength, up, down, stop, clear, pulse, feedback, status, help"
             )
         
         return await handler(args, user_id, user_name, event)
@@ -392,14 +454,16 @@ class DGLabCommandHandler:
         """停止输出命令: /dglab stop [@user] [A|B]"""
         target_id, remaining = self._resolve_target(args, user_id)
         channel_str = remaining.strip().upper()
-        
+
         if not channel_str:
             result = await self._pool.stop_all(target_id)
             return f"🛑 已停止所有输出\n{result}"
-        
+
         channel = self._parse_channel(channel_str)
-        result = await self._pool.clear_channel(target_id, channel)
-        return f"🛑 {result}"
+        await self._pool.send_strength_command(user_id=target_id, channel=channel, mode=2, value=0)
+        await self._pool.clear_channel(target_id, channel)
+        channel_name = {1: "A", 2: "B"}[channel]
+        return f"🛑 已停止{channel_name}通道输出（强度归零 + 清空波形）"
     
     async def _cmd_clear(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
         """清空波形队列: /dglab clear [@user] <A|B>"""
@@ -407,10 +471,90 @@ class DGLabCommandHandler:
         channel_str = remaining.strip().upper()
         if not channel_str:
             raise DGLabCommandError("必须指定通道", suggestion="用法: /dglab clear A 或 /dglab clear B")
-        
+
         channel = self._parse_channel(channel_str)
         result = await self._pool.clear_channel(target_id, channel)
         return result
+
+    async def _cmd_pulse(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
+        """发送波形: /dglab pulse [@user] <A|B> <预设名|HEX数据> [持续秒数]"""
+        target_id, remaining = self._resolve_target(args, user_id)
+        parts = remaining.strip().split()
+
+        if len(parts) < 2:
+            preset_list = "\n".join(
+                f"  • {key} — {info['name']}（{info['description']}）"
+                for key, info in WAVE_PRESETS.items()
+            )
+            raise DGLabCommandError(
+                "参数不足",
+                suggestion=f"用法: /dglab pulse <A|B> <预设名> [秒数]\n可用预设:\n{preset_list}"
+            )
+
+        channel_str = parts[0].upper()
+        channel = self._parse_channel(channel_str)
+        channel_letter = {1: "A", 2: "B"}[channel]
+
+        preset_or_hex = parts[1].lower()
+        duration = 5
+
+        if len(parts) >= 3:
+            try:
+                duration = int(parts[2])
+                if not (1 <= duration <= 30):
+                    raise DGLabCommandError("持续时间超出范围", suggestion="持续时间范围: 1-30 秒")
+            except ValueError:
+                raise DGLabCommandError(f"持续时间必须是数字: {parts[2]}", suggestion="持续时间范围: 1-30 秒")
+
+        if preset_or_hex in WAVE_PRESETS:
+            pulse_data = WAVE_PRESETS[preset_or_hex]["data"]
+            preset_name = WAVE_PRESETS[preset_or_hex]["name"]
+        else:
+            # 尝试作为逗号分隔的HEX数据解析
+            hex_parts = preset_or_hex.split(",")
+            for h in hex_parts:
+                if len(h) != 16 or not all(c in "0123456789abcdefABCDEF" for c in h):
+                    raise DGLabCommandError(
+                        f"无效的波形数据或预设名: {preset_or_hex}",
+                        suggestion=f"可用预设: {', '.join(WAVE_PRESETS.keys())}\n或提供16位HEX数据（逗号分隔多条）"
+                    )
+            pulse_data = hex_parts
+            preset_name = "自定义"
+
+        result = await self._pool.send_pulse_command(
+            user_id=target_id,
+            channel=channel_letter,
+            pulse_data=pulse_data,
+            duration=duration,
+        )
+        return f"{result}\n📋 波形: {preset_name} | 通道: {channel_letter} | 持续: {duration}秒"
+
+    async def _cmd_feedback(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
+        """查看设备实时反馈: /dglab feedback [@user]"""
+        target_id, _ = self._resolve_target(args, user_id)
+
+        feedback = self._pool.get_strength_feedback(target_id)
+        if not feedback:
+            raise DGLabCommandError("无法获取设备反馈", suggestion="请确认设备已绑定且在线")
+
+        parts = [
+            "📡 DG-LAB 设备实时反馈",
+            "",
+            f"⚡ A通道强度: {feedback['strength_a']} / {feedback['limit_a']}",
+            f"⚡ B通道强度: {feedback['strength_b']} / {feedback['limit_b']}",
+        ]
+
+        if feedback["last_feedback_button"] >= 0 and feedback["last_feedback_time"]:
+            btn = feedback["last_feedback_button"]
+            ch = "A" if btn < 5 else "B"
+            btn_idx = (btn % 5) + 1
+            elapsed = int(time.time() - feedback["last_feedback_time"])
+            parts.extend([
+                "",
+                f"🔘 最近反馈按钮: {ch}通道 第{btn_idx}个（{elapsed}秒前）",
+            ])
+
+        return "\n".join(parts)
     
     async def _cmd_status(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
         """查看状态命令"""

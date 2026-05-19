@@ -43,6 +43,13 @@ class ConnectionInfo:
     error_count: int = 0         # 连续错误次数
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     reconnect_task: Optional[asyncio.Task] = None
+    # APP 回传的实时强度/上限数据
+    strength_a: int = 0
+    strength_b: int = 0
+    limit_a: int = 200
+    limit_b: int = 200
+    last_feedback_button: int = -1       # 最近一次反馈按钮角标 (0-9)
+    last_feedback_time: Optional[float] = None
 
 
 class DeviceConnectionPool:
@@ -189,7 +196,31 @@ class DeviceConnectionPool:
                 conn_info.error_count += 1
                 logger.warning(f"[DGLab] 用户 {user_id} 收到错误: {msg}")
 
+            elif pkt_type == "msg":
+                self._parse_app_message(conn_info, msg)
+
         return _on_message
+
+    def _parse_app_message(self, conn_info: "ConnectionInfo", msg: str):
+        """解析 APP 回传的 msg 消息（强度回传、反馈按钮等）"""
+        if msg.startswith("strength-"):
+            # 格式: strength-A强度+B强度+A上限+B上限
+            parts = msg[len("strength-"):].split("+")
+            if len(parts) == 4:
+                try:
+                    conn_info.strength_a = int(parts[0])
+                    conn_info.strength_b = int(parts[1])
+                    conn_info.limit_a = int(parts[2])
+                    conn_info.limit_b = int(parts[3])
+                except ValueError:
+                    pass
+        elif msg.startswith("feedback-"):
+            try:
+                btn = int(msg[len("feedback-"):])
+                conn_info.last_feedback_button = btn
+                conn_info.last_feedback_time = time.time()
+            except ValueError:
+                pass
 
     async def execute_with_retry(
         self,
@@ -292,12 +323,12 @@ class DeviceConnectionPool:
         pulse_data: list,
         duration: int = 5,
     ) -> str:
-        """发送波形数据
+        """通过 clientMsg 类型发送波形数据（服务端管理队列和发送频率）
 
         Args:
             channel: "A" 或 "B"
-            pulse_data: 波形HEX数据列表
-            duration: 持续时间(秒)
+            pulse_data: 波形HEX数据列表（每条8字节HEX，代表100ms）
+            duration: 持续发送时长（秒）
         """
         if channel not in ("A", "B"):
             raise ValueError("通道必须是 A 或 B")
@@ -306,12 +337,11 @@ class DeviceConnectionPool:
         if len(pulse_data) > 100:
             raise ValueError("波形数据过长（最大100条）")
 
-        message = json.dumps({channel: pulse_data})
-        command = f"pulse-{channel}:{message}"
+        pulse_json = json.dumps(pulse_data, ensure_ascii=False)
+        message = f"{channel}:{pulse_json}"
 
         async def _send(client: DGLabClient):
-            await client.send_message(command[:1950])
-            return command
+            await client.send_pulse(channel, message, duration)
 
         await self.execute_with_retry(user_id, _send)
         return f"✅ 已向{channel}通道发送波形数据（持续{duration}秒）"
@@ -388,6 +418,21 @@ class DeviceConnectionPool:
             "idle_seconds": int(time.time() - conn_info.last_used_at),
             "error_count": conn_info.error_count,
             "is_bound": conn_info.status == ConnectionStatus.BOUND,
+        }
+
+    def get_strength_feedback(self, user_id: str) -> Optional[dict]:
+        """获取 APP 回传的实时强度和上限数据"""
+        conn_info = self._connections.get(user_id)
+        if not conn_info:
+            return None
+
+        return {
+            "strength_a": conn_info.strength_a,
+            "strength_b": conn_info.strength_b,
+            "limit_a": conn_info.limit_a,
+            "limit_b": conn_info.limit_b,
+            "last_feedback_button": conn_info.last_feedback_button,
+            "last_feedback_time": conn_info.last_feedback_time,
         }
 
     async def _reconnect_user(self, user_id: str):

@@ -122,7 +122,7 @@ class DGLabClient:
             self.state.bound = False
 
     # ---------- 收发 ----------
-    async def _send_envelope(self, type_: str, message: str, target_id: str = "") -> None:
+    async def _send_envelope(self, type_, message: str, target_id: str = "") -> None:
         if not self._ws:
             raise RuntimeError("WebSocket 未连接")
         payload = {
@@ -139,7 +139,23 @@ class DGLabClient:
             raise RuntimeError("尚未与 APP 绑定, 无法发送 msg")
         if len(message) > 1950:
             raise ValueError("message 长度不能超过 1950")
-        await self._send_envelope("msg", message)
+        await self._send_envelope(4, message)
+
+    async def send_pulse(self, channel: str, message: str, duration: int = 5) -> None:
+        """通过 clientMsg 类型发送波形数据（服务端管理队列和发送频率）。"""
+        if not self.state.bound or not self.state.target_id:
+            raise RuntimeError("尚未与 APP 绑定, 无法发送波形")
+        if not self._ws:
+            raise RuntimeError("WebSocket 未连接")
+        payload = {
+            "type": "clientMsg",
+            "clientId": self.state.client_id,
+            "targetId": self.state.target_id,
+            "channel": channel,
+            "time": duration,
+            "message": message,
+        }
+        await self._ws.send(json.dumps(payload, ensure_ascii=False))
 
     async def _recv_loop(self):
         assert self._ws is not None
