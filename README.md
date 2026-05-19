@@ -14,7 +14,7 @@
 - **👗 男娘图片**：随机获取男娘主题图片（需配置 API 密钥）
 - **📚 JMComic 漫画**：搜索漫画、查看详情、获取章节图片、随机推荐
 - **🎵 网易云音乐**：点歌、搜索歌曲、获取播放链接和歌曲详情
-- **🔌 DG-LAB 设备管理**：完整的 DG-LAB Socket V2 设备控制，包括绑定/解绑、强度调节、波形发送等
+- **🔌 DG-LAB 设备管理**：完整的 DG-LAB Socket V2 设备控制，包括绑定/解绑、强度调节、电击启停、波形发送、实时反馈等
 - **⚡ 异步高性能**：基于 aiohttp 的异步请求，响应迅速
 - **🛡️ 完善错误处理**：网络异常、API 错误、参数错误等均有友好提示
 - **⚙️ 灵活配置**：支持在 AstrBot 管理面板中自定义默认参数
@@ -418,8 +418,12 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 | `/dglab strength <A\|B> <0-200>` | 设置通道强度值 |
 | `/dglab up <A\|B> [步进]` | 增加强度（默认+5） |
 | `/dglab down <A\|B> [步进]` | 减少强度（默认-5） |
-| `/dglab stop [A\|B]` | 停止输出（不指定则停止全部） |
+| `/dglab shock <A\|B> [强度] [波形] [秒数]` | 开始电击（设置强度并发送波形） |
+| `/dglab stop [A\|B]` | 停止电击（强度归零+清空波形，不指定则停止全部） |
+| `/dglab pulse <A\|B> <预设名\|HEX> [秒数]` | 发送波形数据（默认5秒） |
 | `/dglab clear <A\|B>` | 清空波形队列 |
+| `/dglab feedback` | 查看设备实时强度和反馈按钮状态 |
+| `/dglab permission [on\|off]` | 查看/切换权限隔离（默认开启） |
 | `/dglab status` | 查看绑定状态和连接状态 |
 | `/dglab info` | 查看详细设备信息 |
 | `/dglab help` | 显示帮助信息 |
@@ -433,12 +437,16 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 2. 使用 DG-LAB APP 扫描二维码完成绑定
 
 3. 控制设备
-   /dglab strength A 50     # 设置A通道强度为50
+   /dglab shock A 50 breathe 10  # A通道开始电击（强度50，呼吸波形，10秒）
+   /dglab strength A 50     # 仅设置A通道强度为50
+   /dglab pulse A wave 5    # 仅发送波浪波形到A通道（5秒）
    /dglab up B 10           # B通道强度增加10
    /dglab stop              # 停止所有输出
+   /dglab stop A            # 仅停止A通道
 
 4. 查看状态
    /dglab status            # 查看连接状态
+   /dglab feedback          # 查看实时强度和反馈
 
 5. 解绑设备（可选）
    /dglab unbind            # 解绑当前设备
@@ -453,6 +461,33 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 | `通道` | string | A 或 B | A/B 双通道独立控制 |
 | `强度值` | int | 0-200 | 目标强度值（0=关闭，200=最大） |
 | `步进值` | int | 1-200 | 每次调整的幅度（默认5） |
+
+**电击控制参数（`/dglab shock`）：**
+
+| 参数 | 类型 | 范围 | 说明 |
+| --- | --- | --- | --- |
+| `通道` | string | A 或 B | 必填，指定输出通道 |
+| `强度` | int | 0-200 | 可选，默认20 |
+| `波形` | string | 预设名 | 可选，默认pulse。可选: breathe, pulse, wave, tap, storm |
+| `秒数` | int | 1-30 | 可选，持续时间，默认5秒 |
+
+**波形控制参数（`/dglab pulse`）：**
+
+| 参数 | 类型 | 范围 | 说明 |
+| --- | --- | --- | --- |
+| `通道` | string | A 或 B | 必填，指定输出通道 |
+| `预设名/HEX` | string | 见下方 | 必填，波形预设名或16位HEX数据 |
+| `秒数` | int | 1-30 | 可选，持续时间，默认5秒 |
+
+**可用波形预设：**
+
+| 预设名 | 效果 |
+| --- | --- |
+| `breathe` | 缓慢渐强渐弱 |
+| `pulse` | 快速间歇脉冲 |
+| `wave` | 连续波浪起伏 |
+| `tap` | 短促有力的单次敲击 |
+| `storm` | 高频持续输出 |
 
 **绑定参数：**
 

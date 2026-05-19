@@ -125,8 +125,11 @@ class DGLabCommandHandler:
                             例: /dglab pulse B 0A0A0A0A64646464
   可用预设: breathe(呼吸), pulse(脉冲), wave(波浪), tap(敲击), storm(风暴)
 
-📌 输出控制
-  /dglab stop [A|B]          停止输出（不指定则停止全部）
+📌 电击启停
+  /dglab shock <A|B> [强度] [波形] [秒数]  开始电击
+                            例: /dglab shock A 30 breathe 10
+                            默认: 强度20, 波形pulse, 持续5秒
+  /dglab stop [A|B]          停止电击（不指定则停止全部）
   /dglab clear <A|B>         清空波形队列
 
 📌 状态与反馈
@@ -227,6 +230,9 @@ class DGLabCommandHandler:
             "down": self._cmd_strength_down,
             "+": self._cmd_strength_up,
             "-": self._cmd_strength_down,
+            "shock": self._cmd_shock,
+            "start": self._cmd_shock,
+            "fire": self._cmd_shock,
             "stop": self._cmd_stop,
             "clear": self._cmd_clear,
             "pulse": self._cmd_pulse,
@@ -241,7 +247,7 @@ class DGLabCommandHandler:
         if not handler:
             raise DGLabCommandError(
                 f"未知命令: {command}",
-                suggestion="可用命令: bind, unbind, strength, up, down, stop, clear, pulse, feedback, status, help"
+                suggestion="可用命令: bind, unbind, strength, up, down, shock, stop, clear, pulse, feedback, status, help"
             )
         
         return await handler(args, user_id, user_name, event)
@@ -449,7 +455,70 @@ class DGLabCommandHandler:
         )
         
         return result
-    
+
+    async def _cmd_shock(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
+        """开始电击: /dglab shock [@user] <A|B> [强度] [波形预设] [秒数]"""
+        target_id, remaining = self._resolve_target(args, user_id)
+        parts = remaining.strip().split()
+
+        if len(parts) < 1:
+            preset_list = ", ".join(WAVE_PRESETS.keys())
+            raise DGLabCommandError(
+                "参数不足",
+                suggestion=f"用法: /dglab shock <A|B> [强度0-200] [波形预设] [秒数]\n可用预设: {preset_list}"
+            )
+
+        channel_str = parts[0].upper()
+        channel = self._parse_channel(channel_str)
+        channel_letter = {1: "A", 2: "B"}[channel]
+
+        # 默认值
+        strength = 20
+        preset_name_key = "pulse"
+        duration = 5
+
+        # 解析可选参数
+        idx = 1
+        if idx < len(parts):
+            try:
+                strength = int(parts[idx])
+                if not (0 <= strength <= 200):
+                    raise DGLabCommandError("强度值超出范围", suggestion="强度值范围: 0-200")
+                idx += 1
+            except ValueError:
+                pass
+
+        if idx < len(parts) and parts[idx].lower() in WAVE_PRESETS:
+            preset_name_key = parts[idx].lower()
+            idx += 1
+
+        if idx < len(parts):
+            try:
+                duration = int(parts[idx])
+                if not (1 <= duration <= 30):
+                    raise DGLabCommandError("持续时间超出范围", suggestion="持续时间范围: 1-30 秒")
+            except ValueError:
+                raise DGLabCommandError(f"持续时间必须是数字: {parts[idx]}", suggestion="持续时间范围: 1-30 秒")
+
+        pulse_data = WAVE_PRESETS[preset_name_key]["data"]
+        preset_display = WAVE_PRESETS[preset_name_key]["name"]
+
+        # 设置强度
+        await self._pool.send_strength_command(
+            user_id=target_id, channel=channel, mode=2, value=strength,
+        )
+        # 发送波形
+        await self._pool.send_pulse_command(
+            user_id=target_id, channel=channel_letter,
+            pulse_data=pulse_data, duration=duration,
+        )
+
+        return (
+            f"⚡ 已启动{channel_letter}通道电击\n"
+            f"📋 强度: {strength} | 波形: {preset_display} | 持续: {duration}秒\n"
+            f"💡 使用 /dglab stop {channel_letter} 停止输出"
+        )
+
     async def _cmd_stop(self, args: str, user_id: str, user_name: str, event: AstrMessageEvent) -> str:
         """停止输出命令: /dglab stop [@user] [A|B]"""
         target_id, remaining = self._resolve_target(args, user_id)
