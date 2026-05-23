@@ -45,7 +45,7 @@ HITOKOTO_CATEGORIES = {
 
 HELP_TEXT = """🎨 Pixiv 随机图片插件 使用说明
 
-📌 基本命令
+📌 基本命令（别名：/图片）
   /pixiv               获取一张随机全年龄图片（默认参数）
   /pixiv help          显示此帮助信息
 
@@ -95,11 +95,12 @@ HELP_TEXT = """🎨 Pixiv 随机图片插件 使用说明
   • 图片来源于 Pixiv，请遵守相关法律法规
   • 如遇问题可发送 /pixiv help 查看帮助
 
-💡 提示：所有参数均可自由组合使用"""
+💡 提示：所有参数均可自由组合使用
+💡 中文别名：输入 /图片 等同于 /pixiv"""
 
 HITOKOTO_HELP_TEXT = """✨ 每日一言 使用说明
 
-📌 基本命令
+📌 基本命令（别名：/一言）
   /hitokoto             获取一条随机一言（默认全部分类）
   /hitokoto help       显示此帮助信息
 
@@ -128,7 +129,7 @@ HITOKOTO_HELP_TEXT = """✨ 每日一言 使用说明
 
 WEATHER_HELP_TEXT = """🌤️ 天气查询 使用说明
 
-📌 基本命令
+📌 基本命令（别名：/天气）
   /weather <城市名>     查询指定城市的天气
   /weather help         显示此帮助信息
 
@@ -153,11 +154,16 @@ WEATHER_HELP_TEXT = """🌤️ 天气查询 使用说明
 
 MUSIC_HELP_TEXT = """🎵 网易云音乐 使用说明
 
-📌 基本命令
+📌 基本命令（别名：/音乐）
   /music <歌曲名>       搜索并获取歌曲信息（点歌）
-  /music id:<歌曲ID>    通过歌曲ID获取详细信息
-  /music search <关键词> 搜索歌曲列表
+  /music id:<歌曲ID>    通过歌曲ID获取详细信息（别名：编号:<ID>）
+  /music search <关键词> 搜索歌曲列表（别名：搜索）
   /music help           显示此帮助信息
+
+📌 中文用法示例
+  /音乐 孤勇者              点歌
+  /音乐 搜索 陈奕迅         搜索歌曲列表
+  /音乐 编号:1901371647     通过ID获取歌曲
 
 📌 使用示例
   点歌（搜索并返回第一首）：
@@ -185,7 +191,7 @@ MUSIC_HELP_TEXT = """🎵 网易云音乐 使用说明
 
 FEMBOY_HELP_TEXT = """👗 男娘图片 使用说明
 
-📌 基本命令
+📌 基本命令（别名：/男娘）
   /femboy              获取一张随机男娘图片（WebP 格式）
   /femboy help         显示此帮助信息
 
@@ -219,11 +225,16 @@ FEMBOY_HELP_TEXT = """👗 男娘图片 使用说明
 
 JMCOMIC_HELP_TEXT = """📚 JMComic 漫画 使用说明
 
-📌 基本命令
-  /jm search <关键词>     搜索漫画
-  /jm detail <漫画ID>     获取漫画详情
-  /jm chapter <章节ID>    获取章节图片列表
+📌 基本命令（别名：/漫画）
+  /jm search <关键词>     搜索漫画（别名：搜索）
+  /jm detail <漫画ID>     获取漫画详情（别名：详情）
+  /jm chapter <章节ID>    获取章节图片列表（别名：章节）
   /jm help               显示此帮助信息
+
+📌 中文用法示例
+  /漫画 搜索 原神            搜索「原神」相关漫画
+  /漫画 详情 413828          获取漫画详情
+  /漫画 章节 413828          获取章节图片
 
 📌 搜索参数
   /jm search <关键词> [page:<页码>]
@@ -259,7 +270,7 @@ JMCOMIC_HELP_TEXT = """📚 JMComic 漫画 使用说明
   • 如遇问题可发送 /jm help 查看帮助
 
 📌 相关命令
-  /jmcommend             随机推荐一部漫画"""
+  /jmcommend（别名：/漫画推荐）  随机推荐一部漫画"""
 
 
 class PixivAPIClient:
@@ -911,7 +922,7 @@ class PixivPlugin(Star):
             f"size={self._default_size}, proxy={self._image_proxy}, excludeAI={self._exclude_ai}"
         )
 
-    @filter.command("hitokoto")
+    @filter.command("hitokoto", alias={'一言'})
     async def hitokoto_command(self, event: AstrMessageEvent):
         user_name = event.get_sender_name()
         message_str = event.message_str.strip()
@@ -945,8 +956,8 @@ class PixivPlugin(Star):
             yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试")
 
     def _parse_hitokoto_params(self, message: str) -> Optional[str]:
-        cleaned = re.sub(r'^[/!！]\s*hitokoto\s*', '', message.strip(), flags=re.IGNORECASE)
-        cleaned = re.sub(r'^hitokoto\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^[/!！]\s*(hitokoto|一言)\s*', '', message.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^(hitokoto|一言)\s*', '', cleaned.strip(), flags=re.IGNORECASE)
         cleaned = cleaned.strip()
 
         if not cleaned or cleaned.lower() in ('help', '-h', '--help', '帮助'):
@@ -973,7 +984,7 @@ class PixivPlugin(Star):
 
         return "\n".join(response_parts)
 
-    @filter.command("weather")
+    @filter.command("weather", alias={'天气'})
     async def weather_command(self, event: AstrMessageEvent):
         user_name = event.get_sender_name()
         message_str = event.message_str.strip()
@@ -1023,8 +1034,8 @@ class PixivPlugin(Star):
             yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试或联系管理员")
 
     def _parse_weather_params(self, message: str) -> Optional[str]:
-        cleaned = re.sub(r'^[/!！]\s*weather\s*', '', message.strip(), flags=re.IGNORECASE)
-        cleaned = re.sub(r'^weather\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^[/!！]\s*(weather|天气)\s*', '', message.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^(weather|天气)\s*', '', cleaned.strip(), flags=re.IGNORECASE)
         cleaned = cleaned.strip()
 
         if not cleaned or cleaned.lower() in ('help', '-h', '--help', '帮助'):
@@ -1121,7 +1132,7 @@ class PixivPlugin(Star):
         logger.info(f"[Weather] Formatted response with {len(response_parts)} parts for city: {city}")
         return final_response
 
-    @filter.command("femboy")
+    @filter.command("femboy", alias={'男娘'})
     async def femboy_command(self, event: AstrMessageEvent):
         user_name = event.get_sender_name()
         message_str = event.message_str.strip()
@@ -1198,7 +1209,7 @@ class PixivPlugin(Star):
         logger.warning(f"[Femboy] Unknown response type: {response_type}")
         return [event.plain_result("⚠️ API 返回了未知格式的数据，请联系管理员")]
 
-    @filter.command("music")
+    @filter.command("music", alias={'音乐'})
     async def music_command(self, event: AstrMessageEvent):
         user_name = event.get_sender_name()
         message_str = event.message_str.strip()
@@ -1217,9 +1228,9 @@ class PixivPlugin(Star):
                 return
 
             # 通过ID获取歌曲
-            id_match = re.match(r'^id\s*[:：]\s*(\d+)$', query, re.IGNORECASE)
+            id_match = re.match(r'^(id|编号)\s*[:：]\s*(\d+)$', query, re.IGNORECASE)
             if id_match:
-                song_id = id_match.group(1)
+                song_id = id_match.group(2)
                 logger.info(f"[Music] Fetching song by ID {song_id} for user {user_name}")
                 song_data = await self._netease_client.get_song(song_id)
                 response_items = await self._format_song_response(song_data, event)
@@ -1228,9 +1239,9 @@ class PixivPlugin(Star):
                 return
 
             # 搜索模式：仅列出搜索结果
-            search_match = re.match(r'^search\s+(.+)$', query, re.IGNORECASE)
+            search_match = re.match(r'^(search|搜索)\s+(.+)$', query, re.IGNORECASE)
             if search_match:
-                search_query = search_match.group(1).strip()
+                search_query = search_match.group(2).strip()
                 logger.info(f"[Music] Searching songs '{search_query}' for user {user_name}")
                 songs = await self._netease_client.search_songs(search_query)
                 if not songs:
@@ -1270,8 +1281,8 @@ class PixivPlugin(Star):
             yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试")
 
     def _parse_music_params(self, message: str) -> Optional[str]:
-        cleaned = re.sub(r'^[/!！]\s*music\s*', '', message.strip(), flags=re.IGNORECASE)
-        cleaned = re.sub(r'^music\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^[/!！]\s*(music|音乐)\s*', '', message.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^(music|音乐)\s*', '', cleaned.strip(), flags=re.IGNORECASE)
         cleaned = cleaned.strip()
 
         if not cleaned or cleaned.lower() in ('help', '-h', '--help', '帮助'):
@@ -1396,7 +1407,7 @@ class PixivPlugin(Star):
         parts.append(f"\n💡 使用 /music id:<歌曲ID> 获取详细信息和播放链接")
         return "\n".join(parts)
 
-    @filter.command("pixiv")
+    @filter.command("pixiv", alias={'图片'})
     async def pixiv_command(self, event: AstrMessageEvent):
         user_name = event.get_sender_name()
         message_str = event.message_str.strip()
@@ -1436,25 +1447,30 @@ class PixivPlugin(Star):
 
     def _is_help_command(self, message: str) -> bool:
         """
-        检测是否为帮助命令
-        支持多种格式，增强健壮性
+        检测是否为帮助命令。
+        支持所有命令名（英文和中文别名）的 help 检测。
         """
         if not message:
             return False
 
         msg_clean = message.strip()
-        logger.debug(f"[DEBUG] 检测help命令: 原始='{msg_clean}'")
 
         # 标准化消息：移除命令前缀
         normalized = re.sub(r'^[/!！]', '', msg_clean).strip()
-        logger.debug(f"[DEBUG] 标准化后: '{normalized}'")
 
-        # 提取参数部分（处理 "pixiv help" 格式）
-        if normalized.lower().startswith('pixiv'):
-            args_part = normalized[5:].strip()
-            logger.debug(f"[DEBUG] 提取参数: '{args_part}'")
-        else:
-            args_part = normalized
+        # 所有已知命令名（英文+中文别名），按长度降序排列避免前缀误匹配
+        command_names = [
+            'jmcommend', '漫画推荐', 'hitokoto', 'weather', 'pixiv',
+            'femboy', 'music', 'dglab', '图片', '一言', '天气',
+            '男娘', '音乐', '漫画', '电击', 'jm',
+        ]
+
+        # 尝试剥离命令名，提取参数部分
+        args_part = normalized
+        for cmd in command_names:
+            if normalized.lower().startswith(cmd.lower()):
+                args_part = normalized[len(cmd):].strip()
+                break
 
         lower_args = args_part.lower().strip()
 
@@ -1463,38 +1479,23 @@ class PixivPlugin(Star):
 
         # 精确匹配
         if lower_args in help_keywords:
-            logger.debug(f"[DEBUG] ✅ 精确匹配到help关键词: '{lower_args}'")
             return True
 
-        # 处理可能的额外空格或变体
-        if lower_args in ('', ' '):
+        # 空参数不算help
+        if not lower_args:
             return False
 
-        # 检查是否以帮助关键词开头（如 "help me" 这种情况也应该显示帮助）
+        # 检查是否以帮助关键词开头或结尾
         for kw in ['help', '帮助']:
             if lower_args == kw or lower_args.startswith(kw + ' ') or lower_args.endswith(' ' + kw):
-                logger.debug(f"[DEBUG] ✅ 模式匹配到help关键词: '{lower_args}' (关键词: {kw})")
                 return True
 
-        # 使用正则表达式进行更灵活的匹配
-        help_patterns = [
-            r'^(/|!|！)?pixiv\s*(help|-h|--help|帮助|\?)\s*$',
-            r'^(help|-h|--help|帮助|\?|？)\s*$',
-            r'^(/|!|！)?pixiv\s*$',  # 仅 /pixiv 不算help
-        ]
-
-        for pattern in help_patterns[:-1]:  # 排除最后一个模式（仅 /pixiv）
-            if re.match(pattern, msg_clean, re.IGNORECASE):
-                logger.debug(f"[DEBUG] ✅ 正则匹配成功: pattern='{pattern}'")
-                return True
-
-        logger.debug(f"[DEBUG] ❌ 不是help命令")
         return False
 
     def _build_request_params(self, message: str) -> Dict[str, Any]:
-        # 标准化消息：移除命令前缀和 "pixiv" 关键字
-        cleaned = re.sub(r'^[/!！]\s*pixiv\s*', '', message.strip(), flags=re.IGNORECASE)
-        cleaned = re.sub(r'^pixiv\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+        # 标准化消息：移除命令前缀和 "pixiv"/"图片" 关键字
+        cleaned = re.sub(r'^[/!！]\s*(pixiv|图片)\s*', '', message.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^(pixiv|图片)\s*', '', cleaned.strip(), flags=re.IGNORECASE)
 
         logger.debug(f"[DEBUG] _build_request_params 输入: '{message}' → 清理后: '{cleaned}'")
 
@@ -1651,7 +1652,7 @@ class PixivPlugin(Star):
         return ""
 
 
-    @filter.command("jm")
+    @filter.command("jm", alias={'漫画'})
     async def jm_command(self, event: AstrMessageEvent):
         """JMComic 漫画命令入口"""
         user_name = event.get_sender_name()
@@ -1703,7 +1704,7 @@ class PixivPlugin(Star):
                     yield item
 
             else:
-                yield event.plain_result("❌ 未知子命令\n💡 可用命令：search / detail / chapter\n💡 发送 /jm help 查看帮助")
+                yield event.plain_result("❌ 未知子命令\n💡 可用命令：search(搜索) / detail(详情) / chapter(章节)\n💡 发送 /jm help 查看帮助")
 
         except JMComicAPIError as e:
             logger.error(f"[JMComic] API error for user {user_name}: {e}")
@@ -1718,8 +1719,8 @@ class PixivPlugin(Star):
 
     def _parse_jm_params(self, message: str) -> tuple:
         """解析 /jm 命令参数，返回 (action, params)"""
-        cleaned = re.sub(r'^[/!！]\s*jm\s*', '', message.strip(), flags=re.IGNORECASE)
-        cleaned = re.sub(r'^jm\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^[/!！]\s*(jm|漫画)\s*', '', message.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^(jm|漫画)\s*', '', cleaned.strip(), flags=re.IGNORECASE)
         cleaned = cleaned.strip()
 
         if not cleaned or cleaned.lower() in ('help', '-h', '--help', '帮助'):
@@ -1729,6 +1730,14 @@ class PixivPlugin(Star):
         parts = cleaned.split(None, 1)
         action = parts[0].lower()
         rest = parts[1] if len(parts) > 1 else ""
+
+        # 中文子命令别名映射
+        action_alias = {
+            "搜索": "search",
+            "详情": "detail",
+            "章节": "chapter",
+        }
+        action = action_alias.get(action, action)
 
         if action == "search":
             # 解析 page 参数
@@ -1900,7 +1909,7 @@ class PixivPlugin(Star):
 
 
 
-    @filter.command("jmcommend")
+    @filter.command("jmcommend", alias={'漫画推荐'})
     async def jmcommend_command(self, event: AstrMessageEvent):
         """JMComic 随机推荐漫画"""
         user_name = event.get_sender_name()
@@ -1909,10 +1918,10 @@ class PixivPlugin(Star):
         if self._is_help_command(event.message_str.strip()):
             yield event.plain_result(
                 "📚 JMComic 随机推荐\n\n"
-                "📌 用法：/jmcommend\n"
+                "📌 用法：/jmcommend（别名：/漫画推荐）\n"
                 "📌 功能：随机推荐一部漫画作品\n\n"
                 "💡 返回漫画的标题、作者、分类等信息\n"
-                "💡 使用 /jm detail <ID> 可查看详情"
+                "💡 使用 /jm detail <ID>（或 /漫画 详情 <ID>）可查看详情"
             )
             return
 
@@ -1985,7 +1994,7 @@ class PixivPlugin(Star):
             await self._connection_pool.stop()
             logger.info("✅ DG-LAB连接池已停止")
 
-    @filter.command("dglab")
+    @filter.command("dglab", alias={'电击'})
     async def dglab_command(self, event: AstrMessageEvent):
         """DG-LAB设备管理命令入口"""
         if not getattr(self, '_pool_started', False):

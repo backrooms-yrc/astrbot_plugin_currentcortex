@@ -103,44 +103,42 @@ class DGLabCommandHandler:
     5. 统一异常处理
     """
     
-    HELP_TEXT = """🔌 DG-LAB 设备管理 使用说明
+    HELP_TEXT = """🔌 DG-LAB 设备管理 使用说明（别名：/电击）
 
 📌 设备绑定管理
   /dglab bind [服务器地址]   绑定设备（显示二维码）
-                            例: /dglab bind ws://192.168.1.100:9999
   /dglab unbind             解绑当前设备
+  中文：/电击 绑定 / /电击 解绑
 
 📌 强度控制 (范围: 0-200)
   /dglab strength <A|B> <值>  设置通道强度
-                            例: /dglab strength A 50
   /dglab up <A|B> [步进]     增加强度（默认+5）
-                            例: /dglab up A 10
   /dglab down <A|B> [步进]    减少强度（默认-5）
-                            例: /dglab down B
+  中文：/电击 强度 / /电击 增加 / /电击 减少
 
 📌 波形控制
   /dglab pulse <A|B> <预设名> [秒数]  发送波形（默认5秒）
-                            例: /dglab pulse A breathe 10
   /dglab pulse <A|B> <HEX数据> [秒数] 发送自定义波形
-                            例: /dglab pulse B 0A0A0A0A64646464
+  中文：/电击 波形 A breathe 10
   可用预设: breathe(呼吸), pulse(脉冲), wave(波浪), tap(敲击), storm(风暴)
 
 📌 电击启停
   /dglab shock <A|B> [强度] [波形] [秒数]  开始电击
-                            例: /dglab shock A 30 breathe 10
-                            默认: 强度20, 波形pulse, 持续5秒
   /dglab stop [A|B]          停止电击（不指定则停止全部）
   /dglab clear <A|B>         清空波形队列
+  中文：/电击 开始 / /电击 停止 / /电击 清空
 
 📌 状态与反馈
   /dglab status              查看绑定和连接状态
   /dglab info                查看详细设备信息
   /dglab feedback            查看设备实时强度和反馈
+  中文：/电击 状态 / /电击 信息 / /电击 反馈
 
 📌 权限管理
   /dglab permission          查看权限隔离状态
   /dglab permission off      关闭隔离（允许他人操控你的设备）
   /dglab permission on       开启隔离（仅本人可控，默认）
+  中文：/电击 权限 on / /电击 权限 off
 
 ⚠️ 注意事项
   • 强度值范围: 0-200，请根据个人耐受度调整
@@ -149,7 +147,8 @@ class DGLabCommandHandler:
   • 操控他人设备: /dglab strength @用户ID A 50
   • 如遇问题发送 /dglab help 查看帮助
 
-💡 提示: 默认开启权限隔离，仅本人可控制自己的设备
+💡 提示: 所有子命令均支持中文，如 /电击 绑定、/电击 强度 A 50 等
+   默认开启权限隔离，仅本人可控制自己的设备
    使用 /dglab permission off 可允许他人操控"""
     
     def __init__(self, connection_pool, device_store, default_server_url: str = ""):
@@ -195,8 +194,8 @@ class DGLabCommandHandler:
     
     def _parse_command(self, message: str) -> Tuple[str, str]:
         """解析命令和参数"""
-        cleaned = re.sub(r'^[/!！]\s*dglab\s*', '', message.strip(), flags=re.IGNORECASE)
-        cleaned = re.sub(r'^dglab\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^[/!！]\s*(dglab|电击)\s*', '', message.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r'^(dglab|电击)\s*', '', cleaned.strip(), flags=re.IGNORECASE)
         cleaned = cleaned.strip()
         
         if not cleaned or cleaned.lower() in ('help', '-h', '--help', '帮助'):
@@ -241,13 +240,31 @@ class DGLabCommandHandler:
             "status": self._cmd_status,
             "info": self._cmd_info,
             "state": self._cmd_status,
+            # 中文子命令别名
+            "绑定": self._cmd_bind,
+            "解绑": self._cmd_unbind,
+            "权限": self._cmd_permission,
+            "强度": self._cmd_strength,
+            "设置": self._cmd_strength,
+            "增加": self._cmd_strength_up,
+            "加": self._cmd_strength_up,
+            "减少": self._cmd_strength_down,
+            "减": self._cmd_strength_down,
+            "电击": self._cmd_shock,
+            "开始": self._cmd_shock,
+            "停止": self._cmd_stop,
+            "清空": self._cmd_clear,
+            "波形": self._cmd_pulse,
+            "反馈": self._cmd_feedback,
+            "状态": self._cmd_status,
+            "信息": self._cmd_info,
         }
         
         handler = handlers.get(command)
         if not handler:
             raise DGLabCommandError(
                 f"未知命令: {command}",
-                suggestion="可用命令: bind, unbind, strength, up, down, shock, stop, clear, pulse, feedback, status, help"
+                suggestion="可用命令: bind(绑定), unbind(解绑), strength(强度), up(增加), down(减少), shock(电击), stop(停止), clear(清空), pulse(波形), feedback(反馈), status(状态), info(信息), permission(权限), help(帮助)"
             )
         
         return await handler(args, user_id, user_name, event)

@@ -20,6 +20,29 @@
 - **⚙️ 灵活配置**：支持在 AstrBot 管理面板中自定义默认参数
 - **👥 多用户隔离**：DG-LAB 模块支持多用户并发使用，操作完全隔离
 
+### 📝 指令别名速查
+
+所有指令均支持中文别名，用户输入中文命令也能触发对应功能：
+
+| 英文指令 | 中文别名 | 功能 |
+| --- | --- | --- |
+| `/pixiv` | `/图片` | Pixiv 随机图片 |
+| `/hitokoto` | `/一言` | 每日一言 |
+| `/weather` | `/天气` | 天气查询 |
+| `/femboy` | `/男娘` | 男娘图片 |
+| `/jm` | `/漫画` | JMComic 漫画 |
+| `/jmcommend` | `/漫画推荐` | 漫画随机推荐 |
+| `/music` | `/音乐` | 网易云音乐 |
+| `/dglab` | `/电击` | DG-LAB 设备管理 |
+
+**子命令中文别名：**
+
+| 命令 | 英文子命令 | 中文子命令 |
+| --- | --- | --- |
+| `/jm` (漫画) | `search` / `detail` / `chapter` | `搜索` / `详情` / `章节` |
+| `/music` (音乐) | `search` / `id:` | `搜索` / `编号:` |
+| `/dglab` (电击) | `bind` / `unbind` / `strength` / `up` / `down` / `shock` / `stop` / `clear` / `pulse` / `feedback` / `status` / `info` / `permission` | `绑定` / `解绑` / `强度` / `增加` / `减少` / `电击` / `停止` / `清空` / `波形` / `反馈` / `状态` / `信息` / `权限` |
+
 ## 📦 安装方法
 
 ### 方法一：通过 AstrBot 插件市场安装（推荐）
@@ -50,7 +73,7 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 ## 🎯 功能介绍
 
-### 1️⃣ Pixiv 随机图片 (`/pixiv`)
+### 1️⃣ Pixiv 随机图片 (`/pixiv`，别名：`/图片`)
 
 通过 LeiZ API 获取随机 Pixiv 图片，支持丰富的筛选和搜索功能。
 
@@ -58,7 +81,7 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 | 指令 | 说明 |
 | --- | --- |
-| `/pixiv` | 获取一张随机全年龄图片 |
+| `/pixiv`（或 `/图片`） | 获取一张随机全年龄图片 |
 | `/pixiv help` | 显示帮助信息 |
 
 #### 参数说明
@@ -121,7 +144,7 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 ---
 
-### 2️⃣ 每日一言 (`/hitokoto`)
+### 2️⃣ 每日一言 (`/hitokoto`，别名：`/一言`)
 
 获取来自社区贡献的随机一言，支持多分类选择。
 
@@ -129,7 +152,7 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 | 指令 | 说明 |
 | --- | --- |
-| `/hitokoto` | 获取一条随机一言（默认全部分类） |
+| `/hitokoto`（或 `/一言`） | 获取一条随机一言（默认全部分类） |
 | `/hitokoto <分类代码>` | 获取指定分类的一言 |
 | `/hitokoto help` | 显示帮助信息 |
 
@@ -167,7 +190,7 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 ---
 
-### 3️⃣ 天气查询 (`/weather`)
+### 3️⃣ 天气查询 (`/weather`，别名：`/天气`)
 
 实时查询指定城市的天气信息及未来 3 天天气预报。
 
@@ -175,7 +198,7 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 | 指令 | 说明 |
 | --- | --- |
-| `/weather <城市名>` | 查询指定城市的天气 |
+| `/weather <城市名>`（或 `/天气 <城市名>`） | 查询指定城市的天气 |
 | `/weather help` | 显示帮助信息 |
 
 #### 使用示例
@@ -217,7 +240,7 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 ---
 
-### 4️⃣ 男娘图片 (`/femboy`)
+### 4️⃣ 男娘图片 (`/femboy`，别名：`/男娘`)
 
 通过 LeiZ Femboy API 随机获取男娘主题图片。
 
@@ -227,7 +250,7 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 | 指令 | 说明 |
 | --- | --- |
-| `/femboy` | 获取一张随机男娘图片（WebP 格式） |
+| `/femboy`（或 `/男娘`） | 获取一张随机男娘图片（WebP 格式） |
 | `/femboy help` | 显示帮助信息 |
 
 #### 配置要求
@@ -252,7 +275,7 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 ---
 
-### 5️⃣ JMComic 漫画 (`/jm` & `/jmcommend`)
+### 5️⃣ JMComic 漫画 (`/jm`，别名：`/漫画` & `/jmcommend`，别名：`/漫画推荐`)
 
 通过 LeiZ JMComic API 搜索和获取漫画内容，支持搜索、详情查看、章节图片获取及随机推荐。
 
@@ -260,11 +283,11 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 | 指令 | 说明 |
 | --- | --- |
-| `/jm search <关键词>` | 搜索漫画 |
+| `/jm search <关键词>`（或 `/漫画 搜索 <关键词>`） | 搜索漫画 |
 | `/jm search <关键词> page:<页码>` | 搜索漫画（指定页码） |
-| `/jm detail <漫画ID>` | 获取漫画详情（标题、作者、简介、章节列表） |
-| `/jm chapter <章节ID>` | 获取章节图片（以合并转发消息发送） |
-| `/jmcommend` | 随机推荐一部漫画 |
+| `/jm detail <漫画ID>`（或 `/漫画 详情 <漫画ID>`） | 获取漫画详情（标题、作者、简介、章节列表） |
+| `/jm chapter <章节ID>`（或 `/漫画 章节 <章节ID>`） | 获取章节图片（以合并转发消息发送） |
+| `/jmcommend`（或 `/漫画推荐`） | 随机推荐一部漫画 |
 | `/jm help` | 显示帮助信息 |
 
 #### 使用示例
@@ -324,7 +347,7 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 ---
 
-### 6️⃣ 网易云音乐 (`/music`)
+### 6️⃣ 网易云音乐 (`/music`，别名：`/音乐`)
 
 通过 LeiZ Netease API 实现点歌、搜索歌曲和获取播放链接功能。
 
@@ -332,9 +355,9 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 | 指令 | 说明 |
 | --- | --- |
-| `/music <歌曲名>` | 点歌（搜索并返回第一首歌的详细信息） |
-| `/music id:<歌曲ID>` | 通过歌曲 ID 获取详细信息 |
-| `/music search <关键词>` | 搜索歌曲列表 |
+| `/music <歌曲名>`（或 `/音乐 <歌曲名>`） | 点歌（搜索并返回第一首歌的详细信息） |
+| `/music id:<歌曲ID>`（或 `/音乐 编号:<歌曲ID>`） | 通过歌曲 ID 获取详细信息 |
+| `/music search <关键词>`（或 `/音乐 搜索 <关键词>`） | 搜索歌曲列表 |
 | `/music help` | 显示帮助信息 |
 
 #### 使用示例
@@ -403,7 +426,7 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 ---
 
-### 7️⃣ DG-LAB 设备管理 (`/dglab`)
+### 7️⃣ DG-LAB 设备管理 (`/dglab`，别名：`/电击`)
 
 通过 DG-LAB Socket V2 协议实现对郊狼脉冲主机的完整控制，支持设备绑定、强度调节、输出控制等功能。
 
@@ -413,20 +436,20 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 | 指令 | 说明 |
 | --- | --- |
-| `/dglab bind [服务器地址]` | 绑定设备（生成二维码供 APP 扫描） |
-| `/dglab unbind` | 解绑当前设备 |
-| `/dglab strength <A\|B> <0-200>` | 设置通道强度值 |
-| `/dglab up <A\|B> [步进]` | 增加强度（默认+5） |
-| `/dglab down <A\|B> [步进]` | 减少强度（默认-5） |
-| `/dglab shock <A\|B> [强度] [波形] [秒数]` | 开始电击（设置强度并发送波形） |
-| `/dglab stop [A\|B]` | 停止电击（强度归零+清空波形，不指定则停止全部） |
-| `/dglab pulse <A\|B> <预设名\|HEX> [秒数]` | 发送波形数据（默认5秒） |
-| `/dglab clear <A\|B>` | 清空波形队列 |
-| `/dglab feedback` | 查看设备实时强度和反馈按钮状态 |
-| `/dglab permission [on\|off]` | 查看/切换权限隔离（默认开启） |
-| `/dglab status` | 查看绑定状态和连接状态 |
-| `/dglab info` | 查看详细设备信息 |
-| `/dglab help` | 显示帮助信息 |
+| `/dglab bind [服务器地址]`（或 `/电击 绑定`） | 绑定设备（生成二维码供 APP 扫描） |
+| `/dglab unbind`（或 `/电击 解绑`） | 解绑当前设备 |
+| `/dglab strength <A\|B> <0-200>`（或 `/电击 强度`） | 设置通道强度值 |
+| `/dglab up <A\|B> [步进]`（或 `/电击 增加`） | 增加强度（默认+5） |
+| `/dglab down <A\|B> [步进]`（或 `/电击 减少`） | 减少强度（默认-5） |
+| `/dglab shock <A\|B> [强度] [波形] [秒数]`（或 `/电击 开始`） | 开始电击（设置强度并发送波形） |
+| `/dglab stop [A\|B]`（或 `/电击 停止`） | 停止电击（强度归零+清空波形，不指定则停止全部） |
+| `/dglab pulse <A\|B> <预设名\|HEX> [秒数]`（或 `/电击 波形`） | 发送波形数据（默认5秒） |
+| `/dglab clear <A\|B>`（或 `/电击 清空`） | 清空波形队列 |
+| `/dglab feedback`（或 `/电击 反馈`） | 查看设备实时强度和反馈按钮状态 |
+| `/dglab permission [on\|off]`（或 `/电击 权限`） | 查看/切换权限隔离（默认开启） |
+| `/dglab status`（或 `/电击 状态`） | 查看绑定状态和连接状态 |
+| `/dglab info`（或 `/电击 信息`） | 查看详细设备信息 |
+| `/dglab help`（或 `/电击 帮助`） | 显示帮助信息 |
 
 #### 使用流程
 
