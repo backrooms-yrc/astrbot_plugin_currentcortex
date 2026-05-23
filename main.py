@@ -2,6 +2,7 @@ import re
 import random
 import asyncio
 import time
+import shutil
 from typing import Any, Dict, List, Optional
 
 import aiohttp
@@ -156,12 +157,14 @@ MUSIC_HELP_TEXT = """🎵 网易云音乐 使用说明
 
 📌 基本命令（别名：/音乐）
   /music <歌曲名>       搜索并获取歌曲信息（点歌）
+  /music direct <歌曲名> 仅返回语音条（别名：直接）
   /music id:<歌曲ID>    通过歌曲ID获取详细信息（别名：编号:<ID>）
   /music search <关键词> 搜索歌曲列表（别名：搜索）
   /music help           显示此帮助信息
 
 📌 中文用法示例
   /音乐 孤勇者              点歌
+  /音乐 直接 孤勇者         仅返回语音条
   /音乐 搜索 陈奕迅         搜索歌曲列表
   /音乐 编号:1901371647     通过ID获取歌曲
 
@@ -169,6 +172,9 @@ MUSIC_HELP_TEXT = """🎵 网易云音乐 使用说明
   点歌（搜索并返回第一首）：
     /music 孤勇者              搜索并获取「孤勇者」
     /music 周杰伦 晴天         搜索「周杰伦 晴天」
+
+  仅语音条（不附带标题、封面等）：
+    /music direct 孤勇者       只返回语音消息
 
   通过ID获取：
     /music id:1901371647       获取指定ID的歌曲信息
@@ -181,6 +187,7 @@ MUSIC_HELP_TEXT = """🎵 网易云音乐 使用说明
   • 专辑封面图片
   • 音质信息（码率、格式）
   • 播放链接
+  • 语音条（自动转码为MP3格式）
 
 ⚠️ 注意事项
   • 部分VIP歌曲可能无法获取播放链接
@@ -605,13 +612,15 @@ class NeteaseAPIClient:
             "Accept": "application/json",
         }
 
-    async def get_song(self, song_id: str) -> Dict[str, Any]:
+    async def get_song(self, song_id: str, level: Optional[str] = None) -> Dict[str, Any]:
         """通过歌曲ID获取歌曲信息和播放链接"""
         if not song_id or not song_id.strip():
             raise NeteaseAPIError("歌曲ID不能为空")
 
         params = {"id": song_id.strip()}
-        logger.debug(f"[Netease] Fetching song by id: {song_id}")
+        if level:
+            params["level"] = level
+        logger.debug(f"[Netease] Fetching song by id: {song_id}, level: {level}")
 
         async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
             try:
@@ -1251,6 +1260,28 @@ class PixivPlugin(Star):
                 yield event.plain_result(response_text)
                 return
 
+            # direct模式：仅返回语音条，不附带额外信息
+            direct_match = re.match(r'^(direct|直接)\s+(.+)$', query, re.IGNORECASE)
+            if direct_match:
+                direct_query = direct_match.group(2).strip()
+                logger.info(f"[Music] Direct play '{direct_query}' for user {user_name}")
+                songs = await self._netease_client.search_songs(direct_query)
+                if not songs:
+                    yield event.plain_result(f"😕 未找到与「{direct_query}」相关的歌曲")
+                    return
+
+                first_song = songs[0]
+                song_id = str(first_song.get("id", ""))
+                if not song_id:
+                    yield event.plain_result("⚠️ 搜索结果异常，未能获取歌曲ID")
+                    return
+
+                song_data = await self._netease_client.get_song(song_id)
+                response_items = await self._format_song_response(song_data, event, direct_mode=True)
+                for item in response_items:
+                    yield item
+                return
+
             # 点歌模式：搜索并获取第一首歌的详细信息
             logger.info(f"[Music] Quick play '{query}' for user {user_name}")
             songs = await self._netease_client.search_songs(query)
@@ -1290,7 +1321,7 @@ class PixivPlugin(Star):
 
         return cleaned
 
-    async def _format_song_response(self, song_data: Dict[str, Any], event: AstrMessageEvent) -> List[Any]:
+    async def _format_song_response(self, song_data: Dict[str, Any], event: AstrMessageEvent, direct_mode: bool = False) -> List[Any]:
         name = song_data.get("name", "未知歌曲")
         artists = song_data.get("artists", "未知艺术家")
         album = song_data.get("album", "")
@@ -1301,35 +1332,38 @@ class PixivPlugin(Star):
         file_type = song_data.get("type", "")
         size = song_data.get("size", 0)
 
-        parts = [f"🎵 {name}", f"👤 艺术家：{artists}"]
-        if album:
-            parts.append(f"💿 专辑：{album}")
+        results = []
 
-        quality_parts = []
-        if level:
-            level_map = {"standard": "标准", "higher": "较高", "exhigh": "极高", "lossless": "无损", "hires": "Hi-Res"}
-            quality_parts.append(level_map.get(level, level))
-        if file_type:
-            quality_parts.append(file_type.upper())
-        if bitrate:
-            quality_parts.append(f"{bitrate // 1000}kbps")
-        if quality_parts:
-            parts.append(f"🎧 音质：{' / '.join(quality_parts)}")
+        if not direct_mode:
+            parts = [f"🎵 {name}", f"👤 艺术家：{artists}"]
+            if album:
+                parts.append(f"💿 专辑：{album}")
 
-        if size:
-            size_mb = size / (1024 * 1024)
-            parts.append(f"📦 大小：{size_mb:.1f}MB")
+            quality_parts = []
+            if level:
+                level_map = {"standard": "标准", "higher": "较高", "exhigh": "极高", "lossless": "无损", "hires": "Hi-Res"}
+                quality_parts.append(level_map.get(level, level))
+            if file_type:
+                quality_parts.append(file_type.upper())
+            if bitrate:
+                quality_parts.append(f"{bitrate // 1000}kbps")
+            if quality_parts:
+                parts.append(f"🎧 音质：{' / '.join(quality_parts)}")
 
-        if url:
-            parts.append(f"🔗 播放链接：{url}")
-        else:
-            parts.append("⚠️ 无法获取播放链接（可能需要VIP权限）")
+            if size:
+                size_mb = size / (1024 * 1024)
+                parts.append(f"📦 大小：{size_mb:.1f}MB")
 
-        caption = "\n".join(parts)
-        results = [event.plain_result(caption)]
+            if url:
+                parts.append(f"🔗 播放链接：{url}")
+            else:
+                parts.append("⚠️ 无法获取播放链接（可能需要VIP权限）")
 
-        if pic_url:
-            results.append(event.image_result(pic_url))
+            caption = "\n".join(parts)
+            results.append(event.plain_result(caption))
+
+            if pic_url:
+                results.append(event.image_result(pic_url))
 
         # 如果有播放链接，尝试下载音频并通过 Comp.Record 发送语音条
         if url:
@@ -1339,13 +1373,21 @@ class PixivPlugin(Star):
                     record_comp = Comp.Record(file=local_path, url=local_path)
                     results.append(event.chain_result([record_comp]))
                     logger.info(f"[Music] 已添加语音消息: {name} -> {local_path}")
+                elif not direct_mode:
+                    pass
+                else:
+                    results.append(event.plain_result(f"❌ 无法生成语音条：{name}"))
             except Exception as e:
                 logger.warning(f"[Music] 发送语音消息失败: {e}，仅发送文本链接")
+                if direct_mode:
+                    results.append(event.plain_result(f"❌ 发送语音失败：{e}"))
+        elif direct_mode:
+            results.append(event.plain_result("⚠️ 无法获取播放链接（可能需要VIP权限）"))
 
         return results
 
     async def _download_audio_to_temp(self, url: str, name: str) -> Optional[str]:
-        """下载音频文件到临时目录，返回本地文件路径"""
+        """下载音频文件到临时目录，返回本地文件路径。非MP3格式会尝试转码为MP3。"""
         try:
             ext = ".mp3"
             if ".flac" in url.lower():
@@ -1374,12 +1416,44 @@ class PixivPlugin(Star):
                         async for chunk in resp.content.iter_chunked(8192):
                             f.write(chunk)
 
+            if ext != ".mp3":
+                converted = await self._convert_to_mp3(temp_path, temp_dir, safe_name)
+                if converted:
+                    return converted
+                logger.warning(f"[Music] 转码失败，语音条可能无法播放: {temp_path}")
+
             logger.debug(f"[Music] 音频已下载到: {temp_path}")
             return temp_path
 
         except Exception as e:
             logger.warning(f"[Music] 下载音频异常: {e}")
             return None
+
+    async def _convert_to_mp3(self, source_path: str, temp_dir: str, safe_name: str) -> Optional[str]:
+        """使用ffmpeg将音频转码为MP3 320kbps"""
+        if not shutil.which("ffmpeg"):
+            logger.warning("[Music] ffmpeg 未安装，无法转码非MP3音频")
+            return None
+
+        mp3_path = os.path.join(temp_dir, f"{safe_name}.mp3")
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "ffmpeg", "-y", "-i", source_path,
+                "-vn", "-ar", "44100", "-ac", "2", "-b:a", "320k",
+                mp3_path,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await asyncio.wait_for(proc.wait(), timeout=60)
+            if proc.returncode == 0 and os.path.exists(mp3_path):
+                os.remove(source_path)
+                logger.info(f"[Music] 已转码为MP3: {mp3_path}")
+                return mp3_path
+        except asyncio.TimeoutError:
+            logger.warning("[Music] ffmpeg 转码超时")
+        except Exception as e:
+            logger.warning(f"[Music] ffmpeg 转码异常: {e}")
+        return None
 
     @staticmethod
     def _cleanup_old_audio_files(temp_dir: str, max_age_seconds: int = 3600):
