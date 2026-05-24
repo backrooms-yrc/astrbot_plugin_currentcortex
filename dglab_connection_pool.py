@@ -338,10 +338,9 @@ class DeviceConnectionPool:
             raise ValueError("波形数据过长（最大100条）")
 
         pulse_json = json.dumps(pulse_data, ensure_ascii=False)
-        message = f"{channel}:{pulse_json}"
 
         async def _send(client: DGLabClient):
-            await client.send_pulse(channel, message, duration)
+            await client.send_pulse(channel, pulse_json, duration)
 
         await self.execute_with_retry(user_id, _send)
         return f"✅ 已向{channel}通道发送波形数据（持续{duration}秒）"
@@ -500,8 +499,9 @@ class DeviceConnectionPool:
                                 f"idle={idle_time:.0f}s > {self._idle_timeout}s"
                             )
 
-                for user_id in to_close:
-                    await self._close_connection(user_id)
+                    # 在持有锁的情况下直接关闭，避免释放锁后再获取导致死锁
+                    for user_id in to_close:
+                        await self._close_connection_unlocked(user_id)
         except asyncio.CancelledError:
             pass
 

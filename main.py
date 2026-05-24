@@ -1370,7 +1370,7 @@ class PixivPlugin(Star):
             try:
                 local_path = await self._download_audio_to_temp(url, name)
                 if local_path:
-                    record_comp = Comp.Record(file=local_path, url=local_path)
+                    record_comp = Comp.Record(file=local_path, url=url)
                     results.append(event.chain_result([record_comp]))
                     logger.info(f"[Music] 已添加语音消息: {name} -> {local_path}")
                 elif not direct_mode:
@@ -1549,7 +1549,7 @@ class PixivPlugin(Star):
         lower_args = args_part.lower().strip()
 
         # 定义所有帮助关键词
-        help_keywords = {'help', '-h', '--help', '帮助', 'h', '?', '？'}
+        help_keywords = {'help', '-h', '--help', '帮助', '?', '？'}
 
         # 精确匹配
         if lower_args in help_keywords:

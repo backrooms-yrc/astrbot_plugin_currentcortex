@@ -139,7 +139,7 @@ class DGLabClient:
             raise RuntimeError("尚未与 APP 绑定, 无法发送 msg")
         if len(message) > 1950:
             raise ValueError("message 长度不能超过 1950")
-        await self._send_envelope(4, message)
+        await self._send_envelope("msg", message)
 
     async def send_pulse(self, channel: str, message: str, duration: int = 5) -> None:
         """通过 clientMsg 类型发送波形数据（服务端管理队列和发送频率）。"""

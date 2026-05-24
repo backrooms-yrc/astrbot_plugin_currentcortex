@@ -88,7 +88,7 @@ class DeviceStore:
             self._bindings = {}
 
     def _save(self):
-        """保存绑定数据到文件（整个操作在锁内完成，防止并发写入损坏）"""
+        """保存绑定数据到文件（调用方应确保数据一致性）"""
         try:
             with self._lock:
                 data = {
@@ -96,12 +96,12 @@ class DeviceStore:
                     for user_id, binding in self._bindings.items()
                 }
 
-                temp_file = self._file_path + '.tmp'
-                with open(temp_file, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
+            temp_file = self._file_path + '.tmp'
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
 
-                os.replace(temp_file, self._file_path)
-                logger.debug(f"[DGLab] 已保存 {len(data)} 条绑定记录")
+            os.replace(temp_file, self._file_path)
+            logger.debug(f"[DGLab] 已保存 {len(data)} 条绑定记录")
 
         except Exception as e:
             logger.error(f"[DGLab] 保存绑定数据失败: {e}")
