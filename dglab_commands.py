@@ -273,7 +273,7 @@ class DGLabCommandHandler:
         """绑定设备命令"""
         server_url = args.strip() if args.strip() else None
         user_specified_url = bool(server_url)
-        
+
         if not server_url:
             binding = self._store.get_binding(user_id)
             if binding and binding.server_url:
@@ -283,10 +283,17 @@ class DGLabCommandHandler:
                 server_url = self._default_server_url
                 logger.info(f"[DGLab] 使用配置文件默认服务器地址: {server_url}")
             else:
-                raise DGLabCommandError(
-                    "未指定服务器地址",
-                    suggestion="用法: /dglab bind ws://服务器地址:端口"
-                )
+                all_bindings = self._store.list_all_bindings()
+                for other_binding in all_bindings.values():
+                    if other_binding.server_url:
+                        server_url = other_binding.server_url
+                        logger.info(f"[DGLab] 使用已有绑定记录中的服务器地址: {server_url}")
+                        break
+                if not server_url:
+                    raise DGLabCommandError(
+                        "未指定服务器地址",
+                        suggestion="用法: /dglab bind ws://服务器地址:端口"
+                    )
         
         if not re.match(r'^wss?://[\w\.-]+(:\d+)?(/.*)?$', server_url):
             raise DGLabCommandError(

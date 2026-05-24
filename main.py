@@ -893,10 +893,14 @@ class PixivPlugin(Star):
                 parsed = _json.loads(dglab_config_raw)
                 if isinstance(parsed, dict):
                     dglab_config = parsed
-            except (ValueError, TypeError):
-                logger.warning("dglab config parse failed, using defaults")
+                else:
+                    logger.warning(f"[DGLab] 配置解析结果不是字典: {type(parsed)}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"[DGLab] 配置JSON解析失败: {e}, 原始值: {repr(dglab_config_raw[:100])}")
 
         server_url = dglab_config.get("server_url", "").strip()
+        if not server_url and dglab_config:
+            logger.warning(f"[DGLab] 配置中未找到有效的server_url, 可用key: {list(dglab_config.keys())}")
         heartbeat_interval = float(dglab_config.get("heartbeat_interval", 60))
         auto_connect = bool(dglab_config.get("auto_connect", False))
 
