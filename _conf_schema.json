@@ -35,7 +35,7 @@
     "default": ""
   },
   "dglab": {
-    "description": "DG-LAB Socket V2 集成配置（JSON格式: {\"server_url\":\"\", \"heartbeat_interval\":60, \"auto_connect\":false}）",
+    "description": "DG-LAB Socket V2 集成配置（JSON格式: {\"server_url\":\"\", \"heartbeat_interval\":60, \"auto_connect\":false, \"webui_enabled\":false, \"webui_port\":9800}）",
     "type": "string",
     "default": ""
   }

@@ -18,6 +18,7 @@ import astrbot.api.message_components as Comp
 from .dglab_device_store import DeviceStore
 from .dglab_connection_pool import DeviceConnectionPool
 from .dglab_commands import DGLabCommandHandler
+from .dglab_webui import DGLabWebUI
 
 
 API_BASE_URL = "https://api.bileizhen.top/api/pixiv"
@@ -917,6 +918,16 @@ class PixivPlugin(Star):
             default_server_url=server_url,
         )
 
+        webui_enabled = bool(dglab_config.get("webui_enabled", False))
+        webui_port = int(dglab_config.get("webui_port", 9800))
+        self._dglab_webui: Optional[DGLabWebUI] = None
+        if webui_enabled:
+            self._dglab_webui = DGLabWebUI(
+                connection_pool=self._connection_pool,
+                device_store=self._device_store,
+                port=webui_port,
+            )
+
         if server_url:
             logger.info(f"✅ DG-LAB模块已初始化 (server={server_url}, auto_connect={auto_connect})")
         else:
@@ -925,6 +936,8 @@ class PixivPlugin(Star):
         try:
             asyncio.get_running_loop()
             asyncio.create_task(self._connection_pool.start())
+            if self._dglab_webui:
+                asyncio.create_task(self._dglab_webui.start())
         except RuntimeError:
             self._pool_started = False
         else:
@@ -2068,6 +2081,9 @@ class PixivPlugin(Star):
 
     async def terminate(self):
         logger.info("PixivPlugin is being terminated")
+        if hasattr(self, '_dglab_webui') and self._dglab_webui:
+            await self._dglab_webui.stop()
+            logger.info("✅ DG-LAB WebUI已停止")
         if hasattr(self, '_connection_pool'):
             await self._connection_pool.stop()
             logger.info("✅ DG-LAB连接池已停止")
