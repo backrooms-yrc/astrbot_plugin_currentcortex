@@ -35,8 +35,18 @@
     "default": ""
   },
   "dglab": {
-    "description": "DG-LAB Socket V2 集成配置（JSON格式: {\"server_url\":\"\", \"heartbeat_interval\":60, \"auto_connect\":false, \"webui_enabled\":false, \"webui_port\":9800}）",
+    "description": "DG-LAB Socket V2 集成配置（JSON格式: {\"server_url\":\"\", \"heartbeat_interval\":60, \"auto_connect\":false}）",
     "type": "string",
     "default": ""
+  },
+  "dglab_webui_enabled": {
+    "description": "是否启用 DG-LAB WebUI 控制面板（浏览器远程控制界面）",
+    "type": "bool",
+    "default": true
+  },
+  "dglab_webui_port": {
+    "description": "DG-LAB WebUI 监听端口号",
+    "type": "int",
+    "default": 9178
   }
 }

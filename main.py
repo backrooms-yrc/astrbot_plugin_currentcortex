@@ -918,8 +918,8 @@ class PixivPlugin(Star):
             default_server_url=server_url,
         )
 
-        webui_enabled = bool(dglab_config.get("webui_enabled", False))
-        webui_port = int(dglab_config.get("webui_port", 9800))
+        webui_enabled = bool(config.get("dglab_webui_enabled", True))
+        webui_port = int(config.get("dglab_webui_port", 9178))
         self._dglab_webui: Optional[DGLabWebUI] = None
         if webui_enabled:
             self._dglab_webui = DGLabWebUI(
