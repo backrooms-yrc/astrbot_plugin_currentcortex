@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
 import json
 import uuid
 from dataclasses import dataclass, field
@@ -142,20 +143,26 @@ class DGLabClient:
         await self._send_envelope("msg", message)
 
     async def send_pulse(self, channel: str, message: str, duration: int = 5) -> None:
-        """通过 clientMsg 类型发送波形数据（服务端管理队列和发送频率）。"""
+        """发送波形数据到 APP（使用标准 msg 类型，兼容所有中转服务器）。
+
+        Args:
+            channel: "A" 或 "B"
+            message: 波形HEX数据的JSON数组字符串
+            duration: 持续时长（秒），用于循环填充波形数据
+        """
         if not self.state.bound or not self.state.target_id:
             raise RuntimeError("尚未与 APP 绑定, 无法发送波形")
         if not self._ws:
             raise RuntimeError("WebSocket 未连接")
-        payload = {
-            "type": "clientMsg",
-            "clientId": self.state.client_id,
-            "targetId": self.state.target_id,
-            "channel": channel,
-            "time": duration,
-            "message": message,
-        }
-        await self._ws.send(json.dumps(payload, ensure_ascii=False))
+        frames = json.loads(message)
+        total_frames_needed = duration * 10
+        expanded = list(itertools.islice(itertools.cycle(frames), total_frames_needed))
+        # 分批发送，每批最多 100 帧（协议推荐上限），避免单条消息过大
+        batch_size = 100
+        for i in range(0, len(expanded), batch_size):
+            batch = expanded[i:i + batch_size]
+            pulse_msg = f"pulse-{channel}:{json.dumps(batch, ensure_ascii=False)}"
+            await self._send_envelope("msg", pulse_msg)
 
     async def _recv_loop(self):
         assert self._ws is not None

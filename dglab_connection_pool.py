@@ -125,7 +125,15 @@ class DeviceConnectionPool:
                 conn_info = self._connections[user_id]
                 conn_info.last_used_at = time.time()
 
-                if conn_info.status in (
+                # 如果已有连接指向不同的服务器，关闭旧连接重建
+                existing_url = conn_info.client.state.server_url
+                if existing_url and existing_url != server_url.rstrip("/"):
+                    logger.info(
+                        f"[DGLab] 用户 {user_id} 服务器地址变更 "
+                        f"({existing_url} -> {server_url})，重建连接"
+                    )
+                    await self._close_connection_unlocked(user_id)
+                elif conn_info.status in (
                     ConnectionStatus.BOUND,
                     ConnectionStatus.CONNECTED,
                     ConnectionStatus.CONNECTING,
@@ -323,7 +331,7 @@ class DeviceConnectionPool:
         pulse_data: list,
         duration: int = 5,
     ) -> str:
-        """通过 clientMsg 类型发送波形数据（服务端管理队列和发送频率）
+        """发送波形数据（使用标准 msg 类型透传，兼容所有中转服务器）
 
         Args:
             channel: "A" 或 "B"
