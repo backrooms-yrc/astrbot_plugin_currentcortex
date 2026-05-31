@@ -19,6 +19,8 @@ from .dglab_device_store import DeviceStore
 from .dglab_connection_pool import DeviceConnectionPool
 from .dglab_commands import DGLabCommandHandler
 from .dglab_webui import DGLabWebUI
+from .dglab_user_store import UserStore
+from .dglab_permission_store import PermissionStore
 
 
 API_BASE_URL = "https://api.bileizhen.top/api/pixiv"
@@ -918,6 +920,9 @@ class PixivPlugin(Star):
             default_server_url=server_url,
         )
 
+        self._user_store = UserStore(data_dir="data")
+        self._permission_store = PermissionStore(data_dir="data")
+
         webui_enabled = bool(config.get("dglab_webui_enabled", True))
         webui_port = int(config.get("dglab_webui_port", 9178))
         self._dglab_webui: Optional[DGLabWebUI] = None
@@ -925,6 +930,8 @@ class PixivPlugin(Star):
             self._dglab_webui = DGLabWebUI(
                 connection_pool=self._connection_pool,
                 device_store=self._device_store,
+                user_store=self._user_store,
+                permission_store=self._permission_store,
                 port=webui_port,
             )
 

@@ -23,6 +23,8 @@ def load_module(name, filepath):
     source = source.replace('from .dglab_connection_pool import', 'from dglab_connection_pool import')
     source = source.replace('from .dglab_device_store import', 'from dglab_device_store import')
     source = source.replace('from .dglab_commands import', 'from dglab_commands import')
+    source = source.replace('from .dglab_user_store import', 'from dglab_user_store import')
+    source = source.replace('from .dglab_permission_store import', 'from dglab_permission_store import')
     code = compile(source, filepath, 'exec')
     mod = types.ModuleType(name)
     mod.__file__ = filepath
@@ -35,14 +37,22 @@ load_module('dglab_client', os.path.join(base, 'dglab_client.py'))
 device_store_mod = load_module('dglab_device_store', os.path.join(base, 'dglab_device_store.py'))
 connection_pool_mod = load_module('dglab_connection_pool', os.path.join(base, 'dglab_connection_pool.py'))
 load_module('dglab_commands', os.path.join(base, 'dglab_commands.py'))
+user_store_mod = load_module('dglab_user_store', os.path.join(base, 'dglab_user_store.py'))
+permission_store_mod = load_module('dglab_permission_store', os.path.join(base, 'dglab_permission_store.py'))
 webui_mod = load_module('dglab_webui', os.path.join(base, 'dglab_webui.py'))
 
 async def main():
     os.makedirs('data', exist_ok=True)
     store = device_store_mod.DeviceStore(data_dir='data')
     pool = connection_pool_mod.DeviceConnectionPool(device_store=store)
+    user_store = user_store_mod.UserStore(data_dir='data')
+    perm_store = permission_store_mod.PermissionStore(data_dir='data')
     await pool.start()
-    webui = webui_mod.DGLabWebUI(connection_pool=pool, device_store=store, host='0.0.0.0', port=9178)
+    webui = webui_mod.DGLabWebUI(
+        connection_pool=pool, device_store=store,
+        user_store=user_store, permission_store=perm_store,
+        host='0.0.0.0', port=9178
+    )
     await webui.start()
     print('=== WebUI running at http://0.0.0.0:9178 ===', flush=True)
     print('Press Ctrl+C to stop', flush=True)
