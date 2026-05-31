@@ -31,19 +31,24 @@ class DGLabWebUI:
         self._site: Optional[web.TCPSite] = None
 
     async def start(self):
-        self._app = web.Application()
-        self._app.router.add_get("/", self._handle_index)
-        self._app.router.add_get("/api/devices", self._handle_list_devices)
-        self._app.router.add_get("/api/device/{user_id}/status", self._handle_device_status)
-        self._app.router.add_post("/api/device/{user_id}/strength", self._handle_set_strength)
-        self._app.router.add_post("/api/device/{user_id}/pulse", self._handle_send_pulse)
-        self._app.router.add_post("/api/device/{user_id}/stop", self._handle_stop)
+        try:
+            self._app = web.Application()
+            self._app.router.add_get("/", self._handle_index)
+            self._app.router.add_get("/api/devices", self._handle_list_devices)
+            self._app.router.add_get("/api/device/{user_id}/status", self._handle_device_status)
+            self._app.router.add_post("/api/device/{user_id}/strength", self._handle_set_strength)
+            self._app.router.add_post("/api/device/{user_id}/pulse", self._handle_send_pulse)
+            self._app.router.add_post("/api/device/{user_id}/stop", self._handle_stop)
 
-        self._runner = web.AppRunner(self._app)
-        await self._runner.setup()
-        self._site = web.TCPSite(self._runner, self._host, self._port)
-        await self._site.start()
-        logger.info(f"[DGLab WebUI] 已启动: http://{self._host}:{self._port}")
+            self._runner = web.AppRunner(self._app)
+            await self._runner.setup()
+            self._site = web.TCPSite(self._runner, self._host, self._port)
+            await self._site.start()
+            logger.info(f"[DGLab WebUI] 已启动: http://{self._host}:{self._port}")
+        except OSError as e:
+            logger.error(f"[DGLab WebUI] 启动失败（端口 {self._port} 可能被占用）: {e}")
+        except Exception as e:
+            logger.error(f"[DGLab WebUI] 启动失败: {e}")
 
     async def stop(self):
         if self._runner:

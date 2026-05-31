@@ -2093,6 +2093,8 @@ class PixivPlugin(Star):
         """DG-LAB设备管理命令入口"""
         if not getattr(self, '_pool_started', False):
             await self._connection_pool.start()
+            if self._dglab_webui:
+                await self._dglab_webui.start()
             self._pool_started = True
 
         message_str = event.message_str.strip()
