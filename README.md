@@ -1,4 +1,4 @@
-# AstrBot Pixiv 综合插件
+# AstrBot CurrentCortex 综合插件
 
 基于 [LeiZ API](https://api.bileizhen.top) 开发的多功能 AstrBot 插件，提供 **Pixiv 随机图片获取**、**每日一言**、**天气查询**、**男娘图片获取**、**网易云音乐点歌**、**JMComic 漫画获取** 及 **DG-LAB 设备管理** 等功能。
 
@@ -47,13 +47,13 @@
 
 ### 方法一：通过 AstrBot 插件市场安装（推荐）
 
-在 AstrBot 管理面板的插件市场中搜索 `astrbot_plugin_pixiv` 并安装。
+在 AstrBot 管理面板的插件市场中搜索 `astrbot_plugin_currentcortex` 并安装。
 
 ### 方法二：手动安装
 
 ```bash
 cd AstrBot/data/plugins
-git clone https://github.com/backrooms-yrc/astrbot_plugin_pixiv.git
+git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 ```
 
 #### 安装依赖
@@ -610,12 +610,25 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 | 配置项 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `dglab.server_url` | string | （空） | DG-LAB 中转服务器地址（如 `ws://192.168.1.100:9999`） |
-| `dglab.heartbeat_interval` | int | 60 | 心跳间隔（秒），建议 30-120 |
-| `dglab.auto_connect` | bool | false | 是否在插件启动时自动连接（一般设为 false） |
+| `dglab_server_url` | string | （空） | DG-LAB 中转服务器地址（如 `ws://192.168.1.100:9999`） |
+| `dglab_heartbeat_interval` | int | 60 | 心跳间隔（秒），建议 30-120 |
+| `dglab_auto_connect` | bool | false | 是否在插件启动时自动连接（一般设为 false） |
 
 #### 配置示例
 
+在 AstrBot 管理面板的插件配置中直接填写：
+
+| 配置项 | 填写示例 |
+| --- | --- |
+| `dglab_server_url` | `ws://192.168.1.100:9999` |
+| `dglab_heartbeat_interval` | `60` |
+| `dglab_auto_connect` | `false` |
+
+#### 配置迁移指南
+
+从旧版本（v1.2.0 及更早）的 JSON 格式配置迁移到新独立配置项：
+
+**旧格式（已弃用）：**
 ```json
 {
   "dglab": {
@@ -625,6 +638,15 @@ pip install aiohttp>=3.8.0 websockets>=10.0
   }
 }
 ```
+
+**新格式：**
+直接在配置面板中填写以下三个独立项：
+- `dglab_server_url` → 填入旧 `server_url` 的值
+- `dglab_heartbeat_interval` → 填入旧 `heartbeat_interval` 的值（默认 60）
+- `dglab_auto_connect` → 填入旧 `auto_connect` 的值（默认 false）
+
+**兼容性说明：**
+插件仍会检测旧版 `dglab` JSON 配置。如果新的独立配置项留空但旧配置存在，插件会自动读取旧配置并给出迁移提示。建议尽快手动迁移以获得更好的配置体验。
 
 #### 部署中转服务器
 
@@ -681,7 +703,7 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 
 请检查：
 1. **是否安装依赖**：`pip install websockets>=10.0`
-2. **是否配置服务器地址**：在插件配置中填写 `dglab.server_url`
+2. **是否配置服务器地址**：在插件配置中填写 `dglab_server_url`
 3. **中转服务器是否运行**：确保 DG-LAB Socket V2 服务器已启动并可访问
 4. **网络连通性**：AstrBot 服务器能否连接到中转服务器
 5. **查看日志**：检查 AstrBot 日志中的 `[DGLab]` 相关错误信息
@@ -721,7 +743,7 @@ pip install aiohttp>=3.8.0 websockets>=10.0
 ## 📊 项目结构
 
 ```
-astrbot_plugin_pixiv/
+astrbot_plugin_currentcortex/
 ├── main.py                      # 主程序文件（包含所有功能实现及插件入口）
 ├── dglab_client.py              # DG-LAB Socket V2 WebSocket 客户端封装
 ├── dglab_device_store.py        # DG-LAB 设备绑定关系持久化存储
@@ -755,7 +777,7 @@ astrbot_plugin_pixiv/
 - **DGLabCommandHandler** ([dglab_commands.py](dglab_commands.py))：命令处理器，负责参数解析、合法性校验、操作执行、结果格式化
 
 **主插件：**
-- **PixivPlugin(Star)** ([main.py](main.py))：主插件类，集成所有功能并注册命令
+- **CurrentCortexPlugin(Star)** ([main.py](main.py))：主插件类，集成所有功能并注册命令
 
 ### 设计特点
 
@@ -783,4 +805,4 @@ MIT License
 **版本**：v1.3.0  
 **更新日期**：2026-05-17  
 **新增功能**：JMComic 漫画获取（搜索、详情、章节图片、随机推荐）  
-**仓库**：[GitHub](https://github.com/backrooms-yrc/astrbot_plugin_pixiv)
+**仓库**：[GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)

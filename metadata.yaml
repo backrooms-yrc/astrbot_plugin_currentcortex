@@ -1,6 +1,6 @@
-name: astrbot_plugin_pixiv
-display_name: Pixiv 综合插件
-desc: Pixiv 随机图片插件 - 支持通过 /pixiv 指令获取随机 Pixiv 图片（含 R18 内容），支持标签筛选、关键词搜索、多图获取、每日一言、天气查询、男娘图片及 DG-LAB 设备管理等功能
+name: astrbot_plugin_currentcortex
+display_name: CurrentCortex 综合插件
+desc: 多功能 AstrBot 插件 - 支持 Pixiv 随机图片、每日一言、天气查询、男娘图片、网易云音乐点歌、JMComic 漫画获取、DG-LAB 设备管理及小红书/B站/抖音媒体内容解析等功能
 author: AstrBot Community
-version: v1.2.0
-repo: https://github.com/user/astrbot_plugin_pixiv
+version: v1.3.0
+repo: https://github.com/user/astrbot_plugin_currentcortex

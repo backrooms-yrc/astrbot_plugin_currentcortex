@@ -21,6 +21,11 @@ from .dglab_commands import DGLabCommandHandler
 from .dglab_webui import DGLabWebUI
 from .dglab_user_store import UserStore
 from .dglab_permission_store import PermissionStore
+from .media_parser import (
+    MediaParserManager,
+    MediaParserError,
+    URLExtractor,
+)
 
 
 API_BASE_URL = "https://api.bileizhen.top/api/pixiv"
@@ -282,12 +287,68 @@ JMCOMIC_HELP_TEXT = """📚 JMComic 漫画 使用说明
 📌 相关命令
   /jmcommend（别名：/漫画推荐）  随机推荐一部漫画"""
 
+MEDIA_PARSER_HELP_TEXT = """🔍 媒体内容解析 使用说明
+
+📌 支持平台
+  • 小红书（xiaohongshu）— 笔记图文/视频解析
+  • Bilibili（bilibili）— 视频信息及下载链接解析
+  • 抖音（douyin）— 短视频解析
+
+📌 基本命令
+  /解析 <链接>           自动识别平台并解析内容（别名：/解析）
+  /xhs <链接>           解析小红书内容（别名：/小红书）
+  /bilibili <链接>      解析B站视频（别名：/B站）
+  /douyin <链接>        解析抖音视频（别名：/抖音）
+  /解析 help            显示此帮助信息
+
+📌 支持的链接格式
+  小红书：
+    • https://www.xiaohongshu.com/explore/xxx
+    • https://xhslink.com/xxx（短链接）
+
+  B站：
+    • https://www.bilibili.com/video/BVxxx
+    • https://b23.tv/xxx（短链接）
+    • https://www.bilibili.com/video/avxxx
+
+  抖音：
+    • https://www.douyin.com/video/xxx
+    • https://v.douyin.com/xxx（短链接）
+
+📌 使用示例
+  /解析 https://www.xiaohongshu.com/explore/abc123
+  /xhs https://xhslink.com/xxxx
+  /bilibili https://www.bilibili.com/video/BV1xx411c7mD
+  /douyin https://v.douyin.com/xxxx
+
+📌 返回信息
+  小红书：
+    • 笔记标题、作者、点赞数
+    • 无水印高清原图列表
+    • 视频链接（如有）
+
+  B站：
+    • 视频标题、UP主、封面
+    • 播放量、点赞、投币等数据
+    • 视频下载链接（如有）
+
+  抖音：
+    • 视频标题、作者
+    • 点赞、评论、分享数
+    • 无水印视频链接
+
+⚠️ 注意事项
+  • 请确保链接可公开访问
+  • 部分平台可能因反爬策略导致解析失败
+  • 下载链接仅供个人学习使用，请遵守平台规范
+  • 如遇问题可发送 /解析 help 查看帮助"""
+
 
 class PixivAPIClient:
     def __init__(self, timeout: int = 15):
         self._timeout = aiohttp.ClientTimeout(total=timeout)
         self._headers = {
-            "User-Agent": "AstrBot-Pixiv-Plugin/1.0",
+            "User-Agent": "AstrBot-CurrentCortex-Plugin/1.0",
             "Accept": "application/json, image/*",
         }
 
@@ -297,11 +358,25 @@ class PixivAPIClient:
         if "excludeAI" in clean_params:
             clean_params["excludeAI"] = bool(clean_params["excludeAI"])
 
-        has_filter_params = any(k in clean_params for k in ("r18", "num", "tag", "keyword", "uid",
-                                                              "size", "excludeAI", "aspectRatio",
-                                                              "dateAfter", "dateBefore"))
+        has_filter_params = any(
+            k in clean_params
+            for k in (
+                "r18",
+                "num",
+                "tag",
+                "keyword",
+                "uid",
+                "size",
+                "excludeAI",
+                "aspectRatio",
+                "dateAfter",
+                "dateBefore",
+            )
+        )
 
-        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+        async with aiohttp.ClientSession(
+            timeout=self._timeout, headers=self._headers
+        ) as session:
             try:
                 if has_filter_params:
                     resp = await self._post_request(session, clean_params)
@@ -316,8 +391,13 @@ class PixivAPIClient:
 
                     if resp.status != 200:
                         error_text = await resp.text()
-                        logger.error(f"API returned status {resp.status}: {error_text[:500]}")
-                        raise PixivAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+                        logger.error(
+                            f"API returned status {resp.status}: {error_text[:500]}"
+                        )
+                        raise PixivAPIError(
+                            f"API 请求失败 (HTTP {resp.status})",
+                            status_code=resp.status,
+                        )
 
                     content_type = resp.headers.get("Content-Type", "")
                     if "image" in content_type:
@@ -326,7 +406,9 @@ class PixivAPIClient:
                         return {"type": "redirect", "url": image_url}
 
                     data = await resp.json()
-                    logger.debug(f"API JSON response keys: {list(data.keys()) if isinstance(data, dict) else type(data).__name__}")
+                    logger.debug(
+                        f"API JSON response keys: {list(data.keys()) if isinstance(data, dict) else type(data).__name__}"
+                    )
                     return {"type": "json", "data": data}
 
             except aiohttp.ClientError as e:
@@ -336,11 +418,15 @@ class PixivAPIClient:
                 logger.error("Request timeout")
                 raise PixivAPIError("API 请求超时，请稍后再试", status_code=0)
 
-    async def _get_request(self, session: aiohttp.ClientSession, params: Dict[str, Any]):
+    async def _get_request(
+        self, session: aiohttp.ClientSession, params: Dict[str, Any]
+    ):
         logger.debug(f"GET {API_BASE_URL} params={params}")
         return await session.get(API_BASE_URL, params=params, allow_redirects=False)
 
-    async def _post_request(self, session: aiohttp.ClientSession, params: Dict[str, Any]):
+    async def _post_request(
+        self, session: aiohttp.ClientSession, params: Dict[str, Any]
+    ):
         body = self._normalize_post_params(params)
         logger.debug(f"POST {API_BASE_URL} body={body}")
         return await session.post(
@@ -386,7 +472,7 @@ class CommandParser:
         params: Dict[str, Any] = {}
 
         key_value_pattern = re.compile(
-            r'([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([^\s]+)',
+            r"([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([^\s]+)",
         )
         consumed_positions = []
         for match in key_value_pattern.finditer(text):
@@ -450,13 +536,20 @@ class HitokotoAPIClient:
 
         logger.debug(f"Fetching hitokoto with params: {params}")
 
-        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+        async with aiohttp.ClientSession(
+            timeout=self._timeout, headers=self._headers
+        ) as session:
             try:
                 async with session.get(HITOKOTO_API_URL, params=params) as resp:
                     if resp.status != 200:
                         error_text = await resp.text()
-                        logger.error(f"Hitokoto API returned status {resp.status}: {error_text[:500]}")
-                        raise HitokotoAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+                        logger.error(
+                            f"Hitokoto API returned status {resp.status}: {error_text[:500]}"
+                        )
+                        raise HitokotoAPIError(
+                            f"API 请求失败 (HTTP {resp.status})",
+                            status_code=resp.status,
+                        )
 
                     data = await resp.json()
                     logger.debug(f"Hitokoto API response: {data}")
@@ -469,7 +562,9 @@ class HitokotoAPIClient:
                         "text": data.get("hitokoto", ""),
                         "from": data.get("from", ""),
                         "type": data.get("type", ""),
-                        "category_name": HITOKOTO_CATEGORIES.get(data.get("type", ""), "未知"),
+                        "category_name": HITOKOTO_CATEGORIES.get(
+                            data.get("type", ""), "未知"
+                        ),
                     }
 
             except aiohttp.ClientError as e:
@@ -499,25 +594,36 @@ class WeatherAPIClient:
 
         logger.debug(f"Fetching weather for city: {city}")
 
-        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+        async with aiohttp.ClientSession(
+            timeout=self._timeout, headers=self._headers
+        ) as session:
             try:
                 async with session.get(WEATHER_API_URL, params=params) as resp:
                     if resp.status != 200:
                         error_text = await resp.text()
-                        logger.error(f"Weather API returned status {resp.status}: {error_text[:500]}")
-                        raise WeatherAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+                        logger.error(
+                            f"Weather API returned status {resp.status}: {error_text[:500]}"
+                        )
+                        raise WeatherAPIError(
+                            f"API 请求失败 (HTTP {resp.status})",
+                            status_code=resp.status,
+                        )
 
                     content_type = resp.headers.get("Content-Type", "")
                     if "json" not in content_type:
                         text_data = await resp.text()
-                        logger.debug(f"Weather API returned text format: {text_data[:500]}")
+                        logger.debug(
+                            f"Weather API returned text format: {text_data[:500]}"
+                        )
                         return {"type": "text", "data": text_data}
 
                     data = await resp.json()
                     logger.debug(f"Weather API JSON response: {data}")
 
                     if not isinstance(data, dict):
-                        logger.warning(f"Unexpected weather API response format: {type(data)}")
+                        logger.warning(
+                            f"Unexpected weather API response format: {type(data)}"
+                        )
                         raise WeatherAPIError("API 返回数据格式异常")
 
                     if data.get("error"):
@@ -531,14 +637,16 @@ class WeatherAPIClient:
                         raise WeatherAPIError("API 返回数据为空")
 
                     if not isinstance(weather_data, dict):
-                        logger.warning(f"Weather API returned non-dict data: {type(weather_data).__name__}")
+                        logger.warning(
+                            f"Weather API returned non-dict data: {type(weather_data).__name__}"
+                        )
                         raise WeatherAPIError("API 返回数据格式异常")
 
                     return {
                         "type": "json",
                         "data": weather_data,
                         "city": weather_data.get("city", city),
-                        "raw_response": data
+                        "raw_response": data,
                     }
 
             except aiohttp.ClientError as e:
@@ -564,13 +672,20 @@ class FemboyAPIClient:
     async def fetch_femboy_image(self) -> Dict[str, Any]:
         logger.debug("Fetching random femboy image")
 
-        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+        async with aiohttp.ClientSession(
+            timeout=self._timeout, headers=self._headers
+        ) as session:
             try:
                 async with session.get(FEMBOY_API_URL) as resp:
                     if resp.status != 200:
                         error_text = await resp.text()
-                        logger.error(f"Femboy API returned status {resp.status}: {error_text[:500]}")
-                        raise FemboyAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+                        logger.error(
+                            f"Femboy API returned status {resp.status}: {error_text[:500]}"
+                        )
+                        raise FemboyAPIError(
+                            f"API 请求失败 (HTTP {resp.status})",
+                            status_code=resp.status,
+                        )
 
                     content_type = resp.headers.get("Content-Type", "")
 
@@ -583,7 +698,9 @@ class FemboyAPIClient:
                     logger.debug(f"Femboy API JSON response: {data}")
 
                     if not isinstance(data, dict):
-                        logger.warning(f"Unexpected femboy API response format: {type(data)}")
+                        logger.warning(
+                            f"Unexpected femboy API response format: {type(data)}"
+                        )
                         raise FemboyAPIError("API 返回数据格式异常")
 
                     if "url" not in data:
@@ -596,7 +713,7 @@ class FemboyAPIClient:
                             "url": data.get("url", ""),
                             "from": data.get("from", "未知来源"),
                             "note": data.get("note", ""),
-                        }
+                        },
                     }
 
             except aiohttp.ClientError as e:
@@ -615,7 +732,9 @@ class NeteaseAPIClient:
             "Accept": "application/json",
         }
 
-    async def get_song(self, song_id: str, level: Optional[str] = None) -> Dict[str, Any]:
+    async def get_song(
+        self, song_id: str, level: Optional[str] = None
+    ) -> Dict[str, Any]:
         """通过歌曲ID获取歌曲信息和播放链接"""
         if not song_id or not song_id.strip():
             raise NeteaseAPIError("歌曲ID不能为空")
@@ -625,13 +744,20 @@ class NeteaseAPIClient:
             params["level"] = level
         logger.debug(f"[Netease] Fetching song by id: {song_id}, level: {level}")
 
-        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+        async with aiohttp.ClientSession(
+            timeout=self._timeout, headers=self._headers
+        ) as session:
             try:
                 async with session.get(NETEASE_API_URL, params=params) as resp:
                     if resp.status != 200:
                         error_text = await resp.text()
-                        logger.error(f"[Netease] API returned status {resp.status}: {error_text[:500]}")
-                        raise NeteaseAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+                        logger.error(
+                            f"[Netease] API returned status {resp.status}: {error_text[:500]}"
+                        )
+                        raise NeteaseAPIError(
+                            f"API 请求失败 (HTTP {resp.status})",
+                            status_code=resp.status,
+                        )
 
                     data = await resp.json()
                     logger.debug(f"[Netease] Song response: {data}")
@@ -667,16 +793,25 @@ class NeteaseAPIClient:
         params = {"q": query.strip()}
         logger.debug(f"[Netease] Searching songs: {query}")
 
-        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+        async with aiohttp.ClientSession(
+            timeout=self._timeout, headers=self._headers
+        ) as session:
             try:
                 async with session.get(NETEASE_SEARCH_URL, params=params) as resp:
                     if resp.status != 200:
                         error_text = await resp.text()
-                        logger.error(f"[Netease] Search API returned status {resp.status}: {error_text[:500]}")
-                        raise NeteaseAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+                        logger.error(
+                            f"[Netease] Search API returned status {resp.status}: {error_text[:500]}"
+                        )
+                        raise NeteaseAPIError(
+                            f"API 请求失败 (HTTP {resp.status})",
+                            status_code=resp.status,
+                        )
 
                     data = await resp.json()
-                    logger.debug(f"[Netease] Search response keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
+                    logger.debug(
+                        f"[Netease] Search response keys: {list(data.keys()) if isinstance(data, dict) else type(data)}"
+                    )
 
                     if not isinstance(data, dict):
                         raise NeteaseAPIError("API 返回数据格式异常")
@@ -699,8 +834,6 @@ class NeteaseAPIClient:
                 raise NeteaseAPIError("API 请求超时，请稍后再试", status_code=0)
 
 
-
-
 class JMComicAPIClient:
     """JMComic 漫画 API 客户端"""
 
@@ -719,13 +852,22 @@ class JMComicAPIClient:
         params = {"query": query.strip(), "page": page}
         logger.debug(f"[JMComic] Searching: query={query}, page={page}")
 
-        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+        async with aiohttp.ClientSession(
+            timeout=self._timeout, headers=self._headers
+        ) as session:
             try:
-                async with session.get(f"{JMCOMIC_API_BASE}/search", params=params) as resp:
+                async with session.get(
+                    f"{JMCOMIC_API_BASE}/search", params=params
+                ) as resp:
                     if resp.status != 200:
                         error_text = await resp.text()
-                        logger.error(f"[JMComic] Search API returned status {resp.status}: {error_text[:500]}")
-                        raise JMComicAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+                        logger.error(
+                            f"[JMComic] Search API returned status {resp.status}: {error_text[:500]}"
+                        )
+                        raise JMComicAPIError(
+                            f"API 请求失败 (HTTP {resp.status})",
+                            status_code=resp.status,
+                        )
 
                     data = await resp.json()
                     if not isinstance(data, dict):
@@ -752,13 +894,20 @@ class JMComicAPIClient:
         comic_id = comic_id.strip()
         logger.debug(f"[JMComic] Fetching detail: id={comic_id}")
 
-        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+        async with aiohttp.ClientSession(
+            timeout=self._timeout, headers=self._headers
+        ) as session:
             try:
                 async with session.get(f"{JMCOMIC_API_BASE}/album/{comic_id}") as resp:
                     if resp.status != 200:
                         error_text = await resp.text()
-                        logger.error(f"[JMComic] Detail API returned status {resp.status}: {error_text[:500]}")
-                        raise JMComicAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+                        logger.error(
+                            f"[JMComic] Detail API returned status {resp.status}: {error_text[:500]}"
+                        )
+                        raise JMComicAPIError(
+                            f"API 请求失败 (HTTP {resp.status})",
+                            status_code=resp.status,
+                        )
 
                     data = await resp.json()
                     if not isinstance(data, dict):
@@ -786,13 +935,22 @@ class JMComicAPIClient:
         params = {"chapter": "all"}
         logger.debug(f"[JMComic] Fetching chapter: id={chapter_id}")
 
-        async with aiohttp.ClientSession(timeout=self._timeout, headers=self._headers) as session:
+        async with aiohttp.ClientSession(
+            timeout=self._timeout, headers=self._headers
+        ) as session:
             try:
-                async with session.get(f"{JMCOMIC_API_BASE}/images/{chapter_id}", params=params) as resp:
+                async with session.get(
+                    f"{JMCOMIC_API_BASE}/images/{chapter_id}", params=params
+                ) as resp:
                     if resp.status != 200:
                         error_text = await resp.text()
-                        logger.error(f"[JMComic] Chapter API returned status {resp.status}: {error_text[:500]}")
-                        raise JMComicAPIError(f"API 请求失败 (HTTP {resp.status})", status_code=resp.status)
+                        logger.error(
+                            f"[JMComic] Chapter API returned status {resp.status}: {error_text[:500]}"
+                        )
+                        raise JMComicAPIError(
+                            f"API 请求失败 (HTTP {resp.status})",
+                            status_code=resp.status,
+                        )
 
                     data = await resp.json()
                     if not isinstance(data, dict):
@@ -841,6 +999,7 @@ class PixivAPIError(Exception):
         super().__init__(message)
         self.status_code = status_code
 
+
 class JMComicAPIError(Exception):
     def __init__(self, message: str, status_code: int = 0):
         super().__init__(message)
@@ -848,12 +1007,12 @@ class JMComicAPIError(Exception):
 
 
 @register(
-    "astrbot_plugin_pixiv",
+    "astrbot_plugin_currentcortex",
     "AstrBot Community",
-    "Pixiv 随机图片插件 - 支持通过 /pixiv 指令获取随机 Pixiv 图片（含 R18 内容），支持标签筛选、关键词搜索等功能",
-    "1.0.0",
+    "CurrentCortex 综合插件 - Pixiv 图片、每日一言、天气查询、网易云音乐、JMComic 漫画、DG-LAB 设备管理及小红书/B站/抖音媒体解析等",
+    "1.3.0",
 )
-class PixivPlugin(Star):
+class CurrentCortexPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
 
@@ -866,14 +1025,15 @@ class PixivPlugin(Star):
         self._femboy_api_key = str(config.get("femboy_api_key", "")).strip()
 
         if not self._femboy_api_key:
-            logger.warning("⚠️ 未配置男娘图片 API 密钥 (femboy_api_key)，/femboy 命令将无法使用")
+            logger.warning(
+                "⚠️ 未配置男娘图片 API 密钥 (femboy_api_key)，/femboy 命令将无法使用"
+            )
             logger.warning("请在插件配置面板中填写 femboy_api_key 字段")
             self._femboy_client = None
         else:
             try:
                 self._femboy_client = FemboyAPIClient(
-                    api_key=self._femboy_api_key,
-                    timeout=self._request_timeout
+                    api_key=self._femboy_api_key, timeout=self._request_timeout
                 )
                 logger.info("✅ 男娘图片 API 客户端初始化成功")
             except ValueError as e:
@@ -885,27 +1045,43 @@ class PixivPlugin(Star):
         self._weather_client = WeatherAPIClient(timeout=self._request_timeout)
         self._netease_client = NeteaseAPIClient(timeout=self._request_timeout)
         self._jmcomic_client = JMComicAPIClient(timeout=self._request_timeout)
+        self._media_parser = MediaParserManager(timeout=self._request_timeout)
 
-        dglab_config_raw = config.get("dglab", "")
-        dglab_config = {}
-        if isinstance(dglab_config_raw, dict):
-            dglab_config = dglab_config_raw
-        elif isinstance(dglab_config_raw, str) and dglab_config_raw.strip():
-            import json as _json
-            try:
-                parsed = _json.loads(dglab_config_raw)
-                if isinstance(parsed, dict):
-                    dglab_config = parsed
-                else:
-                    logger.warning(f"[DGLab] 配置解析结果不是字典: {type(parsed)}")
-            except (ValueError, TypeError) as e:
-                logger.warning(f"[DGLab] 配置JSON解析失败: {e}, 原始值: {repr(dglab_config_raw[:100])}")
+        # 读取 DG-LAB 新独立配置项（优先），兼容旧版 JSON 字符串配置
+        server_url = str(config.get("dglab_server_url", "")).strip()
+        heartbeat_interval = float(config.get("dglab_heartbeat_interval", 60))
+        auto_connect = bool(config.get("dglab_auto_connect", False))
 
-        server_url = dglab_config.get("server_url", "").strip()
-        if not server_url and dglab_config:
-            logger.warning(f"[DGLab] 配置中未找到有效的server_url, 可用key: {list(dglab_config.keys())}")
-        heartbeat_interval = float(dglab_config.get("heartbeat_interval", 60))
-        auto_connect = bool(dglab_config.get("auto_connect", False))
+        # 向后兼容：若新配置未填写但存在旧版 dglab 配置，则尝试解析
+        if not server_url:
+            dglab_config_raw = config.get("dglab", "")
+            dglab_config = {}
+            if isinstance(dglab_config_raw, dict):
+                dglab_config = dglab_config_raw
+            elif isinstance(dglab_config_raw, str) and dglab_config_raw.strip():
+                import json as _json
+
+                try:
+                    parsed = _json.loads(dglab_config_raw)
+                    if isinstance(parsed, dict):
+                        dglab_config = parsed
+                    else:
+                        logger.warning(f"[DGLab] 配置解析结果不是字典: {type(parsed)}")
+                except (ValueError, TypeError) as e:
+                    logger.warning(
+                        f"[DGLab] 配置JSON解析失败: {e}, 原始值: {repr(dglab_config_raw[:100])}"
+                    )
+
+            fallback_server_url = dglab_config.get("server_url", "").strip()
+            if fallback_server_url:
+                server_url = fallback_server_url
+                heartbeat_interval = float(
+                    dglab_config.get("heartbeat_interval", heartbeat_interval)
+                )
+                auto_connect = bool(dglab_config.get("auto_connect", auto_connect))
+                logger.info(
+                    "[DGLab] 已从旧版 dglab JSON 配置迁移到新的独立配置项，建议更新配置面板"
+                )
 
         self._device_store = DeviceStore(data_dir="data")
         self._connection_pool = DeviceConnectionPool(
@@ -936,9 +1112,13 @@ class PixivPlugin(Star):
             )
 
         if server_url:
-            logger.info(f"✅ DG-LAB模块已初始化 (server={server_url}, auto_connect={auto_connect})")
+            logger.info(
+                f"✅ CurrentCortex 模块已初始化 (server={server_url}, auto_connect={auto_connect})"
+            )
         else:
-            logger.info("ℹ️ DG-LAB模块已就绪（未配置服务器地址，用户需手动指定）")
+            logger.info(
+                "ℹ️ CurrentCortex 模块已就绪（未配置服务器地址，用户需手动指定）"
+            )
 
         try:
             asyncio.get_running_loop()
@@ -951,11 +1131,11 @@ class PixivPlugin(Star):
             self._pool_started = True
 
         logger.info(
-            f"PixivPlugin initialized: r18={self._default_r18}, num={self._default_num}, "
+            f"CurrentCortexPlugin initialized: r18={self._default_r18}, num={self._default_num}, "
             f"size={self._default_size}, proxy={self._image_proxy}, excludeAI={self._exclude_ai}"
         )
 
-    @filter.command("hitokoto", alias={'一言'})
+    @filter.command("hitokoto", alias={"一言"})
     async def hitokoto_command(self, event: AstrMessageEvent):
         user_name = event.get_sender_name()
         message_str = event.message_str.strip()
@@ -969,7 +1149,9 @@ class PixivPlugin(Star):
 
         try:
             category = self._parse_hitokoto_params(message_str)
-            logger.info(f"[Hitokoto] Fetching for user {user_name}, category={category}")
+            logger.info(
+                f"[Hitokoto] Fetching for user {user_name}, category={category}"
+            )
 
             result = await self._hitokoto_client.fetch_hitokoto(category=category)
 
@@ -985,15 +1167,23 @@ class PixivPlugin(Star):
             error_msg += "\n💡 请稍后重试或发送 /hitokoto help 查看帮助"
             yield event.plain_result(error_msg)
         except Exception as e:
-            logger.error(f"[Hitokoto] Unexpected error for user {user_name}: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试")
+            logger.error(
+                f"[Hitokoto] Unexpected error for user {user_name}: {e}", exc_info=True
+            )
+            yield event.plain_result(
+                f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试"
+            )
 
     def _parse_hitokoto_params(self, message: str) -> Optional[str]:
-        cleaned = re.sub(r'^[/!！]\s*(hitokoto|一言)\s*', '', message.strip(), flags=re.IGNORECASE)
-        cleaned = re.sub(r'^(hitokoto|一言)\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(
+            r"^[/!！]\s*(hitokoto|一言)\s*", "", message.strip(), flags=re.IGNORECASE
+        )
+        cleaned = re.sub(
+            r"^(hitokoto|一言)\s*", "", cleaned.strip(), flags=re.IGNORECASE
+        )
         cleaned = cleaned.strip()
 
-        if not cleaned or cleaned.lower() in ('help', '-h', '--help', '帮助'):
+        if not cleaned or cleaned.lower() in ("help", "-h", "--help", "帮助"):
             return None
 
         category = cleaned.lower()
@@ -1017,7 +1207,7 @@ class PixivPlugin(Star):
 
         return "\n".join(response_parts)
 
-    @filter.command("weather", alias={'天气'})
+    @filter.command("weather", alias={"天气"})
     async def weather_command(self, event: AstrMessageEvent):
         user_name = event.get_sender_name()
         message_str = event.message_str.strip()
@@ -1033,26 +1223,38 @@ class PixivPlugin(Star):
             city = self._parse_weather_params(message_str)
             if not city:
                 logger.warning(f"[Weather] No city specified by user {user_name}")
-                yield event.plain_result("❌ 请指定城市名称\n💡 用法：/weather 广州市\n💡 发送 /weather help 查看帮助")
+                yield event.plain_result(
+                    "❌ 请指定城市名称\n💡 用法：/weather 广州市\n💡 发送 /weather help 查看帮助"
+                )
                 return
 
             if len(city) > 50:
-                logger.warning(f"[Weather] City name too long ({len(city)} chars) from user {user_name}")
-                yield event.plain_result("❌ 城市名称过长（最多50个字符）\n💡 请输入正确的城市名称")
+                logger.warning(
+                    f"[Weather] City name too long ({len(city)} chars) from user {user_name}"
+                )
+                yield event.plain_result(
+                    "❌ 城市名称过长（最多50个字符）\n💡 请输入正确的城市名称"
+                )
                 return
 
             logger.info(f"[Weather] Fetching weather for user {user_name}, city={city}")
 
             result = await self._weather_client.fetch_weather(city)
 
-            logger.debug(f"[Weather] API response received for {city}, type={result.get('type')}")
+            logger.debug(
+                f"[Weather] API response received for {city}, type={result.get('type')}"
+            )
 
             response_text = self._format_weather_response(result)
-            logger.info(f"[Weather] Successfully formatted weather response for {user_name}, city={city}")
+            logger.info(
+                f"[Weather] Successfully formatted weather response for {user_name}, city={city}"
+            )
             yield event.plain_result(response_text)
 
         except WeatherAPIError as e:
-            logger.error(f"[Weather] API error for user {user_name}: {e} (status_code={e.status_code})")
+            logger.error(
+                f"[Weather] API error for user {user_name}: {e} (status_code={e.status_code})"
+            )
             error_msg = f"❌ 查询天气失败\n📝 错误信息：{str(e)}"
             if e.status_code:
                 error_msg += f"\n🔢 状态码：{e.status_code}"
@@ -1060,18 +1262,30 @@ class PixivPlugin(Star):
             error_msg += "\n💡 支持的城市示例：广州市、北京市、上海市"
             yield event.plain_result(error_msg)
         except ValueError as e:
-            logger.error(f"[Weather] Parameter validation error for user {user_name}: {e}")
-            yield event.plain_result(f"❌ 参数错误：{str(e)}\n💡 用法：/weather 城市名称")
+            logger.error(
+                f"[Weather] Parameter validation error for user {user_name}: {e}"
+            )
+            yield event.plain_result(
+                f"❌ 参数错误：{str(e)}\n💡 用法：/weather 城市名称"
+            )
         except Exception as e:
-            logger.error(f"[Weather] Unexpected error for user {user_name}: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试或联系管理员")
+            logger.error(
+                f"[Weather] Unexpected error for user {user_name}: {e}", exc_info=True
+            )
+            yield event.plain_result(
+                f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试或联系管理员"
+            )
 
     def _parse_weather_params(self, message: str) -> Optional[str]:
-        cleaned = re.sub(r'^[/!！]\s*(weather|天气)\s*', '', message.strip(), flags=re.IGNORECASE)
-        cleaned = re.sub(r'^(weather|天气)\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(
+            r"^[/!！]\s*(weather|天气)\s*", "", message.strip(), flags=re.IGNORECASE
+        )
+        cleaned = re.sub(
+            r"^(weather|天气)\s*", "", cleaned.strip(), flags=re.IGNORECASE
+        )
         cleaned = cleaned.strip()
 
-        if not cleaned or cleaned.lower() in ('help', '-h', '--help', '帮助'):
+        if not cleaned or cleaned.lower() in ("help", "-h", "--help", "帮助"):
             return None
 
         return cleaned if cleaned else None
@@ -1146,7 +1360,11 @@ class PixivPlugin(Star):
                 if weather:
                     response_parts.append(f"   ☁️ 天气：{weather}")
                 if temp_min or temp_max:
-                    temp_str = f"{temp_min}~{temp_max}" if temp_min and temp_max else (temp_max or temp_min)
+                    temp_str = (
+                        f"{temp_min}~{temp_max}"
+                        if temp_min and temp_max
+                        else (temp_max or temp_min)
+                    )
                     response_parts.append(f"   🌡️ 温度：{temp_str}")
                 if wind_dir and wind_scale:
                     response_parts.append(f"   💨 风力：{wind_dir} {wind_scale}级")
@@ -1158,14 +1376,18 @@ class PixivPlugin(Star):
         final_response = "\n".join([p for p in response_parts if p])
 
         if len(final_response.strip()) <= len(f"🌤️ {city} 天气预报"):
-            logger.warning(f"[Weather] Response appears empty after formatting. Raw data keys: {list(data.keys())}")
+            logger.warning(
+                f"[Weather] Response appears empty after formatting. Raw data keys: {list(data.keys())}"
+            )
             raw_data = result.get("raw_response", {})
             return f"🌤️ {city} 天气信息\n\n⚠️ 未能解析天气数据\n原始数据：{str(raw_data)[:200]}"
 
-        logger.info(f"[Weather] Formatted response with {len(response_parts)} parts for city: {city}")
+        logger.info(
+            f"[Weather] Formatted response with {len(response_parts)} parts for city: {city}"
+        )
         return final_response
 
-    @filter.command("femboy", alias={'男娘'})
+    @filter.command("femboy", alias={"男娘"})
     async def femboy_command(self, event: AstrMessageEvent):
         user_name = event.get_sender_name()
         message_str = event.message_str.strip()
@@ -1208,8 +1430,12 @@ class PixivPlugin(Star):
             error_msg += "\n💡 请稍后重试或发送 /femboy help 查看帮助"
             yield event.plain_result(error_msg)
         except Exception as e:
-            logger.error(f"[Femboy] Unexpected error for user {user_name}: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试")
+            logger.error(
+                f"[Femboy] Unexpected error for user {user_name}: {e}", exc_info=True
+            )
+            yield event.plain_result(
+                f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试"
+            )
 
     async def _process_femboy_response(
         self, result: Dict[str, Any], event: AstrMessageEvent
@@ -1242,7 +1468,7 @@ class PixivPlugin(Star):
         logger.warning(f"[Femboy] Unknown response type: {response_type}")
         return [event.plain_result("⚠️ API 返回了未知格式的数据，请联系管理员")]
 
-    @filter.command("music", alias={'音乐'})
+    @filter.command("music", alias={"音乐"})
     async def music_command(self, event: AstrMessageEvent):
         user_name = event.get_sender_name()
         message_str = event.message_str.strip()
@@ -1257,14 +1483,18 @@ class PixivPlugin(Star):
         try:
             query = self._parse_music_params(message_str)
             if not query:
-                yield event.plain_result("❌ 请输入歌曲名或ID\n💡 用法：/music 歌曲名\n💡 发送 /music help 查看帮助")
+                yield event.plain_result(
+                    "❌ 请输入歌曲名或ID\n💡 用法：/music 歌曲名\n💡 发送 /music help 查看帮助"
+                )
                 return
 
             # 通过ID获取歌曲
-            id_match = re.match(r'^(id|编号)\s*[:：]\s*(\d+)$', query, re.IGNORECASE)
+            id_match = re.match(r"^(id|编号)\s*[:：]\s*(\d+)$", query, re.IGNORECASE)
             if id_match:
                 song_id = id_match.group(2)
-                logger.info(f"[Music] Fetching song by ID {song_id} for user {user_name}")
+                logger.info(
+                    f"[Music] Fetching song by ID {song_id} for user {user_name}"
+                )
                 song_data = await self._netease_client.get_song(song_id)
                 response_items = await self._format_song_response(song_data, event)
                 for item in response_items:
@@ -1272,23 +1502,29 @@ class PixivPlugin(Star):
                 return
 
             # 搜索模式：仅列出搜索结果
-            search_match = re.match(r'^(search|搜索)\s+(.+)$', query, re.IGNORECASE)
+            search_match = re.match(r"^(search|搜索)\s+(.+)$", query, re.IGNORECASE)
             if search_match:
                 search_query = search_match.group(2).strip()
-                logger.info(f"[Music] Searching songs '{search_query}' for user {user_name}")
+                logger.info(
+                    f"[Music] Searching songs '{search_query}' for user {user_name}"
+                )
                 songs = await self._netease_client.search_songs(search_query)
                 if not songs:
-                    yield event.plain_result(f"😕 未找到与「{search_query}」相关的歌曲\n💡 请尝试其他关键词")
+                    yield event.plain_result(
+                        f"😕 未找到与「{search_query}」相关的歌曲\n💡 请尝试其他关键词"
+                    )
                     return
                 response_text = self._format_search_results(songs, search_query)
                 yield event.plain_result(response_text)
                 return
 
             # direct模式：仅返回语音条，不附带额外信息
-            direct_match = re.match(r'^(direct|直接)\s+(.+)$', query, re.IGNORECASE)
+            direct_match = re.match(r"^(direct|直接)\s+(.+)$", query, re.IGNORECASE)
             if direct_match:
                 direct_query = direct_match.group(2).strip()
-                logger.info(f"[Music] Direct play '{direct_query}' for user {user_name}")
+                logger.info(
+                    f"[Music] Direct play '{direct_query}' for user {user_name}"
+                )
                 songs = await self._netease_client.search_songs(direct_query)
                 if not songs:
                     yield event.plain_result(f"😕 未找到与「{direct_query}」相关的歌曲")
@@ -1301,7 +1537,9 @@ class PixivPlugin(Star):
                     return
 
                 song_data = await self._netease_client.get_song(song_id)
-                response_items = await self._format_song_response(song_data, event, direct_mode=True)
+                response_items = await self._format_song_response(
+                    song_data, event, direct_mode=True
+                )
                 for item in response_items:
                     yield item
                 return
@@ -1310,7 +1548,9 @@ class PixivPlugin(Star):
             logger.info(f"[Music] Quick play '{query}' for user {user_name}")
             songs = await self._netease_client.search_songs(query)
             if not songs:
-                yield event.plain_result(f"😕 未找到与「{query}」相关的歌曲\n💡 请尝试其他关键词")
+                yield event.plain_result(
+                    f"😕 未找到与「{query}」相关的歌曲\n💡 请尝试其他关键词"
+                )
                 return
 
             first_song = songs[0]
@@ -1332,20 +1572,31 @@ class PixivPlugin(Star):
             error_msg += "\n💡 请稍后重试或发送 /music help 查看帮助"
             yield event.plain_result(error_msg)
         except Exception as e:
-            logger.error(f"[Music] Unexpected error for user {user_name}: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试")
+            logger.error(
+                f"[Music] Unexpected error for user {user_name}: {e}", exc_info=True
+            )
+            yield event.plain_result(
+                f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试"
+            )
 
     def _parse_music_params(self, message: str) -> Optional[str]:
-        cleaned = re.sub(r'^[/!！]\s*(music|音乐)\s*', '', message.strip(), flags=re.IGNORECASE)
-        cleaned = re.sub(r'^(music|音乐)\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(
+            r"^[/!！]\s*(music|音乐)\s*", "", message.strip(), flags=re.IGNORECASE
+        )
+        cleaned = re.sub(r"^(music|音乐)\s*", "", cleaned.strip(), flags=re.IGNORECASE)
         cleaned = cleaned.strip()
 
-        if not cleaned or cleaned.lower() in ('help', '-h', '--help', '帮助'):
+        if not cleaned or cleaned.lower() in ("help", "-h", "--help", "帮助"):
             return None
 
         return cleaned
 
-    async def _format_song_response(self, song_data: Dict[str, Any], event: AstrMessageEvent, direct_mode: bool = False) -> List[Any]:
+    async def _format_song_response(
+        self,
+        song_data: Dict[str, Any],
+        event: AstrMessageEvent,
+        direct_mode: bool = False,
+    ) -> List[Any]:
         name = song_data.get("name", "未知歌曲")
         artists = song_data.get("artists", "未知艺术家")
         album = song_data.get("album", "")
@@ -1365,7 +1616,13 @@ class PixivPlugin(Star):
 
             quality_parts = []
             if level:
-                level_map = {"standard": "标准", "higher": "较高", "exhigh": "极高", "lossless": "无损", "hires": "Hi-Res"}
+                level_map = {
+                    "standard": "标准",
+                    "higher": "较高",
+                    "exhigh": "极高",
+                    "lossless": "无损",
+                    "hires": "Hi-Res",
+                }
                 quality_parts.append(level_map.get(level, level))
             if file_type:
                 quality_parts.append(file_type.upper())
@@ -1426,7 +1683,7 @@ class PixivPlugin(Star):
 
             self._cleanup_old_audio_files(temp_dir)
 
-            safe_name = re.sub(r'[^\w\-.]', '_', name)[:50]
+            safe_name = re.sub(r"[^\w\-.]", "_", name)[:50]
             temp_path = os.path.join(temp_dir, f"{safe_name}{ext}")
 
             timeout = aiohttp.ClientTimeout(total=30)
@@ -1436,7 +1693,7 @@ class PixivPlugin(Star):
                         logger.warning(f"[Music] 下载音频失败: HTTP {resp.status}")
                         return None
 
-                    with open(temp_path, 'wb') as f:
+                    with open(temp_path, "wb") as f:
                         async for chunk in resp.content.iter_chunked(8192):
                             f.write(chunk)
 
@@ -1453,7 +1710,9 @@ class PixivPlugin(Star):
             logger.warning(f"[Music] 下载音频异常: {e}")
             return None
 
-    async def _convert_to_mp3(self, source_path: str, temp_dir: str, safe_name: str) -> Optional[str]:
+    async def _convert_to_mp3(
+        self, source_path: str, temp_dir: str, safe_name: str
+    ) -> Optional[str]:
         """使用ffmpeg将音频转码为MP3 320kbps"""
         if not shutil.which("ffmpeg"):
             logger.warning("[Music] ffmpeg 未安装，无法转码非MP3音频")
@@ -1462,8 +1721,17 @@ class PixivPlugin(Star):
         mp3_path = os.path.join(temp_dir, f"{safe_name}.mp3")
         try:
             proc = await asyncio.create_subprocess_exec(
-                "ffmpeg", "-y", "-i", source_path,
-                "-vn", "-ar", "44100", "-ac", "2", "-b:a", "320k",
+                "ffmpeg",
+                "-y",
+                "-i",
+                source_path,
+                "-vn",
+                "-ar",
+                "44100",
+                "-ac",
+                "2",
+                "-b:a",
+                "320k",
                 mp3_path,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
@@ -1505,7 +1773,7 @@ class PixivPlugin(Star):
         parts.append(f"\n💡 使用 /music id:<歌曲ID> 获取详细信息和播放链接")
         return "\n".join(parts)
 
-    @filter.command("pixiv", alias={'图片'})
+    @filter.command("pixiv", alias={"图片"})
     async def pixiv_command(self, event: AstrMessageEvent):
         user_name = event.get_sender_name()
         message_str = event.message_str.strip()
@@ -1538,10 +1806,14 @@ class PixivPlugin(Star):
             yield event.plain_result(error_msg)
         except ValueError as e:
             logger.error(f"Parameter error for user {user_name}: {e}")
-            yield event.plain_result(f"❌ 参数错误：{str(e)}\n💡 发送 /pixiv help 查看使用说明")
+            yield event.plain_result(
+                f"❌ 参数错误：{str(e)}\n💡 发送 /pixiv help 查看使用说明"
+            )
         except Exception as e:
             logger.error(f"Unexpected error for user {user_name}: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试或联系管理员")
+            yield event.plain_result(
+                f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试或联系管理员"
+            )
 
     def _is_help_command(self, message: str) -> bool:
         """
@@ -1554,26 +1826,39 @@ class PixivPlugin(Star):
         msg_clean = message.strip()
 
         # 标准化消息：移除命令前缀
-        normalized = re.sub(r'^[/!！]', '', msg_clean).strip()
+        normalized = re.sub(r"^[/!！]", "", msg_clean).strip()
 
         # 所有已知命令名（英文+中文别名），按长度降序排列避免前缀误匹配
         command_names = [
-            'jmcommend', '漫画推荐', 'hitokoto', 'weather', 'pixiv',
-            'femboy', 'music', 'dglab', '图片', '一言', '天气',
-            '男娘', '音乐', '漫画', '电击', 'jm',
+            "jmcommend",
+            "漫画推荐",
+            "hitokoto",
+            "weather",
+            "pixiv",
+            "femboy",
+            "music",
+            "dglab",
+            "图片",
+            "一言",
+            "天气",
+            "男娘",
+            "音乐",
+            "漫画",
+            "电击",
+            "jm",
         ]
 
         # 尝试剥离命令名，提取参数部分
         args_part = normalized
         for cmd in command_names:
             if normalized.lower().startswith(cmd.lower()):
-                args_part = normalized[len(cmd):].strip()
+                args_part = normalized[len(cmd) :].strip()
                 break
 
         lower_args = args_part.lower().strip()
 
         # 定义所有帮助关键词
-        help_keywords = {'help', '-h', '--help', '帮助', '?', '？'}
+        help_keywords = {"help", "-h", "--help", "帮助", "?", "？"}
 
         # 精确匹配
         if lower_args in help_keywords:
@@ -1584,18 +1869,26 @@ class PixivPlugin(Star):
             return False
 
         # 检查是否以帮助关键词开头或结尾
-        for kw in ['help', '帮助']:
-            if lower_args == kw or lower_args.startswith(kw + ' ') or lower_args.endswith(' ' + kw):
+        for kw in ["help", "帮助"]:
+            if (
+                lower_args == kw
+                or lower_args.startswith(kw + " ")
+                or lower_args.endswith(" " + kw)
+            ):
                 return True
 
         return False
 
     def _build_request_params(self, message: str) -> Dict[str, Any]:
         # 标准化消息：移除命令前缀和 "pixiv"/"图片" 关键字
-        cleaned = re.sub(r'^[/!！]\s*(pixiv|图片)\s*', '', message.strip(), flags=re.IGNORECASE)
-        cleaned = re.sub(r'^(pixiv|图片)\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(
+            r"^[/!！]\s*(pixiv|图片)\s*", "", message.strip(), flags=re.IGNORECASE
+        )
+        cleaned = re.sub(r"^(pixiv|图片)\s*", "", cleaned.strip(), flags=re.IGNORECASE)
 
-        logger.debug(f"[DEBUG] _build_request_params 输入: '{message}' → 清理后: '{cleaned}'")
+        logger.debug(
+            f"[DEBUG] _build_request_params 输入: '{message}' → 清理后: '{cleaned}'"
+        )
 
         parsed = CommandParser.parse(cleaned)
 
@@ -1640,21 +1933,30 @@ class PixivPlugin(Star):
         if response_type == "redirect":
             url = result.get("url", "")
             r18_label = self._get_r18_label(params.get("r18", 0))
-            caption = self._build_caption({
-                "url": url,
-            }, r18_label)
+            caption = self._build_caption(
+                {
+                    "url": url,
+                },
+                r18_label,
+            )
             return [event.plain_result(caption), event.image_result(url)]
 
         if response_type == "json":
             data = result.get("data", {})
             items = self._extract_items(data)
             if not items:
-                return [event.plain_result("😕 未找到符合条件的图片，请尝试更换参数\n💡 发送 /pixiv help 查看使用说明")]
+                return [
+                    event.plain_result(
+                        "😕 未找到符合条件的图片，请尝试更换参数\n💡 发送 /pixiv help 查看使用说明"
+                    )
+                ]
 
             r18_label = self._get_r18_label(params.get("r18", 0))
             responses = []
             for i, item in enumerate(items):
-                caption = self._build_caption(item, r18_label, idx=i + 1, total=len(items))
+                caption = self._build_caption(
+                    item, r18_label, idx=i + 1, total=len(items)
+                )
                 responses.append(event.plain_result(caption))
                 image_url = self._extract_image_url(item)
                 if image_url:
@@ -1711,7 +2013,9 @@ class PixivPlugin(Star):
             parts.append(f"📷 [{idx}/{total}]")
 
         title = item.get("title", "")
-        author = item.get("author") or item.get("user_name") or item.get("userName") or ""
+        author = (
+            item.get("author") or item.get("user_name") or item.get("userName") or ""
+        )
         pid = item.get("pid") or item.get("id") or item.get("illust_id") or ""
 
         if title:
@@ -1749,8 +2053,7 @@ class PixivPlugin(Star):
             return "🔞 [混合模式] 可能包含 R-18 内容"
         return ""
 
-
-    @filter.command("jm", alias={'漫画'})
+    @filter.command("jm", alias={"漫画"})
     async def jm_command(self, event: AstrMessageEvent):
         """JMComic 漫画命令入口"""
         user_name = event.get_sender_name()
@@ -1770,10 +2073,14 @@ class PixivPlugin(Star):
                 query = params.get("query", "")
                 page = params.get("page", 1)
                 if not query:
-                    yield event.plain_result("❌ 请输入搜索关键词\n💡 用法：/jm search 关键词\n💡 发送 /jm help 查看帮助")
+                    yield event.plain_result(
+                        "❌ 请输入搜索关键词\n💡 用法：/jm search 关键词\n💡 发送 /jm help 查看帮助"
+                    )
                     return
 
-                logger.info(f"[JMComic] Searching '{query}' page={page} for user {user_name}")
+                logger.info(
+                    f"[JMComic] Searching '{query}' page={page} for user {user_name}"
+                )
                 data = await self._jmcomic_client.search(query, page)
                 response_text = self._format_jm_search_results(data, query, page)
                 yield event.plain_result(response_text)
@@ -1781,10 +2088,14 @@ class PixivPlugin(Star):
             elif action == "detail":
                 comic_id = params.get("id", "")
                 if not comic_id:
-                    yield event.plain_result("❌ 请输入漫画ID\n💡 用法：/jm detail 漫画ID\n💡 发送 /jm help 查看帮助")
+                    yield event.plain_result(
+                        "❌ 请输入漫画ID\n💡 用法：/jm detail 漫画ID\n💡 发送 /jm help 查看帮助"
+                    )
                     return
 
-                logger.info(f"[JMComic] Fetching detail for id={comic_id}, user={user_name}")
+                logger.info(
+                    f"[JMComic] Fetching detail for id={comic_id}, user={user_name}"
+                )
                 data = await self._jmcomic_client.get_detail(comic_id)
                 response_text = self._format_jm_detail(data)
                 yield event.plain_result(response_text)
@@ -1792,17 +2103,23 @@ class PixivPlugin(Star):
             elif action == "chapter":
                 chapter_id = params.get("id", "")
                 if not chapter_id:
-                    yield event.plain_result("❌ 请输入章节ID\n💡 用法：/jm chapter 章节ID\n💡 发送 /jm help 查看帮助")
+                    yield event.plain_result(
+                        "❌ 请输入章节ID\n💡 用法：/jm chapter 章节ID\n💡 发送 /jm help 查看帮助"
+                    )
                     return
 
-                logger.info(f"[JMComic] Fetching chapter id={chapter_id}, user={user_name}")
+                logger.info(
+                    f"[JMComic] Fetching chapter id={chapter_id}, user={user_name}"
+                )
                 data = await self._jmcomic_client.get_chapter(chapter_id)
                 response_items = self._format_jm_chapter(data, event)
                 for item in response_items:
                     yield item
 
             else:
-                yield event.plain_result("❌ 未知子命令\n💡 可用命令：search(搜索) / detail(详情) / chapter(章节)\n💡 发送 /jm help 查看帮助")
+                yield event.plain_result(
+                    "❌ 未知子命令\n💡 可用命令：search(搜索) / detail(详情) / chapter(章节)\n💡 发送 /jm help 查看帮助"
+                )
 
         except JMComicAPIError as e:
             logger.error(f"[JMComic] API error for user {user_name}: {e}")
@@ -1812,16 +2129,22 @@ class PixivPlugin(Star):
             error_msg += "\n💡 请稍后重试或发送 /jm help 查看帮助"
             yield event.plain_result(error_msg)
         except Exception as e:
-            logger.error(f"[JMComic] Unexpected error for user {user_name}: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试")
+            logger.error(
+                f"[JMComic] Unexpected error for user {user_name}: {e}", exc_info=True
+            )
+            yield event.plain_result(
+                f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试"
+            )
 
     def _parse_jm_params(self, message: str) -> tuple:
         """解析 /jm 命令参数，返回 (action, params)"""
-        cleaned = re.sub(r'^[/!！]\s*(jm|漫画)\s*', '', message.strip(), flags=re.IGNORECASE)
-        cleaned = re.sub(r'^(jm|漫画)\s*', '', cleaned.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(
+            r"^[/!！]\s*(jm|漫画)\s*", "", message.strip(), flags=re.IGNORECASE
+        )
+        cleaned = re.sub(r"^(jm|漫画)\s*", "", cleaned.strip(), flags=re.IGNORECASE)
         cleaned = cleaned.strip()
 
-        if not cleaned or cleaned.lower() in ('help', '-h', '--help', '帮助'):
+        if not cleaned or cleaned.lower() in ("help", "-h", "--help", "帮助"):
             return ("help", {})
 
         # 解析子命令
@@ -1840,10 +2163,10 @@ class PixivPlugin(Star):
         if action == "search":
             # 解析 page 参数
             page = 1
-            page_match = re.search(r'page\s*[:：]\s*(\d+)', rest, re.IGNORECASE)
+            page_match = re.search(r"page\s*[:：]\s*(\d+)", rest, re.IGNORECASE)
             if page_match:
                 page = max(1, int(page_match.group(1)))
-                rest = rest[:page_match.start()] + rest[page_match.end():]
+                rest = rest[: page_match.start()] + rest[page_match.end() :]
 
             query = rest.strip()
             return ("search", {"query": query, "page": page})
@@ -1860,7 +2183,9 @@ class PixivPlugin(Star):
             # 如果第一个词不是已知子命令，当作搜索处理
             return ("search", {"query": cleaned, "page": 1})
 
-    def _format_jm_search_results(self, data: Dict[str, Any], query: str, page: int) -> str:
+    def _format_jm_search_results(
+        self, data: Dict[str, Any], query: str, page: int
+    ) -> str:
         """格式化搜索结果"""
         results = data.get("results", [])
         if not results:
@@ -1949,7 +2274,9 @@ class PixivPlugin(Star):
 
         return "\n".join(parts)
 
-    def _format_jm_chapter(self, data: Dict[str, Any], event: AstrMessageEvent) -> List[Any]:
+    def _format_jm_chapter(
+        self, data: Dict[str, Any], event: AstrMessageEvent
+    ) -> List[Any]:
         """格式化章节图片列表，使用合并转发消息批量发送图片避免风控"""
         if not data:
             return [event.plain_result("⚠️ 未获取到章节数据")]
@@ -1991,7 +2318,9 @@ class PixivPlugin(Star):
         # 添加尾部提示节点
         if total > max_show:
             tail_node = Comp.Node(
-                content=[Comp.Plain(text=f"本章共{total}张图片，当前展示前{max_show}张。")],
+                content=[
+                    Comp.Plain(text=f"本章共{total}张图片，当前展示前{max_show}张。")
+                ],
                 name="JMComic",
                 uin="0",
             )
@@ -2005,9 +2334,7 @@ class PixivPlugin(Star):
         ]
         return results
 
-
-
-    @filter.command("jmcommend", alias={'漫画推荐'})
+    @filter.command("jmcommend", alias={"漫画推荐"})
     async def jmcommend_command(self, event: AstrMessageEvent):
         """JMComic 随机推荐漫画"""
         user_name = event.get_sender_name()
@@ -2026,9 +2353,21 @@ class PixivPlugin(Star):
         try:
             # 使用随机关键词搜索来获取随机漫画
             random_keywords = [
-                "原神", "少女", "恋爱", "校园", "冒险",
-                "魔法", "日常", "百合", "奇幻", "都市",
-                "青春", "甜蜜", "治愈", "热血", "悬疑",
+                "原神",
+                "少女",
+                "恋爱",
+                "校园",
+                "冒险",
+                "魔法",
+                "日常",
+                "百合",
+                "奇幻",
+                "都市",
+                "青春",
+                "甜蜜",
+                "治愈",
+                "热血",
+                "悬疑",
             ]
             keyword = random.choice(random_keywords)
             page = random.randint(1, 3)
@@ -2052,7 +2391,11 @@ class PixivPlugin(Star):
             title = comic.get("title", "未知标题")
             author = comic.get("author", "未知作者")
             category = comic.get("category", {})
-            cat_title = category.get("title", "未知分类") if isinstance(category, dict) else "未知分类"
+            cat_title = (
+                category.get("title", "未知分类")
+                if isinstance(category, dict)
+                else "未知分类"
+            )
             tags = comic.get("tags", [])
 
             parts = [
@@ -2065,7 +2408,10 @@ class PixivPlugin(Star):
             ]
 
             if tags and isinstance(tags, list):
-                tag_names = [t.get("name", str(t)) if isinstance(t, dict) else str(t) for t in tags[:8]]
+                tag_names = [
+                    t.get("name", str(t)) if isinstance(t, dict) else str(t)
+                    for t in tags[:8]
+                ]
                 if tag_names:
                     parts.append(f"🏷️ 标签：{' / '.join(tag_names)}")
 
@@ -2084,35 +2430,267 @@ class PixivPlugin(Star):
             yield event.plain_result(error_msg)
         except Exception as e:
             logger.error(f"[JMComic] Recommend unexpected error: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试")
+            yield event.plain_result(
+                f"❌ 发生未知错误\n📝 错误信息：{str(e)}\n💡 请稍后重试"
+            )
+
+    @filter.command("解析")
+    async def media_parse_command(self, event: AstrMessageEvent):
+        user_name = event.get_sender_name()
+        message_str = event.message_str.strip()
+        if self._is_help_command(message_str):
+            yield event.plain_result(MEDIA_PARSER_HELP_TEXT)
+            return
+        url = self._parse_media_url(message_str)
+        if not url:
+            yield event.plain_result("请提供有效的媒体链接")
+            return
+        try:
+            result = await self._media_parser.parse(url)
+            platform = result.get("platform", "")
+            data = result.get("data", {})
+            response_items = self._format_media_response(platform, data, event)
+            for item in response_items:
+                yield item
+        except MediaParserError as e:
+            yield event.plain_result(f"解析失败: {str(e)}")
+        except Exception as e:
+            yield event.plain_result(f"发生未知错误: {str(e)}")
+
+    @filter.command("xhs", alias={"小红书"})
+    async def xhs_parse_command(self, event: AstrMessageEvent):
+        message_str = event.message_str.strip()
+        if self._is_help_command(message_str):
+            yield event.plain_result("小红书解析: /xhs <链接>")
+            return
+        url = self._parse_media_url(message_str)
+        if not url or not URLExtractor.extract_xiaohongshu(url):
+            yield event.plain_result("请提供有效的小红书链接")
+            return
+        try:
+            data = await self._media_parser.xiaohongshu.parse(url)
+            for item in self._format_xiaohongshu_response(data, event):
+                yield item
+        except Exception as e:
+            yield event.plain_result(f"小红书解析失败: {str(e)}")
+
+    @filter.command("bilibili", alias={"B站", "b站"})
+    async def bilibili_parse_command(self, event: AstrMessageEvent):
+        message_str = event.message_str.strip()
+        if self._is_help_command(message_str):
+            yield event.plain_result("B站解析: /bilibili <链接>")
+            return
+        url = self._parse_media_url(message_str)
+        if not url or not URLExtractor.extract_bilibili(url):
+            yield event.plain_result("请提供有效的B站链接")
+            return
+        try:
+            data = await self._media_parser.bilibili.parse(url)
+            for item in self._format_bilibili_response(data, event):
+                yield item
+        except Exception as e:
+            yield event.plain_result(f"B站解析失败: {str(e)}")
+
+    @filter.command("douyin", alias={"抖音"})
+    async def douyin_parse_command(self, event: AstrMessageEvent):
+        message_str = event.message_str.strip()
+        if self._is_help_command(message_str):
+            yield event.plain_result("抖音解析: /douyin <链接>")
+            return
+        url = self._parse_media_url(message_str)
+        if not url or not URLExtractor.extract_douyin(url):
+            yield event.plain_result("请提供有效的抖音链接")
+            return
+        try:
+            data = await self._media_parser.douyin.parse(url)
+            for item in self._format_douyin_response(data, event):
+                yield item
+        except Exception as e:
+            yield event.plain_result(f"抖音解析失败: {str(e)}")
+
+    def _parse_media_url(self, message: str) -> Optional[str]:
+        cleaned = re.sub(
+            r"^[/!！]\s*(解析|xhs|小红书|bilibili|B站|b站|douyin|抖音)\s*",
+            "",
+            message.strip(),
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(
+            r"^(解析|xhs|小红书|bilibili|B站|b站|douyin|抖音)\s*",
+            "",
+            cleaned.strip(),
+            flags=re.IGNORECASE,
+        )
+        cleaned = cleaned.strip()
+        if not cleaned or cleaned.lower() in ("help", "-h", "--help", "帮助"):
+            return None
+        url_pattern = re.compile(r"https?://[^\s]+")
+        match = url_pattern.search(cleaned)
+        if match:
+            return match.group(0)
+        if (
+            cleaned.startswith("xhslink.com/")
+            or cleaned.startswith("b23.tv/")
+            or cleaned.startswith("v.douyin.com/")
+        ):
+            return f"https://{cleaned}"
+        return None
+
+    def _format_media_response(
+        self, platform: str, data: Dict[str, Any], event: AstrMessageEvent
+    ) -> List[Any]:
+        if platform == "xiaohongshu":
+            return self._format_xiaohongshu_response(data, event)
+        elif platform == "bilibili":
+            return self._format_bilibili_response(data, event)
+        elif platform == "douyin":
+            return self._format_douyin_response(data, event)
+        return [event.plain_result("未知平台")]
+
+    def _format_xiaohongshu_response(
+        self, data: Dict[str, Any], event: AstrMessageEvent
+    ) -> List[Any]:
+        title = data.get("title", "")
+        desc = data.get("desc", "")
+        author = data.get("author", "")
+        likes = data.get("likes", "")
+        images = data.get("images", [])
+        video = data.get("video")
+        url = data.get("url", "")
+        parts = ["📕 小红书笔记解析"]
+        if title:
+            parts.append(f"📝 标题：{title}")
+        if author:
+            parts.append(f"👤 作者：{author}")
+        if likes:
+            parts.append(f"❤️ 点赞：{likes}")
+        if desc:
+            parts.append(f"📄 简介：{desc[:200]}")
+        if url:
+            parts.append(f"🔗 链接：{url}")
+        results = [event.plain_result("\n".join(parts))]
+        if images:
+            for i, img in enumerate(images[:9]):
+                img_url = img.get("url", "") if isinstance(img, dict) else str(img)
+                if img_url:
+                    results.append(event.image_result(img_url))
+        if video and isinstance(video, dict) and video.get("url"):
+            results.append(event.plain_result(f"🎬 视频：{video['url']}"))
+        return results
+
+    def _format_bilibili_response(
+        self, data: Dict[str, Any], event: AstrMessageEvent
+    ) -> List[Any]:
+        title = data.get("title", "")
+        desc = data.get("desc", "")
+        cover = data.get("cover", "")
+        duration = data.get("duration", 0)
+        link = data.get("link", "")
+        owner = data.get("owner", {})
+        stat = data.get("stat", {})
+        download_url = data.get("download_url")
+        pages = data.get("pages", [])
+        owner_name = owner.get("name", "") if isinstance(owner, dict) else ""
+        parts = ["📺 B站视频解析"]
+        if title:
+            parts.append(f"📝 标题：{title}")
+        if owner_name:
+            parts.append(f"👤 UP主：{owner_name}")
+        if duration:
+            mins, secs = divmod(duration, 60)
+            parts.append(f"⏱️ 时长：{mins}:{secs:02d}")
+        if pages and len(pages) > 1:
+            parts.append(f"📑 分P：共{len(pages)}P")
+        stat_parts = []
+        view = stat.get("view", 0) if isinstance(stat, dict) else 0
+        like = stat.get("like", 0) if isinstance(stat, dict) else 0
+        if view:
+            stat_parts.append(f"▶️ {self._format_number(view)}")
+        if like:
+            stat_parts.append(f"👍 {self._format_number(like)}")
+        if stat_parts:
+            parts.append(" ".join(stat_parts))
+        if desc:
+            parts.append(f"📄 简介：{desc[:200]}")
+        if link:
+            parts.append(f"🔗 链接：{link}")
+        if download_url:
+            parts.append(f"📥 下载：{download_url}")
+        results = [event.plain_result("\n".join(parts))]
+        if cover:
+            results.append(event.image_result(cover))
+        return results
+
+    def _format_douyin_response(
+        self, data: Dict[str, Any], event: AstrMessageEvent
+    ) -> List[Any]:
+        title = data.get("title", "")
+        desc = data.get("desc", "")
+        author = data.get("author", "")
+        likes = data.get("likes", "")
+        comments = data.get("comments", "")
+        shares = data.get("shares", "")
+        cover = data.get("cover", "")
+        video_url = data.get("video_url", "")
+        url = data.get("url", "")
+        parts = ["🎵 抖音视频解析"]
+        if title:
+            parts.append(f"📝 标题：{title}")
+        if author:
+            parts.append(f"👤 作者：{author}")
+        stat_parts = []
+        if likes:
+            stat_parts.append(f"❤️ {likes}")
+        if comments:
+            stat_parts.append(f"💬 {comments}")
+        if shares:
+            stat_parts.append(f"🔄 {shares}")
+        if stat_parts:
+            parts.append(" ".join(stat_parts))
+        if desc:
+            parts.append(f"📄 简介：{desc[:200]}")
+        if url:
+            parts.append(f"🔗 链接：{url}")
+        if video_url:
+            parts.append(f"📥 无水印视频：{video_url}")
+        results = [event.plain_result("\n".join(parts))]
+        if cover:
+            results.append(event.image_result(cover))
+        return results
+
+    @staticmethod
+    def _format_number(num: int) -> str:
+        if num >= 10000:
+            return f"{num / 10000:.1f}万"
+        return str(num)
 
     async def terminate(self):
-        logger.info("PixivPlugin is being terminated")
-        if hasattr(self, '_dglab_webui') and self._dglab_webui:
+        logger.info("CurrentCortexPlugin is being terminated")
+        if hasattr(self, "_dglab_webui") and self._dglab_webui:
             await self._dglab_webui.stop()
-            logger.info("✅ DG-LAB WebUI已停止")
-        if hasattr(self, '_connection_pool'):
+            logger.info("✅ CurrentCortex WebUI 已停止")
+        if hasattr(self, "_connection_pool"):
             await self._connection_pool.stop()
-            logger.info("✅ DG-LAB连接池已停止")
+            logger.info("✅ CurrentCortex 连接池已停止")
 
-    @filter.command("dglab", alias={'电击'})
+    @filter.command("dglab", alias={"电击"})
     async def dglab_command(self, event: AstrMessageEvent):
         """DG-LAB设备管理命令入口"""
-        if not getattr(self, '_pool_started', False):
+        if not getattr(self, "_pool_started", False):
             await self._connection_pool.start()
             if self._dglab_webui:
                 await self._dglab_webui.start()
             self._pool_started = True
 
         message_str = event.message_str.strip()
-        
+
         try:
             async for result in self._dglab_handler.handle_command(event, message_str):
                 yield result
         except Exception as e:
             logger.error(f"[DGLab] 命令处理异常: {e}", exc_info=True)
             yield event.plain_result(
-                f"❌ DG-LAB命令执行失败\n"
+                f"❌ CurrentCortex 命令执行失败\n"
                 f"📝 错误: {str(e)}\n"
                 f"💡 发送 /dglab help 查看帮助"
             )

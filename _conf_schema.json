@@ -34,18 +34,28 @@
     "type": "string",
     "default": ""
   },
-  "dglab": {
-    "description": "DG-LAB Socket V2 集成配置（JSON格式: {\"server_url\":\"\", \"heartbeat_interval\":60, \"auto_connect\":false}）",
+  "dglab_server_url": {
+    "description": "DG-LAB Socket V2 中转服务器地址（如 ws://192.168.1.100:9999 或 wss://your-domain.com:9999）。配置后 /dglab bind 命令可省略地址参数",
     "type": "string",
     "default": ""
   },
+  "dglab_heartbeat_interval": {
+    "description": "DG-LAB WebSocket 心跳间隔（秒），建议 30-120。用于保持设备连接活跃",
+    "type": "int",
+    "default": 60
+  },
+  "dglab_auto_connect": {
+    "description": "是否在插件启动时自动连接 DG-LAB 服务器（一般设为 false，按需连接更节省资源）",
+    "type": "bool",
+    "default": false
+  },
   "dglab_webui_enabled": {
-    "description": "是否启用 DG-LAB WebUI 控制面板（浏览器远程控制界面）",
+    "description": "是否启用 CurrentCortex WebUI 控制面板（浏览器远程控制界面）",
     "type": "bool",
     "default": true
   },
   "dglab_webui_port": {
-    "description": "DG-LAB WebUI 监听端口号",
+    "description": "CurrentCortex WebUI 监听端口号",
     "type": "int",
     "default": 9178
   }

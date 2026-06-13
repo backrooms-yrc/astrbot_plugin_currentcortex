@@ -24,23 +24,25 @@ from .dglab_device_store import DeviceStore, DeviceBinding
 
 class ConnectionStatus(Enum):
     """连接状态枚举"""
+
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"
-    CONNECTED = "connected"       # 已连接服务器，等待APP绑定
-    BOUND = "bound"              # 已与APP绑定，可通信
-    ERROR = "error"              # 错误状态
+    CONNECTED = "connected"  # 已连接服务器，等待APP绑定
+    BOUND = "bound"  # 已与APP绑定，可通信
+    ERROR = "error"  # 错误状态
     RECONNECTING = "reconnecting"
 
 
 @dataclass
 class ConnectionInfo:
     """连接信息"""
+
     user_id: str
     client: DGLabClient
     status: ConnectionStatus
-    created_at: float            # 创建时间戳
-    last_used_at: float          # 最后使用时间戳
-    error_count: int = 0         # 连续错误次数
+    created_at: float  # 创建时间戳
+    last_used_at: float  # 最后使用时间戳
+    error_count: int = 0  # 连续错误次数
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     reconnect_task: Optional[asyncio.Task] = None
     # APP 回传的实时强度/上限数据
@@ -48,7 +50,7 @@ class ConnectionInfo:
     strength_b: int = 0
     limit_a: int = 200
     limit_b: int = 200
-    last_feedback_button: int = -1       # 最近一次反馈按钮角标 (0-9)
+    last_feedback_button: int = -1  # 最近一次反馈按钮角标 (0-9)
     last_feedback_time: Optional[float] = None
 
 
@@ -73,7 +75,7 @@ class DeviceConnectionPool:
     ):
         self._store = device_store
         self._max_connections = max_connections
-        self._idle_timeout = idle_timeout          # 空闲超时（秒）
+        self._idle_timeout = idle_timeout  # 空闲超时（秒）
         self._max_reconnect_attempts = max_reconnect_attempts
         self._operation_timeout = operation_timeout
 
@@ -144,7 +146,9 @@ class DeviceConnectionPool:
                     await self._close_connection_unlocked(user_id)
 
             if len(self._connections) >= self._max_connections:
-                raise RuntimeError(f"连接池已达上限 ({self._max_connections})，请稍后重试")
+                raise RuntimeError(
+                    f"连接池已达上限 ({self._max_connections})，请稍后重试"
+                )
 
             client = DGLabClient(heartbeat_interval=heartbeat_interval)
             conn_info = ConnectionInfo(
@@ -158,13 +162,11 @@ class DeviceConnectionPool:
 
         try:
             state = await asyncio.wait_for(
-                client.connect(server_url, client_id),
-                timeout=self._operation_timeout
+                client.connect(server_url, client_id), timeout=self._operation_timeout
             )
 
             conn_info.status = (
-                ConnectionStatus.BOUND if state.bound
-                else ConnectionStatus.CONNECTED
+                ConnectionStatus.BOUND if state.bound else ConnectionStatus.CONNECTED
             )
 
             if state.bound:
@@ -172,7 +174,9 @@ class DeviceConnectionPool:
 
             client.state.on_message = self._make_state_sync_callback(user_id, conn_info)
 
-            logger.info(f"[DGLab] 用户 {user_id} 连接成功 (status={conn_info.status.value})")
+            logger.info(
+                f"[DGLab] 用户 {user_id} 连接成功 (status={conn_info.status.value})"
+            )
             return client, conn_info.status
 
         except Exception as e:
@@ -183,6 +187,7 @@ class DeviceConnectionPool:
 
     def _make_state_sync_callback(self, user_id: str, conn_info: "ConnectionInfo"):
         """创建状态同步回调，将客户端事件同步到连接池和持久化存储"""
+
         async def _on_message(data: dict):
             pkt_type = data.get("type")
             msg = str(data.get("message", ""))
@@ -193,7 +198,9 @@ class DeviceConnectionPool:
                 conn_info.last_used_at = time.time()
                 self._store.update_target_id(user_id, tid)
                 self._store.update_last_active(user_id)
-                logger.info(f"[DGLab] 用户 {user_id} APP已扫码绑定成功 (target={tid[:8]}...)")
+                logger.info(
+                    f"[DGLab] 用户 {user_id} APP已扫码绑定成功 (target={tid[:8]}...)"
+                )
 
             elif pkt_type == "break":
                 conn_info.status = ConnectionStatus.CONNECTED
@@ -205,6 +212,7 @@ class DeviceConnectionPool:
                 logger.warning(f"[DGLab] 用户 {user_id} 收到错误: {msg}")
 
             elif pkt_type == "msg":
+                logger.debug(f"[DGLab] 用户 {user_id} 收到APP消息: {msg[:100]}")
                 self._parse_app_message(conn_info, msg)
 
         return _on_message
@@ -213,7 +221,7 @@ class DeviceConnectionPool:
         """解析 APP 回传的 msg 消息（强度回传、反馈按钮等）"""
         if msg.startswith("strength-"):
             # 格式: strength-A强度+B强度+A上限+B上限
-            parts = msg[len("strength-"):].split("+")
+            parts = msg[len("strength-") :].split("+")
             if len(parts) == 4:
                 try:
                     conn_info.strength_a = int(parts[0])
@@ -224,7 +232,7 @@ class DeviceConnectionPool:
                     pass
         elif msg.startswith("feedback-"):
             try:
-                btn = int(msg[len("feedback-"):])
+                btn = int(msg[len("feedback-") :])
                 conn_info.last_feedback_button = btn
                 conn_info.last_feedback_time = time.time()
             except ValueError:
@@ -247,7 +255,9 @@ class DeviceConnectionPool:
 
                 if conn_info.status != ConnectionStatus.BOUND:
                     if attempt < max_retries:
-                        logger.warning(f"[DGLab] 用户 {user_id} 未绑定，尝试重新连接...")
+                        logger.warning(
+                            f"[DGLab] 用户 {user_id} 未绑定，尝试重新连接..."
+                        )
                         await self._reconnect_user(user_id)
                         await asyncio.sleep(0.5 * (attempt + 1))
                         continue
@@ -256,8 +266,7 @@ class DeviceConnectionPool:
 
                 async with conn_info.lock:
                     result = await asyncio.wait_for(
-                        operation(conn_info.client),
-                        timeout=self._operation_timeout
+                        operation(conn_info.client), timeout=self._operation_timeout
                     )
 
                     conn_info.last_used_at = time.time()
@@ -266,11 +275,15 @@ class DeviceConnectionPool:
 
             except asyncio.TimeoutError:
                 last_error = f"操作超时 ({self._operation_timeout}s)"
-                logger.warning(f"[DGLab] 用户 {user_id} 操作超时 (attempt {attempt + 1}/{max_retries + 1})")
+                logger.warning(
+                    f"[DGLab] 用户 {user_id} 操作超时 (attempt {attempt + 1}/{max_retries + 1})"
+                )
 
             except Exception as e:
                 last_error = str(e)
-                logger.error(f"[DGLab] 用户 {user_id} 操作失败 (attempt {attempt + 1}): {e}")
+                logger.error(
+                    f"[DGLab] 用户 {user_id} 操作失败 (attempt {attempt + 1}): {e}"
+                )
 
                 if "尚未与 APP 绑定" in str(e) or "WebSocket 未连接" in str(e):
                     if conn_info:
@@ -289,7 +302,7 @@ class DeviceConnectionPool:
         mode: int,
         value: int,
     ) -> str:
-        """发送强度控制命令
+        """发送强度控制命令（使用前端协议格式 type=1/2/3）
 
         Args:
             channel: 1=A通道, 2=B通道
@@ -306,15 +319,17 @@ class DeviceConnectionPool:
         if not (0 <= value <= 200):
             raise ValueError("强度值必须在 0-200 范围内")
 
-        command = f"strength-{channel}+{mode}+{value}"
+        channel_name = {1: "A", 2: "B"}.get(channel, f"未知通道({channel})")
+        logger.info(
+            f"[DGLab] 准备发送强度指令: user={user_id}, channel={channel_name}, "
+            f"mode={mode}, value={value}"
+        )
 
         async def _send(client: DGLabClient):
-            await client.send_message(command)
-            return command
+            await client.send_strength(channel, mode, value)
 
         await self.execute_with_retry(user_id, _send)
 
-        channel_name = {1: "A", 2: "B"}.get(channel, f"未知通道({channel})")
         mode_desc = {0: "减少", 1: "增加", 2: "设置"}.get(mode, f"未知模式({mode})")
 
         if mode == 2:
@@ -331,7 +346,7 @@ class DeviceConnectionPool:
         pulse_data: list,
         duration: int = 5,
     ) -> str:
-        """发送波形数据（使用标准 msg 类型透传，兼容所有中转服务器）
+        """发送波形数据（使用前端协议 clientMsg 格式，由服务器管理定时发送）
 
         Args:
             channel: "A" 或 "B"
@@ -345,6 +360,11 @@ class DeviceConnectionPool:
         if len(pulse_data) > 100:
             raise ValueError("波形数据过长（最大100条）")
 
+        logger.info(
+            f"[DGLab] 准备发送波形指令: user={user_id}, channel={channel}, "
+            f"frames={len(pulse_data)}, duration={duration}s"
+        )
+
         pulse_json = json.dumps(pulse_data, ensure_ascii=False)
 
         async def _send(client: DGLabClient):
@@ -354,45 +374,48 @@ class DeviceConnectionPool:
         return f"✅ 已向{channel}通道发送波形数据（持续{duration}秒）"
 
     async def clear_channel(self, user_id: str, channel: int) -> str:
-        """清空指定通道波形队列"""
+        """清空指定通道波形队列（使用前端协议 type=4 直接转发）"""
         if not (1 <= channel <= 2):
             raise ValueError("通道参数错误")
 
         command = f"clear-{channel}"
+        channel_name = {1: "A", 2: "B"}.get(channel, f"未知通道({channel})")
+
+        logger.info(
+            f"[DGLab] 准备发送清空指令: user={user_id}, channel={channel_name}, cmd={command}"
+        )
 
         async def _send(client: DGLabClient):
-            await client.send_message(command)
-            return command
+            await client.send_direct(command)
 
         await self.execute_with_retry(user_id, _send)
-        channel_name = {1: "A", 2: "B"}.get(channel, f"未知通道({channel})")
         return f"✅ 已清空{channel_name}通道波形队列"
 
     async def stop_all(self, user_id: str) -> str:
         """停止所有输出（将双通道强度设为0并清空波形队列）"""
         results = []
         for ch in [1, 2]:
+            channel_name = {1: "A", 2: "B"}[ch]
             try:
-                # 先将强度设为0
-                strength_cmd = f"strength-{ch}+2+0"
+                # 先将强度设为0（使用前端协议 type=3）
+                logger.info(f"[DGLab] 停止{channel_name}通道: 设置强度为0")
 
-                async def _send_strength(client: DGLabClient, cmd=strength_cmd):
-                    await client.send_message(cmd)
+                async def _send_strength(client: DGLabClient, _ch=ch):
+                    await client.send_strength(_ch, 2, 0)
 
                 await self.execute_with_retry(user_id, _send_strength)
 
-                # 再清空波形队列
+                # 再清空波形队列（使用前端协议 type=4）
                 clear_cmd = f"clear-{ch}"
 
                 async def _send_clear(client: DGLabClient, cmd=clear_cmd):
-                    await client.send_message(cmd)
+                    await client.send_direct(cmd)
 
                 await self.execute_with_retry(user_id, _send_clear)
 
-                channel_name = {1: "A", 2: "B"}[ch]
                 results.append(f"✅ 已停止{channel_name}通道输出")
             except Exception as e:
-                channel_name = {1: "A", 2: "B"}[ch]
+                logger.error(f"[DGLab] 停止{channel_name}通道失败: {e}")
                 results.append(f"❌ 停止{channel_name}通道失败: {e}")
 
         return "\n".join(results) if results else "⚠️ 无活跃通道"
@@ -409,7 +432,8 @@ class DeviceConnectionPool:
     def get_active_count(self) -> int:
         """获取活跃连接数"""
         return sum(
-            1 for c in self._connections.values()
+            1
+            for c in self._connections.values()
             if c.status in (ConnectionStatus.CONNECTED, ConnectionStatus.BOUND)
         )
 
@@ -512,4 +536,3 @@ class DeviceConnectionPool:
                         await self._close_connection_unlocked(user_id)
         except asyncio.CancelledError:
             pass
-

@@ -15,13 +15,20 @@ from astrbot.api import logger
 @dataclass
 class UserInfo:
     username: str
-    phone: str
-    qq: str
     password_hash: str
     salt: str
     created_at: float
+    email: str = ""
+    email_verified: bool = False
+    phone: str = ""
+    qq: str = ""
     public_device: bool = False
     allow_requests: bool = False
+    role: str = "user"  # "user" or "admin"
+    nickname: str = ""
+    gender: str = ""  # "", "male", "female", "other"
+    avatar: str = ""  # avatar URL or empty
+    bio: str = ""
 
 
 @dataclass
@@ -49,23 +56,28 @@ class UserStore:
     def _load(self):
         if os.path.exists(self._file_path):
             try:
-                with open(self._file_path, 'r', encoding='utf-8') as f:
+                with open(self._file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 if isinstance(data, dict):
                     with self._lock:
                         for username, udata in data.items():
                             if isinstance(udata, dict):
                                 try:
+                                    # Backward compatibility: ensure new fields have defaults
+                                    udata.setdefault("email", udata.get("phone", ""))
+                                    udata.setdefault("email_verified", False)
                                     self._users[username] = UserInfo(**udata)
                                 except Exception as e:
-                                    logger.error(f"[DGLab User] 加载用户 {username} 失败: {e}")
+                                    logger.error(
+                                        f"[DGLab User] 加载用户 {username} 失败: {e}"
+                                    )
                 logger.info(f"[DGLab User] 已加载 {len(self._users)} 个用户")
             except Exception as e:
                 logger.error(f"[DGLab User] 加载用户数据失败: {e}")
 
         if os.path.exists(self._sessions_path):
             try:
-                with open(self._sessions_path, 'r', encoding='utf-8') as f:
+                with open(self._sessions_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 if isinstance(data, dict):
                     now = time.time()
@@ -85,8 +97,8 @@ class UserStore:
         try:
             with self._lock:
                 data = {u: asdict(info) for u, info in self._users.items()}
-            temp = self._file_path + '.tmp'
-            with open(temp, 'w', encoding='utf-8') as f:
+            temp = self._file_path + ".tmp"
+            with open(temp, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             os.replace(temp, self._file_path)
         except Exception as e:
@@ -96,8 +108,8 @@ class UserStore:
         try:
             with self._lock:
                 data = {t: asdict(s) for t, s in self._sessions.items()}
-            temp = self._sessions_path + '.tmp'
-            with open(temp, 'w', encoding='utf-8') as f:
+            temp = self._sessions_path + ".tmp"
+            with open(temp, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             os.replace(temp, self._sessions_path)
         except Exception as e:
@@ -105,22 +117,21 @@ class UserStore:
 
     @staticmethod
     def _hash_password(password: str, salt: str) -> str:
-        return hashlib.sha256((salt + password).encode('utf-8')).hexdigest()
+        return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
 
-    def register(self, username: str, phone: str, qq: str, password: str) -> tuple:
+    def register(self, username: str, email: str, password: str) -> tuple:
         with self._lock:
             if username in self._users:
                 return False, "用户名已存在"
             for u in self._users.values():
-                if u.qq == qq:
-                    return False, "该QQ号已被注册"
+                if u.email == email:
+                    return False, "该邮箱已被注册"
 
         salt = secrets.token_hex(16)
         password_hash = self._hash_password(password, salt)
         user = UserInfo(
             username=username,
-            phone=phone,
-            qq=qq,
+            email=email,
             password_hash=password_hash,
             salt=salt,
             created_at=time.time(),
@@ -128,8 +139,25 @@ class UserStore:
         with self._lock:
             self._users[username] = user
         self._save_users()
-        logger.info(f"[DGLab User] 新用户注册: {username} (QQ: {qq})")
+        logger.info(f"[DGLab User] 新用户注册: {username} (Email: {email})")
         return True, "注册成功"
+
+    def verify_email(self, username: str) -> bool:
+        """Mark user's email as verified."""
+        with self._lock:
+            user = self._users.get(username)
+            if not user:
+                return False
+            user.email_verified = True
+        self._save_users()
+        return True
+
+    def get_user_by_email(self, email: str) -> Optional[UserInfo]:
+        with self._lock:
+            for u in self._users.values():
+                if u.email == email:
+                    return u
+        return None
 
     def login(self, username: str, password: str) -> tuple:
         with self._lock:
@@ -179,13 +207,30 @@ class UserStore:
                     return u
         return None
 
-    def update_settings(self, username: str, public_device: bool, allow_requests: bool) -> bool:
+    def update_settings(
+        self, username: str, public_device: bool, allow_requests: bool
+    ) -> bool:
         with self._lock:
             user = self._users.get(username)
             if not user:
                 return False
             user.public_device = public_device
             user.allow_requests = allow_requests
+        self._save_users()
+        return True
+
+    def update_profile(
+        self, username: str, nickname: str, gender: str, avatar: str, bio: str
+    ) -> bool:
+        """Update user profile fields."""
+        with self._lock:
+            user = self._users.get(username)
+            if not user:
+                return False
+            user.nickname = nickname
+            user.gender = gender
+            user.avatar = avatar
+            user.bio = bio
         self._save_users()
         return True
 
@@ -196,3 +241,71 @@ class UserStore:
                 for u in self._users.values()
                 if u.public_device
             ]
+
+    def list_all_users(self) -> list:
+        """Return all users info for admin management."""
+        with self._lock:
+            return [
+                {
+                    "username": u.username,
+                    "email": u.email,
+                    "email_verified": u.email_verified,
+                    "phone": u.phone,
+                    "qq": u.qq,
+                    "role": getattr(u, "role", "user"),
+                    "public_device": u.public_device,
+                    "allow_requests": u.allow_requests,
+                    "created_at": u.created_at,
+                }
+                for u in self._users.values()
+            ]
+
+    def get_all_usernames(self) -> list:
+        """Return all usernames."""
+        with self._lock:
+            return list(self._users.keys())
+
+    def set_user_role(self, username: str, role: str) -> bool:
+        """Set a user's role. Returns True on success."""
+        if role not in ("user", "admin"):
+            return False
+        with self._lock:
+            user = self._users.get(username)
+            if not user:
+                return False
+            user.role = role
+        self._save_users()
+        logger.info(f"[DGLab User] 用户 {username} 角色已更新为: {role}")
+        return True
+
+    def is_admin(self, username: str) -> bool:
+        """Check if a user has admin role. Reloads from disk if role data is stale."""
+        with self._lock:
+            user = self._users.get(username)
+            if not user:
+                return False
+            role = getattr(user, "role", None)
+        # If role is missing (old in-memory data), reload from disk
+        if role is None:
+            self._reload_roles()
+            with self._lock:
+                user = self._users.get(username)
+                if not user:
+                    return False
+                role = getattr(user, "role", "user")
+        return role == "admin"
+
+    def _reload_roles(self):
+        """Reload role fields from disk without overwriting other in-memory state."""
+        if not os.path.exists(self._file_path):
+            return
+        try:
+            with open(self._file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                with self._lock:
+                    for username, udata in data.items():
+                        if isinstance(udata, dict) and username in self._users:
+                            self._users[username].role = udata.get("role", "user")
+        except Exception:
+            pass

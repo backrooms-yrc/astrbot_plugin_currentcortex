@@ -2,7 +2,7 @@
 
 ## 📋 项目概述
 
-成功将 **DG-LAB Socket V2 设备管理功能** 完整集成至 AstrBot Pixiv 综合插件中，实现了通过聊天命令对 DG-LAB 设备的全生命周期管理。
+成功将 **DG-LAB Socket V2 设备管理功能** 完整集成至 AstrBot CurrentCortex 综合插件中，实现了通过聊天命令对 DG-LAB 设备的全生命周期管理。
 
 **集成时间**: 2026-05-16  
 **插件版本**: v1.1.0 → v1.2.0  
@@ -111,7 +111,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                   main.py (PixivPlugin)              │
+│                   main.py (CurrentCortexPlugin)              │
 │                                                      │
 │  __init__():                                        │
 │    ├── self._device_store = DeviceStore()           │  ← 新增
@@ -310,15 +310,13 @@ pip install websockets>=10.0
 
 ### 配置示例
 
-```json
-{
-  "dglab": {
-    "server_url": "ws://your-server:9999",
-    "heartbeat_interval": 60,
-    "auto_connect": false
-  }
-}
-```
+在 AstrBot 管理面板的插件配置中直接填写：
+
+| 配置项 | 填写示例 |
+| --- | --- |
+| `dglab_server_url` | `ws://your-server:9999` |
+| `dglab_heartbeat_interval` | `60` |
+| `dglab_auto_connect` | `false` |
 
 ### 验证步骤
 
