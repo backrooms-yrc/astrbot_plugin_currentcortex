@@ -141,12 +141,12 @@ for module_name, attributes in {
     "cross_group_memory": {"CrossGroupMemoryStore": object},
     "group_switch_store": {"GroupSwitchStore": object},
 }.items():
-    module = types.ModuleType(f"astrbot_plugin_pixiv.{module_name}")
+    module = types.ModuleType(f"astrbot_plugin_currentcortex.{module_name}")
     for name, value in attributes.items():
         setattr(module, name, value)
     sys.modules[module.__name__] = module
 
-from astrbot_plugin_pixiv import main
+from astrbot_plugin_currentcortex import main
 
 
 class TestPlugin:
