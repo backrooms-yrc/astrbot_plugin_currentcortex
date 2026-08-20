@@ -29,15 +29,16 @@ jobs:
         run: |
           set +e
           : > /tmp/pytest.log
+          : > /tmp/failed.txt
           overall=0
           for f in test_*.py; do
             echo "=== $f ===" >> /tmp/pytest.log
             python3 "$f" >> /tmp/pytest.log 2>&1
             code=$?
             echo "--- exit $code ---" >> /tmp/pytest.log
-            [ $code -ne 0 ] && overall=1
+            echo "[$f] exit=$code"
+            if [ $code -ne 0 ]; then overall=1; echo "$f" >> /tmp/failed.txt; fi
           done
-          tail -40 /tmp/pytest.log
           echo "exit_code=$overall" >> "$GITHUB_OUTPUT"
           exit 0
 
@@ -48,18 +49,28 @@ jobs:
           script: |
             const fs = require('fs');
             const log = fs.readFileSync('/tmp/pytest.log', 'utf8');
-            const tail = log.split('\n').slice(-25).join('\n');
+            const failed = fs.readFileSync('/tmp/failed.txt', 'utf8').trim().split('\n').filter(Boolean);
+            const sections = [];
+            for (const f of failed) {
+              const marker = `=== ${f} ===`;
+              const start = log.indexOf(marker);
+              const end = log.indexOf('--- exit', start);
+              let seg = start >= 0 ? log.slice(start + marker.length, end).trim() : '(未捕获到日志)';
+              const lines = seg.split('\n');
+              if (lines.length > 40) {
+                seg = lines.slice(0, 20).join('\n') + '\n...（中间省略）...\n' + lines.slice(-15).join('\n');
+              }
+              sections.push(`### ❌ \`${f}\`\n\n\`\`\`\n${seg}\n\`\`\``);
+            }
             const body = [
               '## ❌ 测试未通过',
               '',
-              '测试机器人自动运行了仓库测试，结果如下（末尾日志）：',
+              `以下 ${failed.length} 个测试脚本失败：`,
               '',
-              '```',
-              tail,
-              '```',
+              sections.join('\n\n'),
               '',
               '请根据日志修复后重新推送，机器人会自动重跑。'
-            ].join('\n');
+            ].join('\n').slice(0, 60000);
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
