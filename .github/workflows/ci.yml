@@ -22,7 +22,9 @@ jobs:
           cache: pip
 
       - name: 安装依赖
-        run: pip install -r requirements.txt
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+          pip install -r requirements.txt
 
       - name: 运行测试
         id: pytest
