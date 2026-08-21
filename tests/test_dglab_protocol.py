@@ -23,7 +23,7 @@ import os
 import uuid
 from urllib.parse import parse_qs, unquote, urlparse
 
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "dglab"))
 
 
 class MockLogger:

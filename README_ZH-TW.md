@@ -928,34 +928,60 @@ v1.2.0 及更早版本使用 JSON 字串設定（已棄用）：
 
 ```text
 astrbot_plugin_currentcortex/
-├── main.py                      # 主程式：所有指令註冊與 API 用戶端
+├── main.py                      # 主程式：指令註冊、LLM 工具、分段回覆
 ├── _pages_api.py                # 總覽 Pages 後端 API（儀表板/設定/郊狼/說明）
-├── pages/                       # 總覽 Pages 前端（mdui 2 元件庫，全部本地化）
+├── __init__.py                  # 插件包初始化
+├── clients/                     # API 用戶端子包
+│   ├── __init__.py
+│   ├── _utils.py                # API Key 未設定提示等通用輔助
+│   ├── command_parser.py        # key:value 參數與快捷語法解析器
+│   ├── pixiv.py                 # Pixiv API 用戶端
+│   ├── hitokoto.py              # 每日一言 API 用戶端
+│   ├── weather.py               # 天氣查詢 API 用戶端
+│   ├── femboy.py                # 男娘圖片 API 用戶端
+│   └── music.py                 # 網易雲 / 酷狗點歌 API 用戶端
+├── dglab/                       # DG-LAB（郊狼）裝置管理子包
+│   ├── __init__.py
+│   ├── docs/                    # DG-LAB 協定與整合文件
+│   ├── dglab_client.py          # WebSocket 用戶端（V3/V4 協定自動識別）
+│   ├── dglab_connection_pool.py # 連線池與狀態管理
+│   ├── dglab_commands.py        # 指令解析 / 驗證 / 執行
+│   ├── dglab_device_store.py    # 裝置綁定關係持久化
+│   ├── dglab_user_store.py      # 使用者儲存
+│   ├── dglab_permission_store.py # 權限儲存
+│   ├── dglab_post_store.py      # 投稿廣場儲存
+│   ├── dglab_email_store.py     # 電子郵件儲存
+│   ├── dglab_turnstile_store.py # Turnstile 儲存
+│   ├── dglab_chat_store.py      # 聊天儲存
+│   └── dglab_webui.py           # CCDG WebUI 控制面板
+├── group/                       # 群聊子包
+│   ├── __init__.py
+│   ├── cross_group_memory.py    # 跨群聊記憶持久化儲存
+│   └── group_switch_store.py    # 按群聊開關狀態持久化儲存
+├── media/                       # 媒體解析子包
+│   ├── __init__.py
+│   └── media_parser.py          # 小紅書/B站/抖音/微博 媒體解析
+├── pages/                       # 總覽 Pages 前端（mdui 2 元件庫，全部在地化）
 │   └── cc-dashboard/
 │       ├── index.html           # Pages 入口
 │       ├── app.js               # Vue 3 單頁應用（5 個頁面）
-│       ├── app.css              # 晴空藍＋雪霧白主題
+│       ├── app.css              # 晴空藍 + 雪霧白主題
 │       └── vendor/              # 本地相依：Vue 3 / mdui 2 / Material Icons 字型
-├── cross_group_memory.py        # 跨群聊記憶持久化儲存
-├── group_switch_store.py        # 按群聊開關狀態持久化儲存
-├── media_parser.py              # 小紅書/B站/抖音 媒體解析
-├── media_cmds.py                # 媒體指令輔助
-├── dglab_client.py              # DG-LAB WebSocket 用戶端封裝
-├── dglab_device_store.py        # DG-LAB 裝置綁定關係持久化
-├── dglab_connection_pool.py     # DG-LAB 連線池與狀態管理
-├── dglab_commands.py            # DG-LAB 指令處理器
-├── dglab_webui.py               # CCDG WebUI 控制面板
-├── dglab_user_store.py          # DG-LAB 使用者儲存
-├── dglab_permission_store.py    # DG-LAB 權限儲存
-├── dglab_post_store.py          # DG-LAB 投稿廣場儲存
-├── dglab_email_store.py         # DG-LAB 電子郵件儲存
-├── dglab_turnstile_store.py     # DG-LAB Turnstile 儲存
-├── dglab_chat_store.py          # DG-LAB 聊天儲存
+├── tests/                       # 測試腳本（獨立執行，無需框架）
+│   ├── __init__.py
+│   ├── test_dglab_protocol.py   # DG-LAB V3/V4 協定端到端
+│   ├── test_memory_and_switch.py # 跨群記憶與群開關
+│   ├── test_music_audio.py      # 點歌音訊
+│   ├── test_reply_seg.py        # 語意分段回覆
+│   └── test_relay_pages.py      # Pages 中繼
 ├── metadata.yaml                # 插件中繼資料
-├── CHANGELOG.md                 # 更新日誌
-├── CONTRIBUTING.md              # 貢獻指南
 ├── _conf_schema.json            # 設定結構定義
 ├── requirements.txt             # Python 相依套件
+├── .gitignore
+├── CHANGELOG.md                 # 更新日誌
+├── CONTRIBUTING.md              # 貢獻指南
+├── LICENSE
+├── logo.png
 ├── README.md                    # 專案文件（簡體中文）
 ├── README_EN.md                 # 專案文件（英文）
 ├── README_JA.md                 # 專案文件（日文）
@@ -965,24 +991,23 @@ astrbot_plugin_currentcortex/
 ### 核心模組
 
 **內容取得與解析：**
-- **PixivAPIClient** ([main.py](main.py))：Pixiv API 用戶端，按過濾參數自動路由 GET 隨機 / POST 篩選 API
-- **HitokotoAPIClient** / **WeatherAPIClient** / **FemboyAPIClient**：一言 / 天氣 / 男娘 API 用戶端
-- **NeteaseAPIClient**：網易雲用戶端，點歌附指數退避重試
-- **KugouAPIClient**：酷狗音樂用戶端（搜尋 / 播放連結）
-- **MediaParserManager** ([media_parser.py](media_parser.py))：小紅書 / B站 / 抖音 連結解析
-- **CommandParser** ([main.py](main.py))：`key:value` 參數與快捷語法解析器
+- **PixivAPIClient** ([clients/pixiv.py](clients/pixiv.py))：Pixiv API 用戶端，按過濾參數自動路由 GET 隨機 / POST 篩選介面
+- **HitokotoAPIClient** ([clients/hitokoto.py](clients/hitokoto.py)) / **WeatherAPIClient** ([clients/weather.py](clients/weather.py)) / **FemboyAPIClient** ([clients/femboy.py](clients/femboy.py))：一言 / 天氣 / 男娘 API 用戶端
+- **NeteaseAPIClient** / **KugouAPIClient** ([clients/music.py](clients/music.py))：網易雲 / 酷狗用戶端，點歌附指數退避重試
+- **MediaParserManager** ([media/media_parser.py](media/media_parser.py))：小紅書 / B站 / 抖音 / 微博 連結解析
+- **CommandParser** ([clients/command_parser.py](clients/command_parser.py))：`key:value` 參數與快捷語法解析器
 
 **DG-LAB 裝置管理：**
-- **DGLabClient** ([dglab_client.py](dglab_client.py))：WebSocket 用戶端，連線管理 / 訊息收發 / 心跳保活
-- **DeviceStore** ([dglab_device_store.py](dglab_device_store.py))：使用者-裝置綁定關係持久化（執行緒安全）
-- **DeviceConnectionPool** ([dglab_connection_pool.py](dglab_connection_pool.py))：連線池，多使用者並行 / 連線複用 / 自動重連 / 閒置清理
-- **DGLabCommandHandler** ([dglab_commands.py](dglab_commands.py))：指令解析 / 驗證 / 執行 / 格式化
-- **DGLabWebUI** ([dglab_webui.py](dglab_webui.py))：CCDG WebUI 瀏覽器遠端控制面板
+- **DGLabClient** ([dglab/dglab_client.py](dglab/dglab_client.py))：WebSocket 用戶端，連線管理 / 訊息收發 / 心跳保活 / V3·V4 協定自動識別
+- **DeviceStore** ([dglab/dglab_device_store.py](dglab/dglab_device_store.py))：使用者-裝置綁定關係持久化（執行緒安全）
+- **DeviceConnectionPool** ([dglab/dglab_connection_pool.py](dglab/dglab_connection_pool.py))：連線池，多使用者並行 / 連線複用 / 自動重連 / 閒置清理
+- **DGLabCommandHandler** ([dglab/dglab_commands.py](dglab/dglab_commands.py))：指令解析 / 驗證 / 執行 / 格式化
+- **DGLabWebUI** ([dglab/dglab_webui.py](dglab/dglab_webui.py))：CCDG WebUI 瀏覽器遠端控制面板
 
 **主插件與記憶：**
 - **CurrentCortexPlugin(Star)** ([main.py](main.py))：主插件類別，整合所有功能並註冊指令
-- **CrossGroupMemoryStore** ([cross_group_memory.py](cross_group_memory.py))：跨群聊共享記憶，JSON 持久化
-- **GroupSwitchStore** ([group_switch_store.py](group_switch_store.py))：按群聊開關狀態，JSON 持久化
+- **CrossGroupMemoryStore** ([group/cross_group_memory.py](group/cross_group_memory.py))：跨群聊共享記憶，JSON 持久化
+- **GroupSwitchStore** ([group/group_switch_store.py](group/group_switch_store.py))：按群聊開關狀態，JSON 持久化
 
 ### 設計特點
 
@@ -1018,7 +1043,7 @@ astrbot_plugin_currentcortex/
 
 ---
 
-**版本**：v2.0.11（各版本變更詳見 [CHANGELOG.md](CHANGELOG.md)）  
+**版本**：v2.2.0（各版本變更詳見 [CHANGELOG.md](CHANGELOG.md)）  
 **儲存庫**：[GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
 
 

@@ -142,22 +142,24 @@ sys.modules.update(
 )
 
 # 包名取目录实际名称，测试不要求目录改名为 astrbot_plugin_pixiv
-PKG = Path(__file__).resolve().parent.name
-PLUGIN_DIR = Path(__file__).resolve().parent
+# 测试文件已移入 tests/ 子目录，需上溯两级定位插件根目录。
+PKG = Path(__file__).resolve().parent.parent.name
+PLUGIN_DIR = Path(__file__).resolve().parent.parent
 plugin_parent = str(PLUGIN_DIR.parent)
 if plugin_parent not in sys.path:
     sys.path.insert(0, plugin_parent)
 
-# main.py 顶部的相对导入中，重依赖模块替换为空桩；
-# cross_group_memory / group_switch_store 用真实实现（本测试的对象）。
+# main.py 顶部的嵌套包相对导入中，重依赖模块替换为空桩；
+# group.cross_group_memory / group.group_switch_store 用真实实现（本测试的对象）；
+# clients.* 依赖均已 stub，可自然加载真实实现。
 for module_name, attributes in {
-    "dglab_device_store": {"DeviceStore": object},
-    "dglab_connection_pool": {"DeviceConnectionPool": object},
-    "dglab_commands": {"DGLabCommandHandler": object},
-    "dglab_webui": {"DGLabWebUI": object},
-    "dglab_user_store": {"UserStore": object},
-    "dglab_permission_store": {"PermissionStore": object},
-    "media_parser": {
+    "dglab.dglab_device_store": {"DeviceStore": object},
+    "dglab.dglab_connection_pool": {"DeviceConnectionPool": object},
+    "dglab.dglab_commands": {"DGLabCommandHandler": object},
+    "dglab.dglab_webui": {"DGLabWebUI": object},
+    "dglab.dglab_user_store": {"UserStore": object},
+    "dglab.dglab_permission_store": {"PermissionStore": object},
+    "media.media_parser": {
         "MediaParserManager": object,
         "MediaParserError": Exception,
         "URLExtractor": object,
@@ -169,8 +171,8 @@ for module_name, attributes in {
     sys.modules[module.__name__] = module
 
 main_mod = importlib.import_module(f"{PKG}.main")
-memory_mod = importlib.import_module(f"{PKG}.cross_group_memory")
-switch_mod = importlib.import_module(f"{PKG}.group_switch_store")
+memory_mod = importlib.import_module(f"{PKG}.group.cross_group_memory")
+switch_mod = importlib.import_module(f"{PKG}.group.group_switch_store")
 
 CrossGroupMemoryStore = memory_mod.CrossGroupMemoryStore
 GroupSwitchStore = switch_mod.GroupSwitchStore

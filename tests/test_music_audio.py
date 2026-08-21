@@ -121,25 +121,26 @@ sys.modules.update(
     }
 )
 
-plugin_parent = str(Path(__file__).resolve().parent.parent)
+plugin_parent = str(Path(__file__).resolve().parent.parent.parent)
 if plugin_parent not in sys.path:
     sys.path.insert(0, plugin_parent)
 
-# 音频测试不需要加载 DG-LAB / 媒体解析的可选依赖，预先替换相对导入模块。
+# 音频测试不需要加载 DG-LAB / 媒体解析的可选依赖，预先替换嵌套包相对导入模块；
+# clients.* 依赖均已 stub，可自然加载真实实现。
 for module_name, attributes in {
-    "dglab_device_store": {"DeviceStore": object},
-    "dglab_connection_pool": {"DeviceConnectionPool": object},
-    "dglab_commands": {"DGLabCommandHandler": object},
-    "dglab_webui": {"DGLabWebUI": object},
-    "dglab_user_store": {"UserStore": object},
-    "dglab_permission_store": {"PermissionStore": object},
-    "media_parser": {
+    "dglab.dglab_device_store": {"DeviceStore": object},
+    "dglab.dglab_connection_pool": {"DeviceConnectionPool": object},
+    "dglab.dglab_commands": {"DGLabCommandHandler": object},
+    "dglab.dglab_webui": {"DGLabWebUI": object},
+    "dglab.dglab_user_store": {"UserStore": object},
+    "dglab.dglab_permission_store": {"PermissionStore": object},
+    "media.media_parser": {
         "MediaParserManager": object,
         "MediaParserError": Exception,
         "URLExtractor": object,
     },
-    "cross_group_memory": {"CrossGroupMemoryStore": object},
-    "group_switch_store": {"GroupSwitchStore": object},
+    "group.cross_group_memory": {"CrossGroupMemoryStore": object},
+    "group.group_switch_store": {"GroupSwitchStore": object},
 }.items():
     module = types.ModuleType(f"astrbot_plugin_currentcortex.{module_name}")
     for name, value in attributes.items():

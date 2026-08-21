@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### 变更
+
+- **项目结构重组为子包**：从扁平文件结构迁移为 Python 子包（`clients/` API 客户端 / `dglab/` 设备管理 / `group/` 群聊 / `media/` 媒体解析 / `tests/` 测试），模块按职责分包，`main.py` 改用相对导入；移除已废弃的 `media_cmds.py`（功能并入 `media/media_parser.py`）。无用户可见行为变化，不影响配置项与命令用法
+
+### 文档
+
+- README 四语言版本（简中/EN/JA/繁中）项目结构树与核心模块引用表同步至新的子包路径，页脚版本号统一为 v2.2.0
+- CONTRIBUTING.md 项目结构速览表、测试命令路径（`python3 tests/test_*.py`）、`.gitignore` 白名单说明同步至 `tests/` 目录
+- PR 模板自测清单的测试命令路径与 `.gitignore` 白名单格式同步至 `tests/` 目录
+
 ## [2.2.0] - 2026-08-21
 
 ### 新增

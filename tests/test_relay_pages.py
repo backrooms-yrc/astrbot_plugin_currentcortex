@@ -12,7 +12,7 @@ import sys
 import tempfile
 from unittest.mock import patch
 
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 class MockLogger:

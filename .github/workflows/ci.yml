@@ -33,7 +33,7 @@ jobs:
           : > /tmp/pytest.log
           : > /tmp/failed.txt
           overall=0
-          for f in test_*.py; do
+          for f in tests/test_*.py; do
             echo "=== $f ===" >> /tmp/pytest.log
             python3 "$f" >> /tmp/pytest.log 2>&1
             code=$?

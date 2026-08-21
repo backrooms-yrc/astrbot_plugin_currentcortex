@@ -945,34 +945,60 @@ v1.2.0 及更早版本使用 JSON 字符串配置（已弃用）：
 
 ```text
 astrbot_plugin_currentcortex/
-├── main.py                      # 主程序：所有命令注册与 API 客户端
+├── main.py                      # 主程序：命令注册、LLM 工具、分段回复
 ├── _pages_api.py                # 总 Pages 后端 API（仪表板/设置/郊狼/帮助）
+├── __init__.py                  # 插件包初始化
+├── clients/                     # API 客户端子包
+│   ├── __init__.py
+│   ├── _utils.py                # API Key 未配置提示等通用辅助
+│   ├── command_parser.py        # key:value 参数与快捷语法解析器
+│   ├── pixiv.py                 # Pixiv API 客户端
+│   ├── hitokoto.py              # 每日一言 API 客户端
+│   ├── weather.py               # 天气查询 API 客户端
+│   ├── femboy.py                # 男娘图片 API 客户端
+│   └── music.py                 # 网易云 / 酷狗点歌 API 客户端
+├── dglab/                       # DG-LAB（郊狼）设备管理子包
+│   ├── __init__.py
+│   ├── docs/                    # DG-LAB 协议与集成文档
+│   ├── dglab_client.py          # WebSocket 客户端（V3/V4 协议自动识别）
+│   ├── dglab_connection_pool.py # 连接池与状态管理
+│   ├── dglab_commands.py        # 命令解析 / 校验 / 执行
+│   ├── dglab_device_store.py    # 设备绑定关系持久化
+│   ├── dglab_user_store.py      # 用户存储
+│   ├── dglab_permission_store.py # 权限存储
+│   ├── dglab_post_store.py      # 投稿广场存储
+│   ├── dglab_email_store.py     # 邮箱存储
+│   ├── dglab_turnstile_store.py # Turnstile 存储
+│   ├── dglab_chat_store.py      # 聊天存储
+│   └── dglab_webui.py           # CCDG WebUI 控制面板
+├── group/                       # 群聊子包
+│   ├── __init__.py
+│   ├── cross_group_memory.py    # 跨群聊记忆持久化存储
+│   └── group_switch_store.py    # 按群聊开关状态持久化存储
+├── media/                       # 媒体解析子包
+│   ├── __init__.py
+│   └── media_parser.py          # 小红书/B站/抖音/微博 媒体解析
 ├── pages/                       # 总 Pages 前端（mdui 2 组件库，全部本地化）
 │   └── cc-dashboard/
 │       ├── index.html           # Pages 入口
 │       ├── app.js               # Vue 3 单页应用（5 个页面）
 │       ├── app.css              # 晴空蓝 + 雪雾白主题
 │       └── vendor/              # 本地依赖：Vue 3 / mdui 2 / Material Icons 字体
-├── cross_group_memory.py        # 跨群聊记忆持久化存储
-├── group_switch_store.py        # 按群聊开关状态持久化存储
-├── media_parser.py              # 小红书/B站/抖音 媒体解析
-├── media_cmds.py                # 媒体命令辅助
-├── dglab_client.py              # DG-LAB WebSocket 客户端封装
-├── dglab_device_store.py        # DG-LAB 设备绑定关系持久化
-├── dglab_connection_pool.py     # DG-LAB 连接池与状态管理
-├── dglab_commands.py            # DG-LAB 命令处理器
-├── dglab_webui.py               # CCDG WebUI 控制面板
-├── dglab_user_store.py          # DG-LAB 用户存储
-├── dglab_permission_store.py    # DG-LAB 权限存储
-├── dglab_post_store.py          # DG-LAB 投稿广场存储
-├── dglab_email_store.py         # DG-LAB 邮箱存储
-├── dglab_turnstile_store.py     # DG-LAB Turnstile 存储
-├── dglab_chat_store.py          # DG-LAB 聊天存储
+├── tests/                       # 测试脚本（独立运行，无需框架）
+│   ├── __init__.py
+│   ├── test_dglab_protocol.py   # DG-LAB V3/V4 协议端到端
+│   ├── test_memory_and_switch.py # 跨群记忆与群开关
+│   ├── test_music_audio.py      # 点歌音频
+│   ├── test_reply_seg.py        # 语义分段回复
+│   └── test_relay_pages.py      # Pages 中转
 ├── metadata.yaml                # 插件元数据
-├── CHANGELOG.md                 # 更新日志
-├── CONTRIBUTING.md              # 贡献指南
 ├── _conf_schema.json            # 配置模式定义
 ├── requirements.txt             # Python 依赖
+├── .gitignore
+├── CHANGELOG.md                 # 更新日志
+├── CONTRIBUTING.md              # 贡献指南
+├── LICENSE
+├── logo.png
 ├── README.md                    # 项目文档（中文）
 ├── README_EN.md                 # 项目文档（英文）
 ├── README_JA.md                 # 项目文档（日文）
@@ -982,24 +1008,23 @@ astrbot_plugin_currentcortex/
 ### 核心模块
 
 **内容获取与解析：**
-- **PixivAPIClient** ([main.py](main.py))：Pixiv API 客户端，按过滤参数自动路由 GET 随机 / POST 筛选接口
-- **HitokotoAPIClient** / **WeatherAPIClient** / **FemboyAPIClient**：一言 / 天气 / 男娘 API 客户端
-- **NeteaseAPIClient**：网易云客户端，点歌带指数退避重试
-- **KugouAPIClient**：酷狗音乐客户端（搜索 / 播放链接）
-- **MediaParserManager** ([media_parser.py](media_parser.py))：小红书 / B站 / 抖音 链接解析
-- **CommandParser** ([main.py](main.py))：`key:value` 参数与快捷语法解析器
+- **PixivAPIClient** ([clients/pixiv.py](clients/pixiv.py))：Pixiv API 客户端，按过滤参数自动路由 GET 随机 / POST 筛选接口
+- **HitokotoAPIClient** ([clients/hitokoto.py](clients/hitokoto.py)) / **WeatherAPIClient** ([clients/weather.py](clients/weather.py)) / **FemboyAPIClient** ([clients/femboy.py](clients/femboy.py))：一言 / 天气 / 男娘 API 客户端
+- **NeteaseAPIClient** / **KugouAPIClient** ([clients/music.py](clients/music.py))：网易云 / 酷狗客户端，点歌带指数退避重试
+- **MediaParserManager** ([media/media_parser.py](media/media_parser.py))：小红书 / B站 / 抖音 / 微博 链接解析
+- **CommandParser** ([clients/command_parser.py](clients/command_parser.py))：`key:value` 参数与快捷语法解析器
 
 **DG-LAB 设备管理：**
-- **DGLabClient** ([dglab_client.py](dglab_client.py))：WebSocket 客户端，连接管理 / 消息收发 / 心跳保活
-- **DeviceStore** ([dglab_device_store.py](dglab_device_store.py))：用户-设备绑定关系持久化（线程安全）
-- **DeviceConnectionPool** ([dglab_connection_pool.py](dglab_connection_pool.py))：连接池，多用户并发 / 连接复用 / 自动重连 / 空闲清理
-- **DGLabCommandHandler** ([dglab_commands.py](dglab_commands.py))：命令解析 / 校验 / 执行 / 格式化
-- **DGLabWebUI** ([dglab_webui.py](dglab_webui.py))：CCDG WebUI 浏览器远程控制面板
+- **DGLabClient** ([dglab/dglab_client.py](dglab/dglab_client.py))：WebSocket 客户端，连接管理 / 消息收发 / 心跳保活 / V3·V4 协议自动识别
+- **DeviceStore** ([dglab/dglab_device_store.py](dglab/dglab_device_store.py))：用户-设备绑定关系持久化（线程安全）
+- **DeviceConnectionPool** ([dglab/dglab_connection_pool.py](dglab/dglab_connection_pool.py))：连接池，多用户并发 / 连接复用 / 自动重连 / 空闲清理
+- **DGLabCommandHandler** ([dglab/dglab_commands.py](dglab/dglab_commands.py))：命令解析 / 校验 / 执行 / 格式化
+- **DGLabWebUI** ([dglab/dglab_webui.py](dglab/dglab_webui.py))：CCDG WebUI 浏览器远程控制面板
 
 **主插件与记忆：**
 - **CurrentCortexPlugin(Star)** ([main.py](main.py))：主插件类，集成所有功能并注册命令
-- **CrossGroupMemoryStore** ([cross_group_memory.py](cross_group_memory.py))：跨群聊共享记忆，JSON 持久化
-- **GroupSwitchStore** ([group_switch_store.py](group_switch_store.py))：按群聊开关状态，JSON 持久化
+- **CrossGroupMemoryStore** ([group/cross_group_memory.py](group/cross_group_memory.py))：跨群聊共享记忆，JSON 持久化
+- **GroupSwitchStore** ([group/group_switch_store.py](group/group_switch_store.py))：按群聊开关状态，JSON 持久化
 
 ### 设计特点
 
@@ -1037,7 +1062,7 @@ astrbot_plugin_currentcortex/
 
 <div align="center">
 
-**CurrentCortex** · v2.0.11 · [更新日志](CHANGELOG.md) · [问题反馈](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/issues) · [MIT License](LICENSE)
+**CurrentCortex** · v2.2.0 · [更新日志](CHANGELOG.md) · [问题反馈](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/issues) · [MIT License](LICENSE)
 
 如果这个插件对你有帮助，欢迎点一个 ⭐ Star 支持作者！
 

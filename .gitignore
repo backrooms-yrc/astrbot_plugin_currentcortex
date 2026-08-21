@@ -126,12 +126,12 @@ _dev_webui.py
 # ============================================
 # 测试文件（包含硬编码内网 IP 等信息）
 # ============================================
-test_*.py
-!test_music_audio.py
-!test_reply_seg.py
-!test_dglab_protocol.py
-!test_relay_pages.py
-!test_memory_and_switch.py
+tests/test_*.py
+!tests/test_music_audio.py
+!tests/test_reply_seg.py
+!tests/test_dglab_protocol.py
+!tests/test_relay_pages.py
+!tests/test_memory_and_switch.py
 
 # ============================================
 # 工具目录（本地 IDE / CLI 配置）

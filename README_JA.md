@@ -928,34 +928,60 @@ v1.2.0 以前は JSON 文字列の設定を使っていました（非推奨）�
 
 ```text
 astrbot_plugin_currentcortex/
-├── main.py                      # メインプログラム：全コマンド登録と API クライアント
+├── main.py                      # メインプログラム：コマンド登録、LLM ツール、分割返信
 ├── _pages_api.py                # 総合 Pages バックエンド API（ダッシュボード/設定/DG-LAB/ヘルプ）
+├── __init__.py                  # プラグインパッケージ初期化
+├── clients/                     # API クライアントサブパッケージ
+│   ├── __init__.py
+│   ├── _utils.py                # API キー未設定プロンプト等の汎用ヘルパー
+│   ├── command_parser.py        # key:value パラメータと省略記法のパーサー
+│   ├── pixiv.py                 # Pixiv API クライアント
+│   ├── hitokoto.py              # ひとこと API クライアント
+│   ├── weather.py               # 天気 API クライアント
+│   ├── femboy.py                # 男の娘 API クライアント
+│   └── music.py                 # 網易雲 / 酷狗音楽 API クライアント
+├── dglab/                       # DG-LAB デバイス管理サブパッケージ
+│   ├── __init__.py
+│   ├── docs/                    # DG-LAB プロトコル・統合ドキュメント
+│   ├── dglab_client.py          # WebSocket クライアント（V3/V4 自動識別）
+│   ├── dglab_connection_pool.py # 接続プールと状態管理
+│   ├── dglab_commands.py        # コマンド解析 / 検証 / 実行
+│   ├── dglab_device_store.py    # デバイスバインド永続化
+│   ├── dglab_user_store.py      # ユーザー保存
+│   ├── dglab_permission_store.py # 権限保存
+│   ├── dglab_post_store.py      # 投稿広場保存
+│   ├── dglab_email_store.py     # メール保存
+│   ├── dglab_turnstile_store.py # Turnstile 保存
+│   ├── dglab_chat_store.py      # チャット保存
+│   └── dglab_webui.py           # CCDG WebUI コントロールパネル
+├── group/                       # グループチャットサブパッケージ
+│   ├── __init__.py
+│   ├── cross_group_memory.py    # グループ横断メモリ永続化
+│   └── group_switch_store.py    # グループ別スイッチ状態永続化
+├── media/                       # メディア解析サブパッケージ
+│   ├── __init__.py
+│   └── media_parser.py          # 小紅書/Bilibili/Douyin/Weibo リンク解析
 ├── pages/                       # 総合 Pages フロントエンド（mdui 2 コンポーネント、完全ローカル化）
 │   └── cc-dashboard/
 │       ├── index.html           # Pages エントリ
 │       ├── app.js               # Vue 3 SPA（5ページ）
 │       ├── app.css              # スカイブルー＋スノーホワイトテーマ
 │       └── vendor/              # ローカル依存：Vue 3 / mdui 2 / Material Icons フォント
-├── cross_group_memory.py        # グループ横断メモリの永続化
-├── group_switch_store.py        # グループ別スイッチ状態の永続化
-├── media_parser.py              # 小紅書/Bilibili/Douyin メディア解析
-├── media_cmds.py                # メディアコマンド補助
-├── dglab_client.py              # DG-LAB WebSocket クライアントラッパー
-├── dglab_device_store.py        # DG-LAB デバイスバインドの永続化
-├── dglab_connection_pool.py     # DG-LAB 接続プールと状態管理
-├── dglab_commands.py            # DG-LAB コマンドハンドラー
-├── dglab_webui.py               # CCDG WebUI コントロールパネル
-├── dglab_user_store.py          # DG-LAB ユーザー保存
-├── dglab_permission_store.py    # DG-LAB 権限保存
-├── dglab_post_store.py          # DG-LAB 投稿広場保存
-├── dglab_email_store.py         # DG-LAB メール保存
-├── dglab_turnstile_store.py     # DG-LAB Turnstile 保存
-├── dglab_chat_store.py          # DG-LAB チャット保存
+├── tests/                       # テストスクリプト（単体実行、フレームワーク不要）
+│   ├── __init__.py
+│   ├── test_dglab_protocol.py   # DG-LAB V3/V4 プロトコル E2E
+│   ├── test_memory_and_switch.py # グループ横断メモリ・グループスイッチ
+│   ├── test_music_audio.py      # 音楽オーディオ
+│   ├── test_reply_seg.py        # 分割返信
+│   └── test_relay_pages.py      # Pages 中継
 ├── metadata.yaml                # プラグインメタデータ
-├── CHANGELOG.md                 # 更新履歴
-├── CONTRIBUTING.md              # コントリビューションガイド
 ├── _conf_schema.json            # 設定スキーマ定義
 ├── requirements.txt             # Python 依存関係
+├── .gitignore
+├── CHANGELOG.md                 # 更新履歴
+├── CONTRIBUTING.md              # コントリビューションガイド
+├── LICENSE
+├── logo.png
 ├── README.md                    # プロジェクトドキュメント（中国語）
 ├── README_EN.md                 # プロジェクトドキュメント（英語）
 ├── README_JA.md                 # プロジェクトドキュメント（日本語）
@@ -965,24 +991,23 @@ astrbot_plugin_currentcortex/
 ### コアモジュール
 
 **コンテンツ取得・解析：**
-- **PixivAPIClient** ([main.py](main.py))：Pixiv API クライアント。フィルタに応じて GET ランダム／POST 検索エンドポイントを自動切替
-- **HitokotoAPIClient** / **WeatherAPIClient** / **FemboyAPIClient**：ひとこと／天気／男の娘 API クライアント
-- **NeteaseAPIClient**：網易雲クライアント。指数バックオフ付きリトライ
-- **KugouAPIClient**：酷狗音楽クライアント（検索／再生リンク）
-- **MediaParserManager** ([media_parser.py](media_parser.py))：小紅書／Bilibili／Douyin のリンク解析
-- **CommandParser** ([main.py](main.py))：`key:value` パラメータと省略記法のパーサー
+- **PixivAPIClient** ([clients/pixiv.py](clients/pixiv.py))：Pixiv API クライアント。フィルタに応じて GET ランダム／POST 検索エンドポイントを自動切替
+- **HitokotoAPIClient** ([clients/hitokoto.py](clients/hitokoto.py)) / **WeatherAPIClient** ([clients/weather.py](clients/weather.py)) / **FemboyAPIClient** ([clients/femboy.py](clients/femboy.py))：ひとこと／天気／男の娘 API クライアント
+- **NeteaseAPIClient** / **KugouAPIClient** ([clients/music.py](clients/music.py))：網易雲／酷狗クライアント。指数バックオフ付きリトライ
+- **MediaParserManager** ([media/media_parser.py](media/media_parser.py))：小紅書／Bilibili／Douyin／Weibo のリンク解析
+- **CommandParser** ([clients/command_parser.py](clients/command_parser.py))：`key:value` パラメータと省略記法のパーサー
 
 **DG-LAB デバイス管理：**
-- **DGLabClient** ([dglab_client.py](dglab_client.py))：WebSocket クライアント。接続管理／メッセージ送受信／ハートビート
-- **DeviceStore** ([dglab_device_store.py](dglab_device_store.py))：ユーザーとデバイスのバインド関係を永続化（スレッドセーフ）
-- **DeviceConnectionPool** ([dglab_connection_pool.py](dglab_connection_pool.py))：接続プール。マルチユーザー並行／接続再利用／自動再接続／アイドル整理
-- **DGLabCommandHandler** ([dglab_commands.py](dglab_commands.py))：コマンドの解析／検証／実行／整形
-- **DGLabWebUI** ([dglab_webui.py](dglab_webui.py))：CCDG WebUI ブラウザ制御パネル
+- **DGLabClient** ([dglab/dglab_client.py](dglab/dglab_client.py))：WebSocket クライアント。接続管理／メッセージ送受信／ハートビート／V3・V4 プロトコル自動識別
+- **DeviceStore** ([dglab/dglab_device_store.py](dglab/dglab_device_store.py))：ユーザーとデバイスのバインド関係を永続化（スレッドセーフ）
+- **DeviceConnectionPool** ([dglab/dglab_connection_pool.py](dglab/dglab_connection_pool.py))：接続プール。マルチユーザー並行／接続再利用／自動再接続／アイドル整理
+- **DGLabCommandHandler** ([dglab/dglab_commands.py](dglab/dglab_commands.py))：コマンドの解析／検証／実行／整形
+- **DGLabWebUI** ([dglab/dglab_webui.py](dglab/dglab_webui.py))：CCDG WebUI ブラウザ制御パネル
 
 **メインプラグインとメモリ：**
 - **CurrentCortexPlugin(Star)** ([main.py](main.py))：メインプラグインクラス。全機能を統合しコマンドを登録
-- **CrossGroupMemoryStore** ([cross_group_memory.py](cross_group_memory.py))：グループ横断共有メモリ。JSON 永続化
-- **GroupSwitchStore** ([group_switch_store.py](group_switch_store.py))：グループ別スイッチ状態。JSON 永続化
+- **CrossGroupMemoryStore** ([group/cross_group_memory.py](group/cross_group_memory.py))：グループ横断共有メモリ。JSON 永続化
+- **GroupSwitchStore** ([group/group_switch_store.py](group/group_switch_store.py))：グループ別スイッチ状態。JSON 永続化
 
 ### 設計の特徴
 
@@ -1018,7 +1043,7 @@ Issue と PR を歓迎します！バグ報告・機能提案には Issue テン
 
 ---
 
-**バージョン**：v2.0.11（バージョンごとの変更は [CHANGELOG.md](CHANGELOG.md) を参照）  
+**バージョン**：v2.2.0（バージョンごとの変更は [CHANGELOG.md](CHANGELOG.md) を参照）  
 **リポジトリ**：[GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
 
 

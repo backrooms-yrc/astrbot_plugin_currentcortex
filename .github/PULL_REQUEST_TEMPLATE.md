@@ -13,11 +13,11 @@
 
 ## 自测清单
 
-- [ ] 本地运行过相关测试（如 `python3 test_dglab_protocol.py`、`python3 test_reply_seg.py` 等，与本次改动相关的都跑一遍）
+- [ ] 本地运行过相关测试（如 `python3 tests/test_dglab_protocol.py`、`python3 tests/test_reply_seg.py` 等，与本次改动相关的都跑一遍）
 - [ ] 涉及命令交互的改动已在真实平台（QQ 等）手动验证
 - [ ] 改动了配置项 / 命令用法的，已同步更新 `README.md` 与 `_conf_schema.json`
 - [ ] 有用户可见变更的，已在 `CHANGELOG.md` 的 `[Unreleased]` 小节追加条目
-- [ ] 新增测试文件已在 `.gitignore` 白名单中登记（`!test_xxx.py`）
+- [ ] 新增测试文件已在 `.gitignore` 白名单中登记（`!tests/test_xxx.py`）
 - [ ] 未引入新的第三方依赖（如引入，已在 `requirements.txt` 与 PR 说明中标注理由）
 
 ## 关联 Issue

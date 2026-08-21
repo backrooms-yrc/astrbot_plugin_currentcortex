@@ -31,11 +31,13 @@
 
 | 模块 | 职责 |
 | --- | --- |
-| `main.py` | 插件主入口：命令注册、Pixiv/一言/天气/男娘/点歌 等功能 |
-| `dglab_*.py` | DG-LAB（郊狼）模块：协议客户端（V3/V4）、连接池、命令、WebUI、各类存储 |
-| `media_parser.py` / `media_cmds.py` | 小红书 / B站 / 抖音链接解析 |
-| `cross_group_memory.py` / `group_switch_store.py` | 跨群聊记忆、按群聊开关 |
+| `main.py` | 插件主入口：命令注册、LLM 工具、分段回复 |
+| `clients/` | API 客户端子包：Pixiv / 一言 / 天气 / 男娘 / 点歌 / 命令解析 |
+| `dglab/` | DG-LAB（郊狼）子包：协议客户端（V3/V4 自动识别）、连接池、命令、WebUI、各类存储 |
+| `media/` | 媒体解析子包：小红书 / B站 / 抖音 / 微博 链接解析 |
+| `group/` | 群聊子包：跨群聊记忆、按群聊开关 |
 | `_pages_api.py` / `pages/` | AstrBot WebUI 集成的 Pages 总面板 |
+| `tests/` | 独立测试脚本（无需测试框架，新增需登记 `.gitignore` 白名单） |
 | `_conf_schema.json` | 配置面板模式定义（新增配置项必须同步这里） |
 | `metadata.yaml` | 插件元数据（版本号在此修改） |
 
@@ -44,12 +46,12 @@
 仓库采用可直接运行的独立测试脚本，无需测试框架：
 
 ```bash
-python3 test_dglab_protocol.py    # DG-LAB V3/V4 协议端到端（mock 服务端）
-python3 test_reply_seg.py         # 语义分段回复
-python3 test_music_audio.py       # 点歌音频
+python3 tests/test_dglab_protocol.py    # DG-LAB V3/V4 协议端到端（mock 服务端）
+python3 tests/test_reply_seg.py         # 语义分段回复
+python3 tests/test_music_audio.py       # 点歌音频
 ```
 
-**注意**：`.gitignore` 默认忽略 `test_*.py`（防止误提交带内网信息的临时脚本），采用白名单机制收录正式测试。**新增测试文件时，记得在 `.gitignore` 追加一行 `!test_xxx.py`**，否则不会被纳入版本管理。
+**注意**：`.gitignore` 默认忽略 `tests/test_*.py`（防止误提交带内网信息的临时脚本），采用白名单机制收录正式测试。**新增测试文件时，记得在 `.gitignore` 追加一行 `!tests/test_xxx.py`**，否则不会被纳入版本管理。
 
 改到哪个模块，就把对应测试（以及受影响的其他测试）跑一遍再提交。
 

@@ -928,34 +928,60 @@ No. Every user has independent device bindings and connections, fully isolated, 
 
 ```text
 astrbot_plugin_currentcortex/
-├── main.py                      # Main program: all command registration & API clients
+├── main.py                      # Main program: command registration, LLM tools, reply segmentation
 ├── _pages_api.py                # Master Pages backend API (dashboard/settings/DG-LAB/help)
+├── __init__.py                  # Plugin package init
+├── clients/                     # API client subpackage
+│   ├── __init__.py
+│   ├── _utils.py                # Shared helpers (API-key-not-configured prompts, etc.)
+│   ├── command_parser.py        # key:value parameter & shorthand syntax parser
+│   ├── pixiv.py                 # Pixiv API client
+│   ├── hitokoto.py              # Hitokoto (daily quote) API client
+│   ├── weather.py               # Weather API client
+│   ├── femboy.py                # Femboy image API client
+│   └── music.py                 # NetEase Cloud / Kugou music API client
+├── dglab/                       # DG-LAB device management subpackage
+│   ├── __init__.py
+│   ├── docs/                    # DG-LAB protocol & integration docs
+│   ├── dglab_client.py          # WebSocket client (V3/V4 auto-detection)
+│   ├── dglab_connection_pool.py # Connection pool & state management
+│   ├── dglab_commands.py        # Command parsing / validation / execution
+│   ├── dglab_device_store.py    # Device binding persistence
+│   ├── dglab_user_store.py      # User storage
+│   ├── dglab_permission_store.py # Permission storage
+│   ├── dglab_post_store.py      # Community-post storage
+│   ├── dglab_email_store.py     # Email storage
+│   ├── dglab_turnstile_store.py # Turnstile storage
+│   ├── dglab_chat_store.py      # Chat storage
+│   └── dglab_webui.py           # CCDG WebUI control panel
+├── group/                       # Group chat subpackage
+│   ├── __init__.py
+│   ├── cross_group_memory.py    # Cross-group memory persistence
+│   └── group_switch_store.py    # Per-group toggle state persistence
+├── media/                       # Media parsing subpackage
+│   ├── __init__.py
+│   └── media_parser.py          # Xiaohongshu / Bilibili / Douyin / Weibo link parsing
 ├── pages/                       # Master Pages frontend (mdui 2 component library, fully local)
 │   └── cc-dashboard/
 │       ├── index.html           # Pages entry
 │       ├── app.js               # Vue 3 single-page app (5 pages)
 │       ├── app.css              # Sky-blue + snow-white theme
 │       └── vendor/              # Local dependencies: Vue 3 / mdui 2 / Material Icons fonts
-├── cross_group_memory.py        # Cross-group memory persistence
-├── group_switch_store.py        # Per-group toggle state persistence
-├── media_parser.py              # Xiaohongshu / Bilibili / Douyin media parsing
-├── media_cmds.py                # Media command helpers
-├── dglab_client.py              # DG-LAB WebSocket client wrapper
-├── dglab_device_store.py        # DG-LAB device binding persistence
-├── dglab_connection_pool.py     # DG-LAB connection pool & state management
-├── dglab_commands.py            # DG-LAB command handlers
-├── dglab_webui.py               # CCDG WebUI control panel
-├── dglab_user_store.py          # DG-LAB user storage
-├── dglab_permission_store.py    # DG-LAB permission storage
-├── dglab_post_store.py          # DG-LAB community-post storage
-├── dglab_email_store.py         # DG-LAB email storage
-├── dglab_turnstile_store.py     # DG-LAB Turnstile storage
-├── dglab_chat_store.py          # DG-LAB chat storage
+├── tests/                       # Test scripts (standalone, no framework needed)
+│   ├── __init__.py
+│   ├── test_dglab_protocol.py   # DG-LAB V3/V4 protocol end-to-end
+│   ├── test_memory_and_switch.py # Cross-group memory & group toggle
+│   ├── test_music_audio.py      # Music audio
+│   ├── test_reply_seg.py        # Reply segmentation
+│   └── test_relay_pages.py      # Pages relay
 ├── metadata.yaml                # Plugin metadata
-├── CHANGELOG.md                 # Changelog
-├── CONTRIBUTING.md              # Contributing guide
 ├── _conf_schema.json            # Config schema definition
 ├── requirements.txt             # Python dependencies
+├── .gitignore
+├── CHANGELOG.md                 # Changelog
+├── CONTRIBUTING.md              # Contributing guide
+├── LICENSE
+├── logo.png
 ├── README.md                    # Project documentation (Chinese)
 ├── README_EN.md                 # Project documentation (English)
 ├── README_JA.md                 # Project documentation (Japanese)
@@ -965,24 +991,23 @@ astrbot_plugin_currentcortex/
 ### Core Modules
 
 **Content fetching & parsing:**
-- **PixivAPIClient** ([main.py](main.py)): Pixiv API client; routes between the GET random and POST filtered-search endpoints based on filters
-- **HitokotoAPIClient** / **WeatherAPIClient** / **FemboyAPIClient**: quote / weather / femboy API clients
-- **NeteaseAPIClient**: NetEase Cloud Music client with exponential-backoff retries
-- **KugouAPIClient**: Kugou client (search / playback links)
-- **MediaParserManager** ([media_parser.py](media_parser.py)): Xiaohongshu / Bilibili / Douyin link parsing
-- **CommandParser** ([main.py](main.py)): parser for `key:value` parameters and shorthand syntax
+- **PixivAPIClient** ([clients/pixiv.py](clients/pixiv.py)): Pixiv API client; routes between the GET random and POST filtered-search endpoints based on filters
+- **HitokotoAPIClient** ([clients/hitokoto.py](clients/hitokoto.py)) / **WeatherAPIClient** ([clients/weather.py](clients/weather.py)) / **FemboyAPIClient** ([clients/femboy.py](clients/femboy.py)): quote / weather / femboy API clients
+- **NeteaseAPIClient** / **KugouAPIClient** ([clients/music.py](clients/music.py)): NetEase Cloud / Kugou clients with exponential-backoff retries
+- **MediaParserManager** ([media/media_parser.py](media/media_parser.py)): Xiaohongshu / Bilibili / Douyin / Weibo link parsing
+- **CommandParser** ([clients/command_parser.py](clients/command_parser.py)): parser for `key:value` parameters and shorthand syntax
 
 **DG-LAB device management:**
-- **DGLabClient** ([dglab_client.py](dglab_client.py)): WebSocket client — connection management, message I/O, keep-alive heartbeats
-- **DeviceStore** ([dglab_device_store.py](dglab_device_store.py)): persistent user-device bindings (thread-safe)
-- **DeviceConnectionPool** ([dglab_connection_pool.py](dglab_connection_pool.py)): connection pool — multi-user concurrency, connection reuse, auto-reconnect, idle cleanup
-- **DGLabCommandHandler** ([dglab_commands.py](dglab_commands.py)): command parsing / validation / execution / formatting
-- **DGLabWebUI** ([dglab_webui.py](dglab_webui.py)): CCDG WebUI browser control panel
+- **DGLabClient** ([dglab/dglab_client.py](dglab/dglab_client.py)): WebSocket client — connection management, message I/O, keep-alive heartbeats, V3/V4 protocol auto-detection
+- **DeviceStore** ([dglab/dglab_device_store.py](dglab/dglab_device_store.py)): persistent user-device bindings (thread-safe)
+- **DeviceConnectionPool** ([dglab/dglab_connection_pool.py](dglab/dglab_connection_pool.py)): connection pool — multi-user concurrency, connection reuse, auto-reconnect, idle cleanup
+- **DGLabCommandHandler** ([dglab/dglab_commands.py](dglab/dglab_commands.py)): command parsing / validation / execution / formatting
+- **DGLabWebUI** ([dglab/dglab_webui.py](dglab/dglab_webui.py)): CCDG WebUI browser control panel
 
 **Main plugin & memory:**
 - **CurrentCortexPlugin(Star)** ([main.py](main.py)): main plugin class; wires everything together and registers commands
-- **CrossGroupMemoryStore** ([cross_group_memory.py](cross_group_memory.py)): cross-group shared memory, JSON-persisted
-- **GroupSwitchStore** ([group_switch_store.py](group_switch_store.py)): per-group toggle state, JSON-persisted
+- **CrossGroupMemoryStore** ([group/cross_group_memory.py](group/cross_group_memory.py)): cross-group shared memory, JSON-persisted
+- **GroupSwitchStore** ([group/group_switch_store.py](group/group_switch_store.py)): per-group toggle state, JSON-persisted
 
 ### Design Highlights
 
@@ -1018,7 +1043,7 @@ Acknowledgements:
 
 ---
 
-**Version**: v2.0.11 (per-version changes in [CHANGELOG.md](CHANGELOG.md))  
+**Version**: v2.2.0 (per-version changes in [CHANGELOG.md](CHANGELOG.md))  
 **Repository**: [GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
 
 
