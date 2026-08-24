@@ -53,6 +53,9 @@ const publicIp = ref("");
 const relay = ref(null);
 const relayBusy = ref({ v3: false, v4: false });
 const relayPublic = ref({ v3: "", v4: "" });
+// 两步部署确认:第一步披露将执行的系统级操作,第二步键入版本号防误触
+const relayConfirmOpen = ref({ v3: false, v4: false });
+const relayConfirmText = ref({ v3: "", v4: "" });
 const relayMeta = {
   v3: {
     title: "V3 中转服务器",
@@ -140,10 +143,29 @@ function relayUrl(v) {
   return ip ? `ws://${ip}:${st.port}` : st.local_url || "";
 }
 
+function openRelayConfirm(v) {
+  relayConfirmText.value[v] = "";
+  relayConfirmOpen.value[v] = true;
+}
+
+function cancelRelayConfirm(v) {
+  relayConfirmOpen.value[v] = false;
+  relayConfirmText.value[v] = "";
+}
+
+function relayConfirmReady(v) {
+  return (relayConfirmText.value[v] || "").trim().toLowerCase() === v;
+}
+
 async function relayDeploy(v) {
+  // 仅当键入的版本号与目标一致时才发起部署（后端同样校验 confirm）
+  if (!relayConfirmReady(v)) return;
   relayBusy.value[v] = true;
   try {
-    const res = await apiPost("cc/coyote/relay/deploy", { version: v });
+    const res = await apiPost("cc/coyote/relay/deploy", {
+      version: v,
+      confirm: (relayConfirmText.value[v] || "").trim(),
+    });
     if (res.ok) {
       toast(res.message || "部署成功");
     } else {
@@ -152,6 +174,7 @@ async function relayDeploy(v) {
   } catch (e) {
     toast("部署失败: " + (e && e.message ? e.message : e));
   } finally {
+    cancelRelayConfirm(v);
     await loadRelay();
     relayBusy.value[v] = false;
   }
@@ -176,7 +199,7 @@ async function relayUninstall(v) {
   }
   relayBusy.value[v] = true;
   try {
-    const res = await apiPost("cc/coyote/relay/uninstall", { version: v });
+    const res = await apiPost("cc/coyote/relay/uninstall", { version: v, confirm: true });
     toast(res.ok ? res.message || "已卸载" : "卸载失败: " + (res.message || ""));
   } catch (e) {
     toast("卸载失败: " + (e && e.message ? e.message : e));
@@ -209,7 +232,7 @@ async function relayExposeToggle(v, ev) {
       }
     }
     const res = wantOn
-      ? await apiPost("cc/coyote/relay/expose", { version: v })
+      ? await apiPost("cc/coyote/relay/expose", { version: v, confirm: true })
       : await apiPost("cc/coyote/relay/unexpose", { version: v });
     if (wantOn) {
       relayPublic.value[v] = res.ip || "";
@@ -342,6 +365,7 @@ async function exposeToggle(ev) {
       }
       const res = await apiPost("cc/coyote/expose", {
         port: coyote.value ? coyote.value.port : undefined,
+        confirm: true,
       });
       publicIp.value = res.ip || "";
       coyote.value = {
@@ -667,22 +691,52 @@ const TEMPLATE = /* html */ `
             </h2>
             <div class="cc-coyote-desc">{{ relayMeta[v].desc }}</div>
 
-            <!-- 未部署：一键部署 -->
+            <!-- 未部署：一键部署（两步确认：披露执行内容 → 键入版本号） -->
             <template v-if="!relay[v].deployed">
               <div class="cc-relay-actions">
                 <mdui-button
                   variant="filled"
                   icon="rocket_launch"
                   :disabled="relayBusy[v] || !(relay.env && relay.env.git)"
-                  @click="relayDeploy(v)"
-                >{{ relayBusy[v] ? "部署中…" : "一键部署" }}</mdui-button>
-                <span v-if="relayBusy[v]" class="cc-coyote-busy">
-                  克隆官方仓库 / 安装依赖 / 启动服务，约需 10~60 秒，请勿关闭页面…
-                </span>
+                  @click="openRelayConfirm(v)"
+                >一键部署</mdui-button>
                 <span
-                  v-else-if="relay.env && !relay.env.git"
+                  v-if="relay.env && !relay.env.git"
                   class="cc-coyote-busy"
                 >系统缺少 git，请先安装 git 后再部署</span>
+              </div>
+
+              <!-- 第一步：披露将在服务器上执行的系统级操作 -->
+              <div v-if="relayConfirmOpen[v] && !relayBusy[v]" class="cc-relay-confirm">
+                <div class="cc-relay-confirm-title">确认在服务器上执行以下系统级操作</div>
+                <ul class="cc-relay-confirm-list">
+                  <li>若缺少 Bun 运行时，执行官方安装脚本（bun.sh）安装到 /root/.bun</li>
+                  <li>克隆官方仓库 dglab-websocket-server 到 /root/dglab-relay/{{ v }}</li>
+                  <li>写入 .env 配置与 systemd 服务 dglab-relay-{{ v }}（开机自启、崩溃自动拉起）</li>
+                  <li>不修改防火墙：端口默认仅本机可达，公网暴露需另行开启「暴露公网」开关</li>
+                </ul>
+                <!-- 第二步：键入版本号，防止误触 -->
+                <mdui-text-field
+                  class="cc-relay-confirm-input"
+                  :label="'键入 ' + v + ' 确认部署'"
+                  :value="relayConfirmText[v]"
+                  @input="relayConfirmText[v] = $event.target.value"
+                ></mdui-text-field>
+                <div class="cc-relay-actions">
+                  <mdui-button
+                    variant="filled"
+                    icon="rocket_launch"
+                    :disabled="!relayConfirmReady(v)"
+                    @click="relayDeploy(v)"
+                  >确认部署</mdui-button>
+                  <mdui-button variant="text" @click="cancelRelayConfirm(v)">取消</mdui-button>
+                </div>
+              </div>
+
+              <div v-if="relayBusy[v]" class="cc-relay-actions">
+                <span class="cc-coyote-busy">
+                  克隆官方仓库 / 安装依赖 / 启动服务，约需 10~60 秒，请勿关闭页面…
+                </span>
               </div>
               <mdui-linear-progress v-if="relayBusy[v]"></mdui-linear-progress>
             </template>
@@ -924,6 +978,11 @@ createApp({
       relay,
       relayBusy,
       relayMeta,
+      relayConfirmOpen,
+      relayConfirmText,
+      relayConfirmReady,
+      openRelayConfirm,
+      cancelRelayConfirm,
       relayUrl,
       fmtUptime,
       fmtDate,
