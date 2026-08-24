@@ -1,7 +1,8 @@
 """Pages 中转服务器(一键部署)纯函数单元测试。
 
 覆盖: .env 渲染、systemd 单元渲染、ufw status 解析、unit 检测、
-CCDG WebUI 暴露公网开关的 ufw 放行/收回行为。
+CCDG WebUI 暴露公网开关的 ufw 放行/收回行为、
+一键部署/卸载/暴露公网的 confirm 显式确认校验。
 
 运行方式: python3 test_relay_pages.py
 """
@@ -184,7 +185,7 @@ def test_webui_expose_ufw():
             fake_ok = _make_ufw({"changed": True, "note": ""})
 
             async def _json_payload(default=None):
-                return {}
+                return {"confirm": True}
 
             with patch.object(P, "_relay_ufw_allow", fake_ok):
                 P.request.json = _json_payload
@@ -246,6 +247,139 @@ def test_webui_expose_ufw():
     asyncio.run(run())
 
 
+def test_deploy_confirm_guard():
+    print("\n🔐 一键部署 confirm 键入校验")
+
+    async def run():
+        deploy_calls = []
+
+        async def fake_deploy(version):
+            deploy_calls.append(version)
+            return {"ok": True, "steps": [], "message": "fake"}
+
+        async def fake_state(version):
+            return {"deployed": False}
+
+        def _json(payload, *a, **k):
+            return payload
+
+        def _error(message, *a, **k):
+            return {"error": message}
+
+        with patch.object(P, "json_response", _json), patch.object(
+            P, "error_response", _error
+        ), patch.object(P, "_relay_deploy_version", fake_deploy), patch.object(
+            P, "_relay_version_state", fake_state
+        ):
+            # 1) 缺 confirm → 拒绝,不触发部署
+            async def _no_confirm(default=None):
+                return {"version": "v3"}
+
+            P.request.json = _no_confirm
+            res = await P.page_relay_deploy(None)
+            check("缺 confirm 拒绝部署", "error" in res and not deploy_calls, res)
+            check("提示需键入确认", "键入确认" in res.get("error", ""), res)
+
+            # 2) confirm 与版本不一致 → 拒绝
+            async def _wrong_confirm(default=None):
+                return {"version": "v3", "confirm": "v4"}
+
+            P.request.json = _wrong_confirm
+            res = await P.page_relay_deploy(None)
+            check("confirm 不匹配拒绝", "error" in res and not deploy_calls, res)
+
+            # 3) confirm 一致(大小写不敏感) → 放行
+            async def _ok_confirm(default=None):
+                return {"version": "v3", "confirm": " V3 "}
+
+            P.request.json = _ok_confirm
+            res = await P.page_relay_deploy(None)
+            check(
+                "confirm 匹配放行(大小写/空白不敏感)",
+                res.get("ok") is True and deploy_calls == ["v3"],
+                (res, deploy_calls),
+            )
+
+    asyncio.run(run())
+
+
+def test_mutating_endpoints_confirm_guard():
+    print("\n🔐 卸载/暴露公网 confirm 校验")
+
+    async def run():
+        uninstall_calls = []
+        ufw_calls = []
+
+        async def fake_uninstall(version):
+            uninstall_calls.append(version)
+            return {"ok": True, "steps": [], "message": "fake"}
+
+        async def fake_state(version):
+            return {"deployed": True}
+
+        async def fake_ufw_allow(port, allow, comment=P.RELAY_UFW_COMMENT):
+            ufw_calls.append((port, allow))
+            return {"changed": True, "note": ""}
+
+        def _json(payload, *a, **k):
+            return payload
+
+        def _error(message, *a, **k):
+            return {"error": message}
+
+        with patch.object(P, "json_response", _json), patch.object(
+            P, "error_response", _error
+        ), patch.object(P, "_relay_uninstall_version", fake_uninstall), patch.object(
+            P, "_relay_version_state", fake_state
+        ):
+            # 卸载缺 confirm → 拒绝
+            async def _no_confirm(default=None):
+                return {"version": "v3"}
+
+            P.request.json = _no_confirm
+            res = await P.page_relay_uninstall(None)
+            check("卸载缺 confirm 拒绝", "error" in res and not uninstall_calls, res)
+
+            # 卸载带 confirm → 放行
+            async def _ok_confirm(default=None):
+                return {"version": "v3", "confirm": True}
+
+            P.request.json = _ok_confirm
+            res = await P.page_relay_uninstall(None)
+            check(
+                "卸载带 confirm 放行",
+                res.get("ok") is True and uninstall_calls == ["v3"],
+                (res, uninstall_calls),
+            )
+
+        with patch.object(P, "json_response", _json), patch.object(
+            P, "error_response", _error
+        ), patch.object(P, "_relay_version_state", fake_state), patch.object(
+            P, "_relay_ufw_allow", fake_ufw_allow
+        ):
+            # 暴露公网缺 confirm → 拒绝,不触碰 ufw
+            async def _no_confirm2(default=None):
+                return {"version": "v3"}
+
+            P.request.json = _no_confirm2
+            res = await P.page_relay_expose(FakePlugin())
+            check("暴露公网缺 confirm 拒绝且不动 ufw", "error" in res and not ufw_calls, res)
+
+            # 暴露公网带 confirm → 放行
+            async def _ok_confirm2(default=None):
+                return {"version": "v3", "confirm": True}
+
+            P.request.json = _ok_confirm2
+            res = await P.page_relay_expose(FakePlugin())
+            check(
+                "暴露公网带 confirm 放行",
+                res.get("ok") is True and ufw_calls == [(9999, True)],
+                (res, ufw_calls),
+            )
+
+    asyncio.run(run())
+
+
 def main():
     print("=" * 60)
     print("🧪 Pages 中转服务器一键部署 · 纯函数测试")
@@ -256,6 +390,8 @@ def main():
     test_ufw_parse()
     test_find_unit()
     test_webui_expose_ufw()
+    test_deploy_confirm_guard()
+    test_mutating_endpoints_confirm_guard()
     print("\n" + "=" * 60)
     print(f"📊 总计: {PASS}/{PASS + FAIL} 通过")
     return FAIL == 0

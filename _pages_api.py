@@ -488,9 +488,15 @@ async def page_coyote_expose(plugin):
     若 WebUI 尚未启用，会一并自动启用（因为暴露的前提是 WebUI 在运行）。
     防火墙放行复用中转服务器暴露开关逻辑：先放行并以 `ufw status` 实际查询
     校验生效，失败则不落配置、显式报错（避免开关显示已开、实际端口未放行）。
+    需请求体携带 ``confirm=true``（前端二次确认）。
     """
     try:
         payload = await request.json(default={}) or {}
+        if not payload.get("confirm"):
+            return error_response(
+                "暴露公网有安全风险，需经前端二次确认（confirm=true）",
+                status_code=400,
+            )
         port = int(payload.get("port") or plugin.config.get("dglab_webui_port", 9178))
         host = str(payload.get("host") or "0.0.0.0")
         # 先放行防火墙：失败时不改配置，前端开关保持关闭状态
@@ -1005,12 +1011,22 @@ async def page_relay_status(plugin):
 
 
 async def page_relay_deploy(plugin):
-    """POST /cc/coyote/relay/deploy {version} — 一键部署 v3/v4 中转。"""
+    """POST /cc/coyote/relay/deploy {version, confirm} — 一键部署 v3/v4 中转。
+
+    属系统级操作（可能安装 Bun、克隆官方仓库、创建 systemd 服务并设自启），
+    在框架层管理员鉴权之外，还要求请求体 ``confirm`` 与版本号一致（前端确认
+    面板键入），防止误触或绕过确认界面直接调用。
+    """
     try:
         payload = await request.json(default={}) or {}
         version = str(payload.get("version", "")).lower()
         if version not in RELAY_PORTS:
             return error_response("version 必须是 v3 或 v4", status_code=400)
+        if str(payload.get("confirm", "")).strip().lower() != version:
+            return error_response(
+                "部署为系统级操作，需键入确认：请在确认面板输入版本号（如 v3）后重试",
+                status_code=400,
+            )
         result = await asyncio.wait_for(
             _relay_deploy_version(version), timeout=300
         )
@@ -1024,12 +1040,17 @@ async def page_relay_deploy(plugin):
 
 
 async def page_relay_uninstall(plugin):
-    """POST /cc/coyote/relay/uninstall {version} — 卸载中转。"""
+    """POST /cc/coyote/relay/uninstall {version, confirm} — 卸载中转（需二次确认）。"""
     try:
         payload = await request.json(default={}) or {}
         version = str(payload.get("version", "")).lower()
         if version not in RELAY_PORTS:
             return error_response("version 必须是 v3 或 v4", status_code=400)
+        if not payload.get("confirm"):
+            return error_response(
+                "卸载会停止并删除 systemd 服务，需经前端二次确认（confirm=true）",
+                status_code=400,
+            )
         result = await _relay_uninstall_version(version)
         state = await _relay_version_state(version)
         return json_response({**result, "state": state})
@@ -1039,12 +1060,17 @@ async def page_relay_uninstall(plugin):
 
 
 async def page_relay_expose(plugin):
-    """POST /cc/coyote/relay/expose {version} — 放行端口 + 探测公网地址。"""
+    """POST /cc/coyote/relay/expose {version, confirm} — 放行端口 + 探测公网地址（需二次确认）。"""
     try:
         payload = await request.json(default={}) or {}
         version = str(payload.get("version", "")).lower()
         if version not in RELAY_PORTS:
             return error_response("version 必须是 v3 或 v4", status_code=400)
+        if not payload.get("confirm"):
+            return error_response(
+                "放行端口会把服务暴露到公网，需经前端二次确认（confirm=true）",
+                status_code=400,
+            )
         port = RELAY_PORTS[version]
         state = await _relay_version_state(version)
         if not state["deployed"]:
@@ -1266,9 +1292,9 @@ def register_routes(plugin) -> None:
         (f"/{prefix}/cc/coyote/expose", page_coyote_expose, ["POST"], "暴露郊狼 WebUI 公网"),
         (f"/{prefix}/cc/coyote/unexpose", page_coyote_unexpose, ["POST"], "取消郊狼 WebUI 公网暴露"),
         (f"/{prefix}/cc/coyote/relay", page_relay_status, ["GET"], "中转服务器部署状态(v3/v4)"),
-        (f"/{prefix}/cc/coyote/relay/deploy", page_relay_deploy, ["POST"], "一键部署中转服务器(v3/v4)"),
-        (f"/{prefix}/cc/coyote/relay/uninstall", page_relay_uninstall, ["POST"], "卸载中转服务器"),
-        (f"/{prefix}/cc/coyote/relay/expose", page_relay_expose, ["POST"], "中转服务器暴露公网(放行端口)"),
+        (f"/{prefix}/cc/coyote/relay/deploy", page_relay_deploy, ["POST"], "一键部署中转服务器(v3/v4,需键入版本号确认)"),
+        (f"/{prefix}/cc/coyote/relay/uninstall", page_relay_uninstall, ["POST"], "卸载中转服务器(需二次确认)"),
+        (f"/{prefix}/cc/coyote/relay/expose", page_relay_expose, ["POST"], "中转服务器暴露公网(放行端口,需二次确认)"),
         (f"/{prefix}/cc/coyote/relay/unexpose", page_relay_unexpose, ["POST"], "中转服务器取消公网暴露"),
         (f"/{prefix}/cc/help", page_help, ["GET"], "帮助中心文档"),
     ]

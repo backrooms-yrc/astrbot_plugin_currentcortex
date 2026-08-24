@@ -508,6 +508,34 @@ body {
   margin-top: 14px;
 }
 
+/* 一键部署两步确认面板（披露执行内容 + 键入版本号） */
+.cc-relay-confirm {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: var(--mdui-shape-corner-medium);
+  background: rgb(var(--mdui-color-surface-variant));
+}
+
+.cc-relay-confirm-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgb(var(--mdui-color-on-surface));
+}
+
+.cc-relay-confirm-list {
+  margin: 10px 0 4px;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.9;
+  color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.cc-relay-confirm-input {
+  margin-top: 6px;
+  width: 100%;
+  max-width: 360px;
+}
+
 .cc-relay-uninstall {
   --mdui-color-primary: var(--mdui-color-error);
   --mdui-color-on-primary: var(--mdui-color-on-error);
