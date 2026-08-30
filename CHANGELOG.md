@@ -6,6 +6,22 @@
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-08-30
+
+- 吃了一根菠萝味的冰棍
+
+### 新增
+
+- **Wikidot 站点管理（`/wikidot`，别名 `/wd` `/维基`）**：调用 Wikidot 前端 JS 接口（`ajax-module-connector.php`，与站点页面内前端 JavaScript 同一 AJAX 通道）以登录账号身份编辑页面与管理站点。默认关闭（`wikidot_enable`），需在配置中填写 `wikidot_site` / `wikidot_username` / `wikidot_password`
+  - **页面编辑**：源码查看（`viewsource/ViewSourceModule`）、信息、写入（新建/覆盖，覆盖需尾缀「覆盖」确认）、追加、标签、重命名/删除（需「确认」词）、父页面；保存走完整「抢锁 → `WikiPageAction/savePage` → 释放锁」流程，他人持锁时给出可读提示
+  - **成员管理**：成员列表（`membership/MembersListModule`，自动翻页）、移除（可一并封禁）、封禁/解封、用户名→ID 解析（`user:info` 页 + 成员列表兜底）
+  - **站点设置**：常规设置（名称/副标题/语言/描述/默认页/欢迎页）、访问策略（open/closed/private 及申请/域名/密码等开关）、导航元素、许可证、页面模板、外观主题
+  - **论坛管理**：版块结构查看与全量保存（增删版块组/版块）、激活论坛、默认嵌套深度（0-10）
+  - **邀请与加入申请**：邀请用户（`inviteMember`，已邀请/已是成员转译为友好提示）、邮件邀请、成员邀请开关、申请列表与同意/拒绝
+  - **LLM 工具（+6 个，共 17 个）**：`wikidot_get_page` / `wikidot_save_page` / `wikidot_append_page`（写工具内部校验管理员）/ `wikidot_list_members` / `wikidot_forum_layout` / `wikidot_site_settings`
+  - **会话与安全**：登录会话 `WIKIDOT_SESSION_ID` 持久化到 `data/currentcortex_wikidot_session.json`（0600 权限，重启免登录），失效自动重登一次；`try_again` 限流指数退避重试；所有写操作要求会话管理员，读操作受 `wikidot_admin_only`（默认 true）控制；`/开关 off wikidot` 可按群单独关闭
+  - 新增 `wikidot_client.py`（AMC 协议 + HTML 标准库解析，无新依赖）、`wikidot_session_store.py`、`wikidot_commands.py`、`test_wikidot.py`（75 项离线测试，CI 自动纳入）
+
 ## [2.2.2] - 2026-08-30
 
 - 修复了一些已知问题

@@ -6,7 +6,7 @@
 
 **一个多功能 AstrBot 插件** — 集内容获取、媒体解析、设备控制与跨群记忆于一体。
 
-Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云点歌 · 小红书/B站/抖音/微博解析 · DG-LAB 设备管理 · 跨群聊记忆 · LLM 工具（AI 自主调用）· 语义分段回复
+Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云点歌 · 小红书/B站/抖音/微博解析 · DG-LAB 设备管理 · Wikidot 站点管理 · 跨群聊记忆 · LLM 工具（AI 自主调用）· 语义分段回复
 
 [![Release](https://img.shields.io/github/v/release/backrooms-yrc/astrbot_plugin_currentcortex.svg?style=flat-square)](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/releases)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
@@ -85,6 +85,7 @@ Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云�
   - [5. 天气查询](#5-天气查询--weather-别名天气)
   - [6. 男娘图片](#6-男娘图片--femboy-别名男娘)
   - [7. DG-LAB 设备管理](#7-dg-lab-设备管理--dglab-别名电击)
+  - [8. Wikidot 站点管理](#8-wikidot-站点管理--wikidot-别名wd-维基)
 - [🖥️ 总 Pages](#️-总-pages)
 - [🧩 按群聊开关](#-按群聊独立开关)
 - [✂️ 分段回复](#️-分段回复)
@@ -111,6 +112,7 @@ Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云�
 | 🌤️ **天气查询** | 实时天气 + 未来 3 天预报 |
 | 👗 **男娘图片** | 随机男娘主题图片（WebP） |
 | 🔌 **DG-LAB** | Socket V3/V4（兼容旧 V2）设备全生命周期管理、协议自动识别、多用户/多设备隔离、CCDG WebUI 控制面板 |
+| 📖 **Wikidot 站点管理** | 调用 Wikidot 前端 JS 接口（ajax-module-connector.php）：页面编辑（源码/写入/追加/标签/重命名/删除）、成员管理、站点设置、论坛版块、邀请与加入申请 |
 | 🖥️ **总 Pages** | AstrBot WebUI 集成总面板：仪表板 · 帮助中心 · 可视化设置（保存即热重载）· 郊狼控制（中转服务器一键部署 · 公网暴露开关）· 联系我们 |
 | 🧩 **按群聊开关** | 在单个群用 `/开关` 命令关闭/开启本插件全部命令（支持限时关闭自动恢复、按功能域分级），互不影响 |
 | 🧠 **跨群聊记忆** | 同平台所有群共享一份持久化上下文，自动注入 LLM 请求（可按时效过滤、LLM 摘要压缩、按关键词清理） |
@@ -199,6 +201,7 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 | `/weather` | `/天气` | 天气查询 |
 | `/femboy` | `/男娘` | 男娘图片 |
 | `/dglab` | `/电击` | DG-LAB 设备管理 |
+| `/wikidot` | `/wd` `/维基` | Wikidot 页面编辑与站点管理 |
 | `/开关` | `/toggle` `/switch` | 按群聊开关本插件全部命令（支持限时、按功能域分级） |
 | `/开关列表` | `/switch_list` `/开关状态列表` | 查看本平台被关闭的群与功能域（管理员） |
 | `/忘记` | `/forget_memory` `/忘记记忆` | 按关键词清理跨群聊记忆（管理员） |
@@ -527,6 +530,53 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 
 ---
 
+### 8. Wikidot 站点管理 (`/wikidot`，别名 `/wd` `/维基`)
+
+可选功能：通过 **Wikidot 前端 JS 接口**（`ajax-module-connector.php`，即 Wikidot 站点页面里前端 JavaScript 使用的同一套 AJAX 通道）以登录账号身份编辑站点页面、管理站点。适合把机器人当作 Wikidot 站点（如 SCP 分部、自家 Wiki）的聊天端运维工具。
+
+#### 前置配置（默认关闭）
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `wikidot_enable` | bool | false | 功能总开关 |
+| `wikidot_site` | string | （空） | 站点名（unix name，不含 `.wikidot.com`），如 `scp-wiki-cn` |
+| `wikidot_username` | string | （空） | Wikidot 账号（需具备目标站点的编辑/管理权限） |
+| `wikidot_password` | string | （空） | 账号密码（仅用于初次登录换取会话，不进日志） |
+| `wikidot_admin_only` | bool | true | 开启时全部命令仅管理员可用；关闭后只读放开、写操作仍需管理员 |
+| `wikidot_timeout` | int | 20 | 接口超时（秒） |
+
+- 登录会话（`WIKIDOT_SESSION_ID`）持久化到 `data/currentcortex_wikidot_session.json`（0600 权限），重启无需重新登录；会话失效自动重登一次。
+- 建议使用**专用小号**配置，且账号不要开管理员之外的多余权限。
+
+#### 命令一览（发送 `/wikidot 帮助` 可查看）
+
+| 分类 | 命令 | 说明 |
+| --- | --- | --- |
+| 页面 | `/wd 源码 <页>` | 查看页面 wikitext 源码 |
+| 页面 | `/wd 信息 <页>` | 标题 / page_id / 标签 |
+| 页面 | `/wd 写入 <页> :: 标题 :: 内容` | 新建页面；覆盖已有页需在末尾加 ` 覆盖` |
+| 页面 | `/wd 追加 <页> <内容>` | 追加到页面末尾 |
+| 页面 | `/wd 标签 <页> <标签…>` | 整组覆盖标签 |
+| 页面 | `/wd 重命名 <旧> <新> 确认` | 重命名（需确认词） |
+| 页面 | `/wd 父页 <页> <父页\|无>` | 设置/移除父页面 |
+| 页面 | `/wd 删除 <页> 确认` | 删除页面（需确认词） |
+| 成员 | `/wd 成员 [页码\|管理员\|版主]` | 成员列表 |
+| 成员 | `/wd 移除成员 <用户> [封禁]` | 移除成员（可一并封禁） |
+| 成员 | `/wd 封禁 <用户> [原因]` / `/wd 解封 <用户>` | 封禁/解封用户 |
+| 设置 | `/wd 设置 [字段=值…]` | 站点名称/副标题/语言/描述/默认页/欢迎页 |
+| 设置 | `/wd 访问策略 [隐私=… 申请=on …]` | 访问策略（open/closed/private 等） |
+| 设置 | `/wd 导航 [顶栏=… 侧栏=…\|默认]` | 导航元素 |
+| 设置 | `/wd 许可证 [id=…\|other=…\|默认]` / `/wd 模板 [id\|无]` / `/wd 外观 [id\|默认]` | 许可证/模板/主题 |
+| 论坛 | `/wd 论坛 [子命令]` | 查看结构、激活、嵌套深度、增删版块组与版块 |
+| 邀请 | `/wd 邀请 <用户> [附言]` / `/wd 邀请 邮箱 <地址> [说明]` | 邀请用户加入 |
+| 邀请 | `/wd 邀请开关 <开\|关>` | 允许/禁止成员邀请他人 |
+| 申请 | `/wd 申请 [列表]` / `/wd 申请 <用户> 同意\|拒绝` | 加入申请管理 |
+| 其他 | `/wd 状态` / `/wd 登录` / `/wd 帮助` | 状态 / 强制重登（管理员）/ 帮助 |
+
+> ⚠️ **安全**：所有**写操作**（编辑/删除/成员/设置/论坛/邀请）一律要求会话管理员（`event.is_admin()`）；删除/重命名/覆盖还需追加「确认」词。`/开关 off wikidot` 可按群单独关闭本模块。
+
+---
+
 ## 🖥️ 总 Pages
 
 > 自 **v1.9.0** 起，插件集成了 AstrBot 插件 Pages 总面板（mdui 2 Material Design 3 风格，晴空蓝 + 雪雾白）。在 AstrBot WebUI 的 **插件详情 → Pages**（或侧边栏「插件 Pages」分组）中打开。
@@ -679,7 +729,7 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 
 > ⚠️ 电击控制涉及物理设备、有安全风险，请确认安全后再开启。所有工具执行第一行都会走开关校验，关闭后工具返回提示而不执行。
 
-#### 已注册工具一览（共 11 个）
+#### 已注册工具一览（共 17 个）
 
 | 类别 | 工具名 | 参数 | 说明 |
 | --- | --- | --- | --- |
@@ -694,6 +744,12 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 | ⚡ 电击 | `dglab_pulse` | channel, wave, duration, device_index | 发送波形 |
 | ⚡ 电击 | `dglab_stop` | channel, device_index | 停止输出 |
 | ⚡ 电击 | `dglab_status` | 无 | 查询设备状态 |
+| 📖 Wikidot | `wikidot_get_page` | fullname | 获取页面源码与元信息 |
+| 📖 Wikidot | `wikidot_save_page` | fullname, source, comment | 保存/覆盖页面（仅管理员） |
+| 📖 Wikidot | `wikidot_append_page` | fullname, text, comment | 向页面末尾追加内容（仅管理员） |
+| 📖 Wikidot | `wikidot_list_members` | 无 | 站点成员列表 |
+| 📖 Wikidot | `wikidot_forum_layout` | 无 | 论坛版块结构 |
+| 📖 Wikidot | `wikidot_site_settings` | 无 | 站点常规设置 |
 
 #### 工作方式
 
@@ -835,6 +891,19 @@ v1.2.0 及更早版本使用 JSON 字符串配置（已弃用）：
 新格式直接填三个独立项：`dglab_server_url`、`dglab_heartbeat_interval`、`dglab_auto_connect`。插件仍会检测旧版 `dglab` JSON 配置：若新项留空但旧配置存在，会自动读取并提示迁移。建议尽快手动迁移。
 
 </details>
+
+### Wikidot
+
+见 [8. Wikidot 站点管理](#8-wikidot-站点管理--wikidot-别名wd-维基) 章节。
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `wikidot_enable` | bool | false | 功能总开关（默认关闭） |
+| `wikidot_site` | string | （空） | 站点名（unix name，不含 `.wikidot.com`） |
+| `wikidot_username` | string | （空） | Wikidot 账号用户名 |
+| `wikidot_password` | string | （空） | Wikidot 账号密码（仅用于登录换取会话） |
+| `wikidot_admin_only` | bool | true | 全部命令仅管理员可用（关闭后只读放开） |
+| `wikidot_timeout` | int | 20 | 接口请求超时（秒） |
 
 ### 跨群聊记忆
 

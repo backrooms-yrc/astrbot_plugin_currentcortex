@@ -96,6 +96,19 @@ _CONFIG_GROUPS: List[Dict[str, Any]] = [
         ],
     },
     {
+        "key": "wikidot",
+        "title": "Wikidot 站点",
+        "icon": "book",
+        "items": [
+            "wikidot_enable",
+            "wikidot_site",
+            "wikidot_username",
+            "wikidot_password",
+            "wikidot_admin_only",
+            "wikidot_timeout",
+        ],
+    },
+    {
         "key": "cross_group",
         "title": "跨群聊记忆",
         "icon": "share",

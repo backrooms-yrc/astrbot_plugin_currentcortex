@@ -90,6 +90,36 @@
     "type": "int",
     "default": 9178
   },
+  "wikidot_enable": {
+    "description": "【Wikidot 站点管理】启用后可通过 /wikidot（/wd）命令编辑站点页面、管理成员/设置/论坛/邀请，并注册 LLM 工具。调用的是 Wikidot 前端 JS 接口（ajax-module-connector.php），需要下方账号具备站点对应权限。默认关闭",
+    "type": "bool",
+    "default": false
+  },
+  "wikidot_site": {
+    "description": "Wikidot 站点名（unix name，不含 .wikidot.com 后缀），如 scp-wiki-cn",
+    "type": "string",
+    "default": ""
+  },
+  "wikidot_username": {
+    "description": "Wikidot 账号用户名（需要有目标站点的编辑/管理权限）。登录会话会持久化到 data/currentcortex_wikidot_session.json（0600 权限），重启无需重新登录",
+    "type": "string",
+    "default": ""
+  },
+  "wikidot_password": {
+    "description": "Wikidot 账号密码。仅用于初次登录换取会话，不会出现在日志中",
+    "type": "string",
+    "default": ""
+  },
+  "wikidot_admin_only": {
+    "description": "开启时所有 /wikidot 命令（含只读）都仅管理员可用；关闭后只读命令放开、写操作（编辑/删除/成员管理等）仍需管理员。建议保持开启",
+    "type": "bool",
+    "default": true
+  },
+  "wikidot_timeout": {
+    "description": "Wikidot 接口请求超时（秒）",
+    "type": "int",
+    "default": 20
+  },
   "cross_group_enable": {
     "description": "【跨群聊记忆开关】开启后，同一平台实例下所有群聊共享一份持久化记忆，并自动注入到 LLM 请求（默认关闭；注意开启会把其他群的聊天内容提供给 LLM，请确认符合隐私预期）",
     "type": "bool",

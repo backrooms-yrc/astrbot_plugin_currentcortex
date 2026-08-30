@@ -3,7 +3,7 @@ display_name: CurrentCortex 综合插件
 desc: 多功能 AstrBot 插件（CurrentCortex）—— Pixiv 随机图片 ·网易云点歌 ·小红书/B站/抖音/微博媒体解析 ·每日一言 ·天气 ·男娘 ·DG-LAB（郊狼） 设备管理 ·跨群聊记忆（LLM 摘要） ·按群聊分级开关 ·LLM 工具（AI 自主调用）· 语义分段回复。基于 LeiZ API。
 short_desc: 多功能 AstrBot 插件（CurrentCortex）—— Pixiv 随机图片 ·网易云点歌 ·小红书/B站/抖音/微博媒体解析 ·每日一言 ·天气 ·男娘 ·DG-LAB（郊狼） 设备管理 ·跨群聊记忆 ·按群聊分级开关 ·LLM 工具 · 语义分段回复。基于 LeiZ API。
 author: Rcst20
-version: v2.2.2
+version: v2.3.0
 repo: https://github.com/backrooms-yrc/astrbot_plugin_currentcortex
 support_platforms:
   - aiocqhttp

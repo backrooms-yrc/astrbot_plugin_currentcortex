@@ -94,6 +94,7 @@ Pixiv random images · Hitokoto quotes · Weather · Femboy images · NetEase Cl
 | 🌤️ **Weather** | Current conditions + 3-day forecast |
 | 👗 **Femboy Images** | Random femboy-themed images (WebP) |
 | 🔌 **DG-LAB** | Full device lifecycle management over Socket V3/V4 (legacy V2 compatible), protocol auto-detection, multi-user/multi-device isolation, CCDG WebUI control panel |
+| 📖 **Wikidot Site Management** | NEW in v2.3.0: edit pages (source / write / append / tags / rename / delete) and manage the site (members / settings / forum / invitations) via Wikidot's front-end JS interface (`/wikidot`). Disabled by default |
 | 🖥️ **Master Pages** | All-in-one panel integrated into the AstrBot WebUI: dashboard · help center · visual settings (hot-reload on save) · DG-LAB control (one-click relay server deployment · public-exposure toggle) · contact us |
 | 🧩 **Per-Group Toggle** | Turn plugin commands on/off per group with `/toggle` (timed auto-recovery and per-category scope control supported), without affecting other groups |
 | 🧠 **Cross-Group Memory** | All groups on a platform share one persistent context, automatically injected into LLM requests (with optional age filtering, LLM summarization, and keyword-based cleanup) |

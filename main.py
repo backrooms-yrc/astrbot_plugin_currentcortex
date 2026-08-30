@@ -30,6 +30,9 @@ from .media_parser import (
 )
 from .cross_group_memory import CrossGroupMemoryStore
 from .group_switch_store import GroupSwitchStore
+from .wikidot_client import WikidotClient, WikidotError
+from .wikidot_session_store import WikidotSessionStore
+from .wikidot_commands import WikidotCommandHandler
 from astrbot.api.provider import ProviderRequest, LLMResponse
 from astrbot.core.agent.message import TextPart
 from astrbot.api.platform import MessageType
@@ -105,6 +108,13 @@ COMMAND_CATEGORIES = [
         "title": "DG-LAB 设备",
         "commands": [
             {"cmd": "/dglab", "alias": "电击", "desc": "管理、绑定和控制 DG-LAB 设备"},
+        ],
+    },
+    {
+        "icon": "book",
+        "title": "Wikidot 站点",
+        "commands": [
+            {"cmd": "/wikidot", "alias": "wd/维基", "desc": "编辑 Wikidot 页面与管理站点（成员/设置/论坛/邀请）"},
         ],
     },
     {
@@ -1150,8 +1160,8 @@ def _remove_file_safe(file_path: str) -> None:
 @register(
     "astrbot_plugin_currentcortex",
     "Rcst20",
-    "多功能 AstrBot 插件（CurrentCortex）—— Pixiv 随机图片 ·网易云点歌 ·小红书/B站/抖音媒体解析 ·每日一言 ·天气 ·男娘 ·DG-LAB（郊狼） 设备管理 ·跨群聊记忆 ·按群聊开关。基于 LeiZ API。",
-    "2.0.6",
+    "多功能 AstrBot 插件（CurrentCortex）—— Pixiv 随机图片 ·网易云点歌 ·小红书/B站/抖音媒体解析 ·每日一言 ·天气 ·男娘 ·DG-LAB（郊狼） 设备管理 ·Wikidot 站点管理 ·跨群聊记忆 ·按群聊开关。基于 LeiZ API。",
+    "2.3.0",
 )
 class CurrentCortexPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -1361,6 +1371,37 @@ class CurrentCortexPlugin(Star):
             f"size={self._default_size}, proxy={self._image_proxy}, excludeAI={self._exclude_ai}"
         )
 
+        # Wikidot 前端 JS 接口：编辑站点页面 + 管理站点（成员/设置/论坛/邀请）。
+        # 凭据走配置（与 leiz_api_key 同级），登录会话持久化到 data/ 目录。
+        self._wikidot_enable = bool(config.get("wikidot_enable", False))
+        self._wikidot_client: Optional[WikidotClient] = None
+        self._wikidot_handler: Optional[WikidotCommandHandler] = None
+        if self._wikidot_enable:
+            self._wikidot_store = WikidotSessionStore(data_dir="data")
+            self._wikidot_client = WikidotClient(
+                site=str(config.get("wikidot_site", "")).strip(),
+                username=str(config.get("wikidot_username", "")).strip(),
+                password=str(config.get("wikidot_password", "")),
+                timeout=int(config.get("wikidot_timeout", 20)),
+                session_store=self._wikidot_store,
+            )
+            self._wikidot_handler = WikidotCommandHandler(
+                self._wikidot_client,
+                admin_only=bool(config.get("wikidot_admin_only", True)),
+            )
+            if self._wikidot_client.configured():
+                logger.info(
+                    f"[Wikidot] 已启用（站点 {self._wikidot_client.site}.wikidot.com，"
+                    f"账号 {self._wikidot_client.username}）"
+                )
+            else:
+                logger.warning(
+                    "[Wikidot] 已启用但站点/账号未配置完整（wikidot_site / "
+                    "wikidot_username / wikidot_password），命令将提示先去配置"
+                )
+        else:
+            self._wikidot_store = None
+
         # 跨群聊记忆：同一平台实例下所有群聊共享的持久化记忆（JSON 文件存储）
         self._cross_group_enable = bool(config.get("cross_group_enable", False))
         self._cross_group_max_cnt = max(1, int(config.get("cross_group_max_cnt", 500)))
@@ -1550,6 +1591,11 @@ class CurrentCortexPlugin(Star):
             "label": "DG-LAB 设备",
             "commands": ("dglab", "电击"),
             "aliases": ("dglab", "电击", "郊狼"),
+        },
+        "wikidot": {
+            "label": "Wikidot 站点",
+            "commands": ("wikidot", "wd", "维基"),
+            "aliases": ("wikidot", "wd", "维基"),
         },
         "memory": {
             "label": "跨群聊记忆",
@@ -2410,6 +2456,136 @@ class CurrentCortexPlugin(Star):
         if not self._llm_tools_enable:
             return "该工具已被管理员关闭（llm_tools_enable 未开启）"
         return None
+
+    def _wikidot_tool_guard(self) -> Optional[str]:
+        """Wikidot LLM 工具的门禁：总开关 + 功能开关 + 已初始化。"""
+        hint = self._llm_tool_guard()
+        if hint:
+            return hint
+        if not getattr(self, "_wikidot_enable", False) or not self._wikidot_handler:
+            return "Wikidot 功能未启用（wikidot_enable 未开启或未配置站点账号）"
+        if not self._wikidot_client.configured():
+            return "Wikidot 站点/账号未配置完整"
+        return None
+
+    @filter.llm_tool(name="wikidot_get_page")
+    async def llm_tool_wikidot_get_page(self, event: AstrMessageEvent, fullname: str):
+        """获取 Wikidot 站点某页面的 wikitext 源码与标题、标签等元信息。当用户想查看某页面的内容或源码时调用。
+
+        Args:
+            fullname(string): 页面全名（可含分类前缀），如 "start" 或 "component:hero"。
+        """
+        hint = self._wikidot_tool_guard()
+        if hint:
+            return hint
+        try:
+            return await self._wikidot_handler.tool_get_page((fullname or "").strip())
+        except WikidotError as e:
+            return f"获取页面失败: {e}"
+        except Exception as e:
+            logger.error(f"[LLMTool] Wikidot 获取页面异常: {e}", exc_info=True)
+            return f"获取页面时出错：{e}"
+
+    @filter.llm_tool(name="wikidot_save_page")
+    async def llm_tool_wikidot_save_page(
+        self, event: AstrMessageEvent, fullname: str, source: str,
+        comment: str = "",
+    ):
+        """保存（新建或整体覆盖）Wikidot 站点的某页面，source 为完整 wikitext 源码。仅会话管理员可用；覆盖已有页面前建议先读取原页面。
+
+        Args:
+            fullname(string): 页面全名，如 "start"。
+            source(string): 页面完整 wikitext 源码（会整体替换现有内容）。
+            comment(string): 修订说明（可选）。
+        """
+        hint = self._wikidot_tool_guard()
+        if hint:
+            return hint
+        try:
+            return await self._wikidot_handler.tool_save_page(
+                event, (fullname or "").strip(), source or "", comment=comment
+            )
+        except WikidotError as e:
+            return f"保存页面失败: {e}"
+        except Exception as e:
+            logger.error(f"[LLMTool] Wikidot 保存页面异常: {e}", exc_info=True)
+            return f"保存页面时出错：{e}"
+
+    @filter.llm_tool(name="wikidot_append_page")
+    async def llm_tool_wikidot_append_page(
+        self, event: AstrMessageEvent, fullname: str, text: str,
+        comment: str = "",
+    ):
+        """向 Wikidot 站点某页面末尾追加一段内容（不改动已有内容）。仅会话管理员可用。
+
+        Args:
+            fullname(string): 页面全名，如 "start"。
+            text(string): 要追加到页面末尾的 wikitext 内容。
+            comment(string): 修订说明（可选）。
+        """
+        hint = self._wikidot_tool_guard()
+        if hint:
+            return hint
+        try:
+            return await self._wikidot_handler.tool_append_page(
+                event, (fullname or "").strip(), text or "", comment=comment
+            )
+        except WikidotError as e:
+            return f"追加内容失败: {e}"
+        except Exception as e:
+            logger.error(f"[LLMTool] Wikidot 追加内容异常: {e}", exc_info=True)
+            return f"追加内容时出错：{e}"
+
+    @filter.llm_tool(name="wikidot_list_members")
+    async def llm_tool_wikidot_members(self, event: AstrMessageEvent):
+        """获取 Wikidot 站点的成员列表（用户名与加入日期）。当用户想知道站点有哪些成员时调用。
+
+        Args:
+        """
+        hint = self._wikidot_tool_guard()
+        if hint:
+            return hint
+        try:
+            return await self._wikidot_handler.tool_list_members()
+        except WikidotError as e:
+            return f"获取成员列表失败: {e}"
+        except Exception as e:
+            logger.error(f"[LLMTool] Wikidot 成员列表异常: {e}", exc_info=True)
+            return f"获取成员列表时出错：{e}"
+
+    @filter.llm_tool(name="wikidot_forum_layout")
+    async def llm_tool_wikidot_forum(self, event: AstrMessageEvent):
+        """获取 Wikidot 站点的论坛版块结构（分组与各版块名称）。当用户想了解论坛版块时调用。
+
+        Args:
+        """
+        hint = self._wikidot_tool_guard()
+        if hint:
+            return hint
+        try:
+            return await self._wikidot_handler.tool_forum_layout()
+        except WikidotError as e:
+            return f"获取论坛结构失败: {e}"
+        except Exception as e:
+            logger.error(f"[LLMTool] Wikidot 论坛结构异常: {e}", exc_info=True)
+            return f"获取论坛结构时出错：{e}"
+
+    @filter.llm_tool(name="wikidot_site_settings")
+    async def llm_tool_wikidot_settings(self, event: AstrMessageEvent):
+        """获取 Wikidot 站点的常规设置（名称、副标题、描述、语言、默认页、欢迎页）。当用户询问站点信息时调用。
+
+        Args:
+        """
+        hint = self._wikidot_tool_guard()
+        if hint:
+            return hint
+        try:
+            return await self._wikidot_handler.tool_site_settings()
+        except WikidotError as e:
+            return f"获取站点设置失败: {e}"
+        except Exception as e:
+            logger.error(f"[LLMTool] Wikidot 站点设置异常: {e}", exc_info=True)
+            return f"获取站点设置时出错：{e}"
 
     async def _llm_fetch_pixiv(
         self, event: AstrMessageEvent, params: Dict[str, Any]
@@ -5218,6 +5394,12 @@ class CurrentCortexPlugin(Star):
         if hasattr(self, "_connection_pool"):
             await self._connection_pool.stop()
             logger.info("✅ CurrentCortex 连接池已停止")
+        if getattr(self, "_wikidot_client", None) is not None:
+            try:
+                await self._wikidot_client.logout()
+                logger.info("✅ Wikidot 会话已注销")
+            except Exception as e:
+                logger.debug(f"[Wikidot] 注销会话失败（忽略）: {e}")
 
     @filter.command("dglab", alias={"电击"})
     async def dglab_command(self, event: AstrMessageEvent):
@@ -5239,6 +5421,24 @@ class CurrentCortexPlugin(Star):
                 f"❌ CurrentCortex 命令执行失败\n"
                 f"📝 错误: {str(e)}\n"
                 f"💡 发送 /dglab help 查看帮助"
+            )
+
+    @filter.command("wikidot", alias={"wd", "维基"})
+    async def wikidot_command(self, event: AstrMessageEvent):
+        """通过 Wikidot 前端 JS 接口编辑页面与管理站点。"""
+        if not getattr(self, "_wikidot_enable", False) or self._wikidot_handler is None:
+            yield event.plain_result(
+                "⚠️ Wikidot 功能未启用\n💡 请在插件配置中开启 wikidot_enable 并填写站点与账号"
+            )
+            return
+        message_str = event.message_str.strip()
+        try:
+            async for result in self._wikidot_handler.handle_command(event, message_str):
+                yield result
+        except Exception as e:
+            logger.error(f"[Wikidot] 命令处理异常: {e}", exc_info=True)
+            yield event.plain_result(
+                f"❌ Wikidot 命令执行失败\n📝 错误: {e}\n💡 发送 /wikidot 帮助 查看用法"
             )
 
     @filter.command("apitest", alias={"连通测试", "接口测试"})
