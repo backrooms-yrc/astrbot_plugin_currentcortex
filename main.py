@@ -1161,7 +1161,7 @@ def _remove_file_safe(file_path: str) -> None:
     "astrbot_plugin_currentcortex",
     "Rcst20",
     "多功能 AstrBot 插件（CurrentCortex）—— Pixiv 随机图片 ·网易云点歌 ·小红书/B站/抖音媒体解析 ·每日一言 ·天气 ·男娘 ·DG-LAB（郊狼） 设备管理 ·Wikidot 站点管理 ·跨群聊记忆 ·按群聊开关。基于 LeiZ API。",
-    "2.3.0",
+    "2.3.1",
 )
 class CurrentCortexPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -4233,6 +4233,18 @@ class CurrentCortexPlugin(Star):
         call = getattr(api, "call_action", None) if api is not None else None
         return call if callable(call) else None
 
+    @staticmethod
+    def _mark_event_send_handled(event: AstrMessageEvent) -> None:
+        """置位 event._has_send_oper，防止命令结束后同一条消息再进 LLM 管线。
+
+        AstrBot ProcessStage 以该标志（仅 event.send() 会置位）判断命令是否
+        已实际发出内容；OneBot call_action 直传不经过 event.send。若不置位，
+        带唤醒前缀的 /音乐 文件 在上传成功后仍被视作「未处理」，同一条消息
+        再进 LLM，LLM 调用 play_song 工具多发一条语音条。
+        """
+        if hasattr(event, "_has_send_oper"):
+            event._has_send_oper = True
+
     async def _send_music_file(
         self, event: AstrMessageEvent, file_path: str, file_name: str
     ) -> bool:
@@ -4267,6 +4279,7 @@ class CurrentCortexPlugin(Star):
                         file=abs_path,
                         name=file_name,
                     )
+                    self._mark_event_send_handled(event)
                     logger.info(
                         f"[Music] 已通过 upload_group_file 发送: {file_name} -> {abs_path}"
                     )
@@ -4284,6 +4297,7 @@ class CurrentCortexPlugin(Star):
                         file=abs_path,
                         name=file_name,
                     )
+                    self._mark_event_send_handled(event)
                     logger.info(
                         f"[Music] 已通过 upload_private_file 发送: {file_name} -> {abs_path}"
                     )

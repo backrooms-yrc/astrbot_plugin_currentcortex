@@ -154,6 +154,9 @@ class TestPlugin:
     _download_source_audio_to_temp = main.CurrentCortexPlugin._download_source_audio_to_temp
     _download_audio_to_temp = main.CurrentCortexPlugin._download_audio_to_temp
     _send_music_file = main.CurrentCortexPlugin._send_music_file
+    _mark_event_send_handled = staticmethod(
+        main.CurrentCortexPlugin._mark_event_send_handled
+    )
     _resolve_onebot_call_action = staticmethod(
         main.CurrentCortexPlugin._resolve_onebot_call_action
     )
@@ -316,6 +319,8 @@ class _FakeEvent:
         self._sender_id = sender_id
         self.bot = bot
         self.sent = []
+        # 对齐真实 AstrMessageEvent：send() 置位 _has_send_oper
+        self._has_send_oper = False
 
     def get_group_id(self):
         return self._group_id
@@ -328,6 +333,7 @@ class _FakeEvent:
 
     async def send(self, message):
         self.sent.append(message)
+        self._has_send_oper = True
 
 
 class _FakeBot:
@@ -358,6 +364,8 @@ async def test_send_music_file_prefers_onebot_group_upload(temp_dir: Path):
         )
     ]
     assert event.sent == []
+    # OneBot 直传不经过 event.send，必须显式置位，否则同一条消息会再进 LLM 管线
+    assert event._has_send_oper is True
 
 
 async def test_send_music_file_private_upload_and_fallback(temp_dir: Path):
@@ -371,12 +379,33 @@ async def test_send_music_file_private_upload_and_fallback(temp_dir: Path):
     assert bot.calls[0][0] == "upload_private_file"
     assert bot.calls[0][1]["user_id"] == 3557197375
     assert event.sent == []
+    assert event._has_send_oper is True
 
     # OneBot 不可用时回退 Comp.File
     event2 = _FakeEvent(group_id="1", sender_id="2", bot=None)
     ok2 = await TestPlugin()._send_music_file(event2, str(source), "song.mp3")
     assert ok2 is True
     assert event2.sent  # 走了 event.send(Comp.File)
+    assert event2._has_send_oper is True
+
+
+async def test_send_music_file_failure_keeps_event_unhandled(temp_dir: Path):
+    """上传失败时不置位：此时命令会 yield 失败提示（经 event.send 发出）。"""
+    source = temp_dir / "broken.mp3"
+    source.write_bytes(b"mp3-bytes")
+
+    class _BoomBot:
+        async def call_action(self, action, **kwargs):
+            raise RuntimeError("retcode=1200")
+
+    event = _FakeEvent(group_id="123", sender_id="999", bot=_BoomBot())
+    # send 也失败（如平台断连），命令只能返回 False 由上层提示
+    event.send = None
+
+    ok = await TestPlugin()._send_music_file(event, str(source), "broken.mp3")
+
+    assert ok is False
+    assert event._has_send_oper is False
 
 
 async def test_raw_download_retries_on_timeout(temp_dir: Path):
@@ -456,11 +485,12 @@ def main_test():
         test_play_song_command_parsing()
         run(test_send_music_file_prefers_onebot_group_upload(temp_dir))
         run(test_send_music_file_private_upload_and_fallback(temp_dir))
+        run(test_send_music_file_failure_keeps_event_unhandled(temp_dir))
         run(test_raw_download_retries_on_timeout(temp_dir))
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-    print("✅ 音乐音频回归测试通过（11 项）")
+    print("✅ 音乐音频回归测试通过（12 项）")
 
 
 if __name__ == "__main__":
