@@ -179,6 +179,17 @@
     "default": 100,
     "slider": {"min": 10, "max": 500, "step": 10}
   },
+  "media_auto_parse_enable": {
+    "description": "【链接自动解析】开启后，消息中侦测到 小红书/B站/抖音/微博 链接时自动解析并回复，无需发送 /解析 命令。命令消息不会重复触发；/开关 off media 可按群关闭（命令与自动解析一并关闭）",
+    "type": "bool",
+    "default": true
+  },
+  "media_auto_parse_dedup_min": {
+    "description": "链接自动解析的去重窗口（分钟）：同一会话内相同链接在该时间内只自动解析一次，避免群里反复转发同一链接刷屏；/解析 命令不受此限制，可随时强制重解析。0 = 不去重。默认 30",
+    "type": "int",
+    "default": 30,
+    "slider": {"min": 0, "max": 240, "step": 5}
+  },
   "group_switch_enable": {
     "description": "启用「按群聊独立开关插件」功能。开启后，可用 /开关 命令在单个群聊中关闭/开启本插件，支持只关某一类功能（如 /开关 off media 2h 只关媒体解析）",
     "type": "bool",

@@ -150,6 +150,30 @@ if plugin_parent not in sys.path:
 
 # main.py 顶部的相对导入中，重依赖模块替换为空桩；
 # cross_group_memory / group_switch_store 用真实实现（本测试的对象）。
+class _StubURLExtractor:
+    """URLExtractor 桩：自动解析监听器只用到 detect_platform。"""
+
+    @staticmethod
+    def detect_platform(text):
+        text = text or ""
+        if "bilibili.com/video/" in text or "b23.tv/" in text:
+            return "bilibili"
+        if "xiaohongshu.com" in text or "xhslink.com" in text:
+            return "xiaohongshu"
+        if "douyin.com" in text:
+            return "douyin"
+        if "weibo.com" in text or "weibo.cn" in text or "t.cn/" in text:
+            return "weibo"
+        return None
+
+    @staticmethod
+    def extract_bilibili(text):
+        detected = _StubURLExtractor.detect_platform(text)
+        if detected == "bilibili":
+            return {"type": "bv", "id": "BV1stub"}
+        return None
+
+
 for module_name, attributes in {
     "dglab_device_store": {"DeviceStore": object},
     "dglab_connection_pool": {"DeviceConnectionPool": object},
@@ -160,7 +184,7 @@ for module_name, attributes in {
     "media_parser": {
         "MediaParserManager": object,
         "MediaParserError": Exception,
-        "URLExtractor": object,
+        "URLExtractor": _StubURLExtractor,
     },
 }.items():
     module = types.ModuleType(f"{PKG}.{module_name}")
@@ -215,6 +239,14 @@ class FakeEvent:
 
     def get_sender_name(self):
         return "tester"
+
+    def get_extra(self, key, default=None):
+        return default
+
+    async def send(self, result):
+        if not hasattr(self, "sent"):
+            self.sent = []
+        self.sent.append(result)
 
     def plain_result(self, text):
         return ("plain", text)
@@ -927,6 +959,88 @@ def test_parsed_video_source_and_fallback_guards():
     assert inst._parsed_video_fallback_text("xiaohongshu", {}) == ""
 
 
+def _make_auto_parse_inst(
+    manager, *, enable=True, dedup_min=30, switch_store=None
+):
+    inst = PluginCls.__new__(PluginCls)
+    inst._cross_group_enable = False
+    inst._cross_group_store = None
+    inst._media_parser = manager
+    inst._media_video_send_enable = False
+    inst._media_video_max_mb = 100
+    inst._media_auto_parse_enable = enable
+    inst._media_auto_parse_dedup_min = dedup_min
+    inst._media_auto_parse_seen = {}
+    inst._group_switch_enable = switch_store is not None
+    inst._group_switch_store = switch_store
+    return inst
+
+
+def _sent_texts(event):
+    return "\n".join(str(item[1]) for item in getattr(event, "sent", []))
+
+
+def test_auto_parse_triggers_on_plain_link():
+    """普通闲聊消息中含受支持平台链接时自动解析并回复。"""
+    inst = _make_auto_parse_inst(_BiliMediaParserManager())
+    ev = FakeEvent("看看这个 https://b23.tv/abc 哈哈哈")
+    asyncio.run(inst.on_media_link_auto_parse(ev))
+    text = _sent_texts(ev)
+    assert "B站视频解析" in text and "📥 下载：" in text, text
+
+
+def test_auto_parse_skips_commands_and_unsupported_links():
+    """命令前缀消息与不受支持平台的链接不触发自动解析。"""
+    inst = _make_auto_parse_inst(_BiliMediaParserManager())
+    for msg in (
+        "/解析 https://b23.tv/abc",
+        "!bilibili https://b23.tv/abc",
+        "刚看了个仓库 https://github.com/example/repo 挺不错",
+        "今天天气不错",
+    ):
+        ev = FakeEvent(msg)
+        asyncio.run(inst.on_media_link_auto_parse(ev))
+        assert not getattr(ev, "sent", []), (msg, getattr(ev, "sent", []))
+
+
+def test_auto_parse_dedup_same_link_same_chat():
+    """同一会话窗口期内相同链接只自动解析一次；不同链接不受影响。"""
+    inst = _make_auto_parse_inst(_BiliMediaParserManager())
+    ev1 = FakeEvent("https://b23.tv/abc")
+    asyncio.run(inst.on_media_link_auto_parse(ev1))
+    assert "B站视频解析" in _sent_texts(ev1)
+    ev2 = FakeEvent("再看一遍 https://b23.tv/abc")
+    asyncio.run(inst.on_media_link_auto_parse(ev2))
+    assert not getattr(ev2, "sent", []), ev2.sent
+    ev3 = FakeEvent("https://www.bilibili.com/video/BV1other")
+    asyncio.run(inst.on_media_link_auto_parse(ev3))
+    assert "B站视频解析" in _sent_texts(ev3)
+
+
+def test_auto_parse_respects_switch_and_disable():
+    """总开关关闭或 media 域被 /开关 off media 关闭时不自动解析。"""
+    inst = _make_auto_parse_inst(_BiliMediaParserManager(), enable=False)
+    ev = FakeEvent("https://b23.tv/abc")
+    asyncio.run(inst.on_media_link_auto_parse(ev))
+    assert not getattr(ev, "sent", [])
+
+    d = _tmp_data_dir()
+    try:
+        store = GroupSwitchStore(data_dir=d)
+        store.set_disabled("aiocqhttp:GroupMessage:10000", scope="media")
+        inst2 = _make_auto_parse_inst(_BiliMediaParserManager(), switch_store=store)
+        ev2 = FakeEvent("https://b23.tv/abc")
+        asyncio.run(inst2.on_media_link_auto_parse(ev2))
+        assert not getattr(ev2, "sent", [])
+        # 其他功能域关闭不影响媒体自动解析（换一个只关 music 的群）
+        store.set_disabled("aiocqhttp:GroupMessage:22222", scope="music")
+        ev3 = FakeEvent("https://b23.tv/abc", umo="aiocqhttp:GroupMessage:22222")
+        asyncio.run(inst2.on_media_link_auto_parse(ev3))
+        assert "B站视频解析" in _sent_texts(ev3)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 TESTS = [
     # cross_group_memory
     test_legacy_string_records_migrate_on_load,
@@ -969,6 +1083,11 @@ TESTS = [
     test_media_parse_video_send_fallback_link,
     test_media_parse_video_direct_send_no_link,
     test_parsed_video_source_and_fallback_guards,
+    # 链接自动解析（v2.5.0）
+    test_auto_parse_triggers_on_plain_link,
+    test_auto_parse_skips_commands_and_unsupported_links,
+    test_auto_parse_dedup_same_link_same_chat,
+    test_auto_parse_respects_switch_and_disable,
 ]
 
 

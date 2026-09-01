@@ -399,6 +399,14 @@ MEDIA_PARSER_HELP_TEXT = """🔍 媒体内容解析 使用说明
   /weibo <链接>         解析微博帖子（别名：/微博）
   /解析 help            显示此帮助信息
 
+📌 链接自动解析（无需命令）
+  开启后，消息中侦测到 小红书/B站/抖音/微博 链接时自动解析并回复
+  （media_auto_parse_enable，默认开启）
+  • 命令消息不会重复触发（/解析 等命令自行解析）
+  • 同一会话相同链接 30 分钟内只自动解析一次，反复转发不刷屏
+    （media_auto_parse_dedup_min，0 = 不去重；/解析 命令不受此限制）
+  • /开关 off media 可按群关闭（命令与自动解析一并关闭）
+
 📌 支持的链接格式
   小红书：
     • https://www.xiaohongshu.com/explore/xxx
@@ -1226,6 +1234,16 @@ class CurrentCortexPlugin(Star):
         self._media_video_max_mb = max(
             1, int(config.get("media_video_max_mb", 100))
         )
+        # 链接自动解析：消息中侦测到受支持平台链接时无需命令直接解析
+        self._media_auto_parse_enable = bool(
+            config.get("media_auto_parse_enable", True)
+        )
+        # 同一会话内相同链接的自动解析去重窗口（分钟，0=不去重）
+        self._media_auto_parse_dedup_min = max(
+            0, int(config.get("media_auto_parse_dedup_min", 30))
+        )
+        # 会话级自动解析去重表：umo -> {url: 最近自动解析时间戳}
+        self._media_auto_parse_seen: Dict[str, Dict[str, float]] = {}
         self._media_parser = MediaParserManager(
             timeout=self._request_timeout,
             cache_enable=self._media_parse_cache_enable,
@@ -5234,6 +5252,13 @@ class CurrentCortexPlugin(Star):
         if not urls:
             yield event.plain_result("请提供有效的媒体链接")
             return
+        async for item in self._respond_media_parse(event, urls):
+            yield item
+
+    async def _respond_media_parse(
+        self, event: AstrMessageEvent, urls: List[str]
+    ):
+        """逐条解析并产出回复（/解析 命令与链接自动解析共用此流程）。"""
         if len(urls) > self._MEDIA_BATCH_LIMIT:
             # 先取原始条数再截断，否则提示里的数量恒等于上限值
             total = len(urls)
@@ -5271,6 +5296,89 @@ class CurrentCortexPlugin(Star):
                     f"解析失败{f'（链接 {idx}/{len(urls)}）' if multiple else ''}: "
                     f"{self._format_media_error(e)}"
                 )
+
+    @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
+    async def on_media_link_auto_parse(self, event: AstrMessageEvent):
+        """侦测到消息含受支持平台的链接时自动解析，无需 /解析 命令。
+
+        守卫顺序：总开关 → 命令消息跳过（已由命令处理器接管，避免双重回复）
+        → media 域分级开关（/开关 off media 同时关闭命令与自动解析）
+        → 提取受支持平台的链接 → 同会话去重（同链接反复转发不刷屏）
+        → 共用 _respond_media_parse（含视频直发与跨群记忆）。
+        """
+        if not self._media_auto_parse_enable:
+            return
+        try:
+            # 已命中命令处理器的消息不再自动解析（/解析 等命令自身会触发）
+            if event.get_extra("handlers_parsed_params", {}):
+                return
+            message = (event.message_str or "").strip()
+            if not message or message[:1] in ("/", "!", "！"):
+                return
+            if not self._is_media_scope_enabled(event):
+                return
+            urls = self._filter_auto_parse_seen(
+                event, self._extract_supported_media_urls(message)
+            )
+            if not urls:
+                return
+            async for item in self._respond_media_parse(event, urls):
+                await event.send(item)
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"[MediaParse] 自动解析处理异常: {e}", exc_info=True)
+
+    _MEDIA_AUTO_URL_RE = re.compile(r"https?://[^\s]+")
+
+    def _is_media_scope_enabled(self, event: AstrMessageEvent) -> bool:
+        """媒体解析功能域（/开关 off media）是否在当前会话启用。"""
+        if not self._group_switch_enable or self._group_switch_store is None:
+            return True
+        umo = getattr(event, "unified_msg_origin", "") or ""
+        if not umo:
+            return True
+        return self._group_switch_store.is_enabled(umo, "media")
+
+    def _extract_supported_media_urls(self, message: str) -> List[str]:
+        """提取消息中受支持平台（小红书/B站/抖音/微博）的链接，去重保序。"""
+        urls: List[str] = []
+        seen = set()
+        for match in self._MEDIA_AUTO_URL_RE.finditer(message or ""):
+            url = match.group(0).strip().rstrip("，。,.！!）)")
+            if url and url not in seen and URLExtractor.detect_platform(url):
+                seen.add(url)
+                urls.append(url)
+        return urls
+
+    def _filter_auto_parse_seen(
+        self, event: AstrMessageEvent, urls: List[str]
+    ) -> List[str]:
+        """按会话过滤窗口期内已自动解析过的链接（防同链接反复刷屏）。
+
+        命中即记录时间戳（含解析失败的链接——自动模式下宁可少发，
+        也不反复报错）；/解析 命令不受此表约束，随时可强制重解析。
+        """
+        if not urls:
+            return urls
+        if self._media_auto_parse_dedup_min <= 0:
+            return urls
+        umo = (
+            getattr(event, "unified_msg_origin", "")
+            or event.get_platform_id()
+            or "default"
+        )
+        now = time.time()
+        window = self._media_auto_parse_dedup_min * 60
+        seen_map = self._media_auto_parse_seen.setdefault(umo, {})
+        # 惰性清理过期项，防长期运行膨胀
+        if len(seen_map) > 128:
+            for key in [
+                key for key, ts in seen_map.items() if now - ts >= window
+            ]:
+                seen_map.pop(key, None)
+        fresh = [u for u in urls if now - seen_map.get(u, 0.0) >= window]
+        for url in fresh:
+            seen_map[url] = now
+        return fresh
 
     @filter.command("xhs", alias={"小红书"})
     async def xhs_parse_command(self, event: AstrMessageEvent):
