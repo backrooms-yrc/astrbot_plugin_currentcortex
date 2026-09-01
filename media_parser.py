@@ -66,10 +66,13 @@ class URLExtractor:
         ),
     ]
 
-    # B站链接模式
+    # B站链接模式（短链模式单独持有引用：短码不是视频 ID，需跳转还原）
+    BILIBILI_SHORT_PATTERN = re.compile(
+        r"https?://b23\.tv/(BV[0-9A-Za-z]+|[a-zA-Z0-9]+)"
+    )
     BILIBILI_PATTERNS = [
         re.compile(r"https?://(?:www\.)?bilibili\.com/video/(BV[0-9A-Za-z]+)"),
-        re.compile(r"https?://b23\.tv/(BV[0-9A-Za-z]+|[a-zA-Z0-9]+)"),
+        BILIBILI_SHORT_PATTERN,
         re.compile(r"https?://(?:www\.)?bilibili\.com/video/av(\d+)"),
     ]
 
@@ -99,15 +102,20 @@ class URLExtractor:
 
     @classmethod
     def extract_bilibili(cls, text: str) -> Optional[Dict[str, str]]:
-        """提取B站视频ID，返回 {'type': 'bv'|'av', 'id': str}"""
+        """提取B站视频ID，返回 {'type': 'bv'|'av'|'short', 'id': str}
+
+        b23.tv 短链的短码（如 KZclOli）不是 av 号，标记为 'short'，
+        由解析器跟随 302 跳转还原成 BV 号后再取详情。
+        """
         for pattern in cls.BILIBILI_PATTERNS:
             match = pattern.search(text)
             if match:
                 vid = match.group(1)
                 if vid.startswith("BV"):
                     return {"type": "bv", "id": vid}
-                else:
-                    return {"type": "av", "id": vid}
+                if pattern is cls.BILIBILI_SHORT_PATTERN:
+                    return {"type": "short", "id": vid}
+                return {"type": "av", "id": vid}
         return None
 
     @classmethod
@@ -401,7 +409,8 @@ class BilibiliParser(BaseMediaParser):
     async def parse(self, url_or_text: str) -> Dict[str, Any]:
         """解析B站链接"""
         video_info = URLExtractor.extract_bilibili(url_or_text)
-        if not video_info:
+        # b23.tv 短码不是视频 ID，需要跟随跳转还原成 BV 号
+        if not video_info or video_info["type"] == "short":
             # 尝试从短链接解析
             if "b23.tv" in url_or_text:
                 bvid = await self._resolve_short_link(url_or_text)
@@ -422,13 +431,25 @@ class BilibiliParser(BaseMediaParser):
         return await self._fetch_video_detail(vid)
 
     async def _resolve_short_link(self, short_url: str) -> str:
-        """解析B站短链接"""
+        """解析B站短链接，跟随跳转从最终 URL 中还原 BV 号"""
+        # 分享文案可能带前缀文字（如「【标题】 https://b23.tv/xxx」），先抽出 URL 本身
+        url_match = re.search(r"https?://b23\.tv/[^\s，。,.！!）)]+", short_url)
+        if url_match:
+            request_url = url_match.group(0)
+        else:
+            bare = re.search(r"b23\.tv/([a-zA-Z0-9]+)", short_url)
+            if not bare:
+                raise MediaParserError(
+                    "B站短链接格式无法识别，请发送完整链接",
+                    kind=MediaParserError.KIND_FORMAT,
+                )
+            request_url = f"https://b23.tv/{bare.group(1)}"
         async with aiohttp.ClientSession(
             timeout=self._timeout, headers=self._headers
         ) as session:
             try:
                 async with session.get(
-                    short_url, allow_redirects=True, ssl=False
+                    request_url, allow_redirects=True, ssl=False
                 ) as resp:
                     final_url = str(resp.url)
                     match = re.search(r"/(BV[0-9A-Za-z]+)", final_url)
@@ -437,7 +458,8 @@ class BilibiliParser(BaseMediaParser):
             except Exception as e:
                 logger.error(f"[Bilibili] 短链接解析失败: {e}")
         raise MediaParserError(
-            "B站短链接解析失败，请使用完整链接", kind=MediaParserError.KIND_EXPIRED
+            "B站短链接解析失败（可能已失效或不是视频链接），请使用完整链接",
+            kind=MediaParserError.KIND_EXPIRED,
         )
 
     @staticmethod
@@ -450,7 +472,9 @@ class BilibiliParser(BaseMediaParser):
         add = 8728348608
 
         av_number = (av_number ^ xor) + add
-        r = list("BV1xx4x1x7x")
+        # 模板必须 12 位（BV 号固定长度），末位下标 11 会被 s[0] 覆盖，
+        # 少一位会导致 r[11] 赋值越界
+        r = list("BV1xx4x1x7xx")
         for i in range(6):
             r[s[i]] = table[av_number // 58**i % 58]
         return "".join(r)
@@ -530,24 +554,49 @@ class BilibiliParser(BaseMediaParser):
 
         return result
 
-    async def _fetch_download_url(self, bvid: str, cid: int) -> Optional[str]:
-        """尝试获取视频下载地址（使用官方API）"""
+    async def _fetch_download_url(
+        self, bvid: str, cid: int
+    ) -> Optional[Dict[str, Any]]:
+        """尝试获取视频下载地址（官方 playurl 接口，游客身份）。
+
+        注意 fnval 必须传 0（传统模式）：B 站在 fnval=16（DASH）下只返回
+        音视频分离的 dash 流、不再填 durl，而分离流没有音轨不能直接播放。
+        fnval=0 返回合并好的 mp4/flv（durl），游客一般可拿到最高 720p。
+        长视频 durl 会切成多段，segments>1 时只发首段是不完整视频，
+        该信息透传给上层决定是否发送。
+
+        Returns:
+            ``{"url": 直链, "size": 字节数, "segments": 段数, "quality": 清晰度}``，
+            失败返回 None。
+        """
         api_url = "https://api.bilibili.com/x/player/playurl"
         params = {
             "bvid": bvid,
             "cid": cid,
             "qn": "80",
             "fnver": "0",
-            "fnval": "16",
+            "fnval": "0",
             "fourk": "1",
         }
 
         try:
             data = await self._fetch_json(api_url, params=params)
             if data.get("code") == 0:
-                durl = data.get("data", {}).get("durl", [])
+                durl = data.get("data", {}).get("durl", []) or []
                 if durl:
-                    return durl[0].get("url", "")
+                    first = durl[0]
+                    url = first.get("url", "")
+                    if url.startswith("//"):
+                        url = "https:" + url
+                    if url:
+                        return {
+                            "url": url,
+                            "size": int(first.get("size", 0) or 0),
+                            "segments": len(durl),
+                            "quality": int(
+                                data.get("data", {}).get("quality", 0) or 0
+                            ),
+                        }
         except Exception as e:
             logger.warning(f"[Bilibili] 获取下载地址失败: {e}")
 

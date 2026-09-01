@@ -386,9 +386,9 @@ MEDIA_PARSER_HELP_TEXT = """🔍 媒体内容解析 使用说明
 
 📌 支持平台
   • 小红书（xiaohongshu）— 笔记图文/视频解析
-  • Bilibili（bilibili）— 视频信息及下载链接解析
-  • 抖音（douyin）— 短视频解析
-  • 微博（weibo）— 帖子图文/视频解析
+  • Bilibili（bilibili）— 视频解析并直接发送视频（失败时回退下载直链）
+  • 抖音（douyin）— 短视频解析并直接发送视频
+  • 微博（weibo）— 帖子图文/视频解析，视频直接发送
 
 📌 基本命令
   /解析 <链接>           自动识别平台并解析内容（别名：/解析）
@@ -1217,6 +1217,14 @@ class CurrentCortexPlugin(Star):
         )
         self._media_parse_cache_ttl = max(
             0, int(config.get("media_parse_cache_ttl", 600))
+        )
+        # 解析出视频后直接下载并发送视频消息（B站/抖音/微博）；
+        # 下载失败或超出大小上限时回退为发送直链文本
+        self._media_video_send_enable = bool(
+            config.get("media_video_send_enable", True)
+        )
+        self._media_video_max_mb = max(
+            1, int(config.get("media_video_max_mb", 100))
         )
         self._media_parser = MediaParserManager(
             timeout=self._request_timeout,
@@ -5011,6 +5019,210 @@ class CurrentCortexPlugin(Star):
         except Exception as e:  # noqa: BLE001
             logger.warning(f"[CrossGroupMemory] 记录媒体解析失败: {e}")
 
+    # ------------------------------------------------------------------ #
+    # 视频直发：解析成功后把视频流下载到本地，再以视频消息发出。
+    # 平台直链普遍带 Referer 防盗链（B站 upos CDN 最典型），聊天窗口里
+    # 点开多半播不了，所以宁可服务端代下载也不直接甩链接；下载/发送失败
+    # 或超出大小上限时才回退为直链文本。
+    # ------------------------------------------------------------------ #
+
+    _MEDIA_VIDEO_UA = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    )
+
+    def _parsed_video_source(
+        self, platform: str, data: Dict[str, Any]
+    ) -> Optional[tuple]:
+        """从解析结果中取出可直发的视频源。
+
+        Returns:
+            ``(url, headers, file_stem)``；无可直发源时返回 None。
+            B站长视频 durl 会切多段，只发首段是不完整视频，直接跳过。
+        """
+        if platform == "bilibili":
+            info = data.get("download_url")
+            if not isinstance(info, dict) or not info.get("url"):
+                return None
+            if int(info.get("segments", 0) or 0) > 1:
+                return None
+            headers = {
+                "User-Agent": self._MEDIA_VIDEO_UA,
+                "Referer": "https://www.bilibili.com/",
+            }
+            return info["url"], headers, data.get("bvid") or "bilibili_video"
+        if platform in ("douyin", "weibo"):
+            url = data.get("video_url", "")
+            if not url:
+                return None
+            stem = str(data.get("title") or data.get("mid") or platform)[:40]
+            return url, {"User-Agent": self._MEDIA_VIDEO_UA}, stem
+        return None
+
+    def _parsed_video_fallback_text(self, platform: str, data: Dict[str, Any]) -> str:
+        """视频直发失败/关闭/超限时的直链兜底文本（空串表示无兜底）。"""
+        if platform == "bilibili":
+            info = data.get("download_url")
+            if not isinstance(info, dict) or not info.get("url"):
+                return ""
+            if int(info.get("segments", 0) or 0) > 1:
+                return "📥 视频较长（多段流），无法直接发送，请在客户端内打开原链接观看"
+            return f"📥 下载：{info['url']}"
+        if platform == "douyin" and data.get("video_url"):
+            return f"📥 无水印视频：{data['video_url']}"
+        if platform == "weibo" and data.get("video_url"):
+            return f"📥 视频：{data['video_url']}"
+        return ""
+
+    async def _send_parsed_video(
+        self, event: AstrMessageEvent, platform: str, data: Dict[str, Any]
+    ) -> bool:
+        """下载解析出的视频并以视频消息发出；失败返回 False 走直链兜底。"""
+        if not self._media_video_send_enable:
+            return False
+        source = self._parsed_video_source(platform, data)
+        if source is None:
+            return False
+        url, headers, stem = source
+        # B站响应自带 size 可预检；其余平台在下载中按上限截断
+        known_size = 0
+        if platform == "bilibili" and isinstance(data.get("download_url"), dict):
+            known_size = int(data["download_url"].get("size", 0) or 0)
+        path = await self._download_media_video_to_temp(
+            url, stem, headers=headers, known_size=known_size
+        )
+        if not path:
+            return False
+        try:
+            await event.send(event.chain_result([Comp.Video(file=path)]))
+            logger.info(
+                f"[MediaParse] 已发送视频消息: {os.path.basename(path)} "
+                f"({os.path.getsize(path) / 1048576:.2f}MB)"
+            )
+            return True
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[MediaParse] 视频消息发送失败: {e}", exc_info=True)
+            return False
+
+    async def _download_media_video_to_temp(
+        self,
+        url: str,
+        name: str,
+        headers: Optional[Dict[str, str]] = None,
+        known_size: int = 0,
+    ) -> Optional[str]:
+        """把视频流下载到临时目录（astrbot_media），带大小上限与有限重试。
+
+        上限通过已知 size / Content-Length 预检 + 流式累计双保险，
+        超限立即中止并删除半成品文件。
+        """
+        max_bytes = self._media_video_max_mb * 1024 * 1024
+        if known_size and known_size > max_bytes:
+            logger.info(
+                f"[MediaParse] 视频过大跳过直发: {known_size / 1048576:.1f}MB "
+                f"> {self._media_video_max_mb}MB"
+            )
+            return None
+
+        temp_dir = os.path.join(tempfile.gettempdir(), "astrbot_media")
+        os.makedirs(temp_dir, exist_ok=True)
+        self._cleanup_old_audio_files(temp_dir)
+
+        safe_name = re.sub(r"[^\w\-.]", "_", name)[:50] or "video"
+        ext = ".flv" if ".flv" in url.lower() else ".mp4"
+
+        max_attempts = 2
+        backoff_base = 0.8
+        last_error: Optional[str] = None
+        for attempt in range(1, max_attempts + 1):
+            request_id = uuid.uuid4().hex[:12]
+            temp_path = os.path.join(temp_dir, f"{safe_name}_{request_id}{ext}")
+            downloaded = False
+            try:
+                # 上限放大：100MB 级视频在慢速链路下可能远超 30s
+                timeout = aiohttp.ClientTimeout(
+                    total=300, sock_connect=15, sock_read=90
+                )
+                async with aiohttp.ClientSession(
+                    timeout=timeout, headers=headers or {"User-Agent": self._MEDIA_VIDEO_UA}
+                ) as session:
+                    async with session.get(url) as resp:
+                        if resp.status != 200:
+                            last_error = f"HTTP {resp.status}"
+                            logger.warning(
+                                f"[MediaParse] 视频下载失败: {last_error} "
+                                f"(attempt {attempt}/{max_attempts})"
+                            )
+                            # 4xx 业务错误不重试（除 408/429）
+                            if resp.status < 500 and resp.status not in (408, 429):
+                                return None
+                        else:
+                            content_length = int(resp.headers.get("Content-Length") or 0)
+                            if content_length and content_length > max_bytes:
+                                logger.info(
+                                    f"[MediaParse] 视频过大跳过直发: "
+                                    f"{content_length / 1048576:.1f}MB "
+                                    f"> {self._media_video_max_mb}MB"
+                                )
+                                return None
+                            written = 0
+                            oversize = False
+                            with open(temp_path, "wb") as video_file:
+                                async for chunk in resp.content.iter_chunked(64 * 1024):
+                                    if not chunk:
+                                        continue
+                                    written += len(chunk)
+                                    if written > max_bytes:
+                                        oversize = True
+                                        break
+                                    video_file.write(chunk)
+                            if oversize:
+                                logger.info(
+                                    f"[MediaParse] 视频下载中超上限中止: "
+                                    f"> {self._media_video_max_mb}MB"
+                                )
+                                self._remove_file(temp_path)
+                                return None
+                            downloaded = written > 0
+                if downloaded:
+                    size = os.path.getsize(temp_path)
+                    if size <= 0:
+                        last_error = "空文件"
+                        self._remove_file(temp_path)
+                    else:
+                        logger.info(
+                            f"[MediaParse] 视频已下载: {temp_path} "
+                            f"({size / 1048576:.2f}MB)"
+                        )
+                        return temp_path
+            except asyncio.TimeoutError:
+                last_error = "超时"
+                logger.warning(
+                    f"[MediaParse] 视频下载超时 (attempt {attempt}/{max_attempts})"
+                )
+            except aiohttp.ClientError as e:
+                last_error = f"网络错误: {e}"
+                logger.warning(
+                    f"[MediaParse] 视频下载网络错误 "
+                    f"(attempt {attempt}/{max_attempts}): {e}"
+                )
+            except Exception as e:  # noqa: BLE001
+                last_error = f"{type(e).__name__}: {e}"
+                logger.warning(f"[MediaParse] 视频下载异常: {e}")
+                self._remove_file(temp_path)
+                return None
+            finally:
+                if not downloaded:
+                    self._remove_file(temp_path)
+
+            if attempt < max_attempts:
+                await asyncio.sleep(backoff_base * (2 ** (attempt - 1)))
+
+        logger.warning(
+            f"[MediaParse] 视频下载最终失败（{max_attempts} 次）: {name}; last={last_error}"
+        )
+        return None
+
     @filter.command("解析")
     async def media_parse_command(self, event: AstrMessageEvent):
         """自动解析小红书、B站、抖音、微博媒体链接（支持批量，最多 5 条）。"""
@@ -5043,6 +5255,11 @@ class CurrentCortexPlugin(Star):
                     yield item
                 # 解析记录计入跨群记忆（tag=media），供后续对话自然回溯
                 self._record_media_parse_memory(event, platform, data)
+                # 视频内容尝试直接发送（B站/抖音/微博）；失败或超限回退直链文本
+                if not await self._send_parsed_video(event, platform, data):
+                    fallback = self._parsed_video_fallback_text(platform, data)
+                    if fallback:
+                        yield event.plain_result(fallback)
             except MediaParserError as e:
                 yield event.plain_result(
                     f"解析失败{f'（链接 {idx}/{len(urls)}）' if multiple else ''}: "
@@ -5095,6 +5312,10 @@ class CurrentCortexPlugin(Star):
             for item in self._format_bilibili_response(data, event):
                 yield item
             self._record_media_parse_memory(event, "bilibili", data)
+            if not await self._send_parsed_video(event, "bilibili", data):
+                fallback = self._parsed_video_fallback_text("bilibili", data)
+                if fallback:
+                    yield event.plain_result(fallback)
         except MediaParserError as e:
             yield event.plain_result(f"B站解析失败: {self._format_media_error(e)}")
         except Exception as e:  # noqa: BLE001
@@ -5118,6 +5339,10 @@ class CurrentCortexPlugin(Star):
             for item in self._format_douyin_response(data, event):
                 yield item
             self._record_media_parse_memory(event, "douyin", data)
+            if not await self._send_parsed_video(event, "douyin", data):
+                fallback = self._parsed_video_fallback_text("douyin", data)
+                if fallback:
+                    yield event.plain_result(fallback)
         except MediaParserError as e:
             yield event.plain_result(f"抖音解析失败: {self._format_media_error(e)}")
         except Exception as e:  # noqa: BLE001
@@ -5141,6 +5366,10 @@ class CurrentCortexPlugin(Star):
             for item in self._format_weibo_response(data, event):
                 yield item
             self._record_media_parse_memory(event, "weibo", data)
+            if not await self._send_parsed_video(event, "weibo", data):
+                fallback = self._parsed_video_fallback_text("weibo", data)
+                if fallback:
+                    yield event.plain_result(fallback)
         except MediaParserError as e:
             yield event.plain_result(f"微博解析失败: {self._format_media_error(e)}")
         except Exception as e:  # noqa: BLE001
@@ -5243,7 +5472,6 @@ class CurrentCortexPlugin(Star):
         link = data.get("link", "")
         owner = data.get("owner", {})
         stat = data.get("stat", {})
-        download_url = data.get("download_url")
         pages = data.get("pages", [])
         owner_name = owner.get("name", "") if isinstance(owner, dict) else ""
         parts = ["📺 B站视频解析"]
@@ -5269,8 +5497,6 @@ class CurrentCortexPlugin(Star):
             parts.append(f"📄 简介：{desc[:200]}")
         if link:
             parts.append(f"🔗 链接：{link}")
-        if download_url:
-            parts.append(f"📥 下载：{download_url}")
         results = [event.plain_result("\n".join(parts))]
         if cover:
             results.append(event.image_result(cover))
@@ -5286,7 +5512,6 @@ class CurrentCortexPlugin(Star):
         comments = data.get("comments", "")
         shares = data.get("shares", "")
         cover = data.get("cover", "")
-        video_url = data.get("video_url", "")
         url = data.get("url", "")
         parts = ["🎵 抖音视频解析"]
         if title:
@@ -5306,8 +5531,6 @@ class CurrentCortexPlugin(Star):
             parts.append(f"📄 简介：{desc[:200]}")
         if url:
             parts.append(f"🔗 链接：{url}")
-        if video_url:
-            parts.append(f"📥 无水印视频：{video_url}")
         results = [event.plain_result("\n".join(parts))]
         if cover:
             results.append(event.image_result(cover))
@@ -5322,7 +5545,6 @@ class CurrentCortexPlugin(Star):
         comments = data.get("comments", "")
         likes = data.get("likes", "")
         images = data.get("images", [])
-        video_url = data.get("video_url", "")
         url = data.get("url", "")
         parts = ["📰 微博解析"]
         if author:
@@ -5340,8 +5562,6 @@ class CurrentCortexPlugin(Star):
             parts.append(f"📄 正文：{text[:200]}")
         if url:
             parts.append(f"🔗 链接：{url}")
-        if video_url:
-            parts.append(f"📥 视频：{video_url}")
         results = [event.plain_result("\n".join(parts))]
         if images:
             for img_url in images[:9]:

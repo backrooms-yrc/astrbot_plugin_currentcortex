@@ -853,6 +853,80 @@ class _FakeMediaParserManager:
         return {"platform": "", "data": {}}
 
 
+_BILI_DOWNLOAD_INFO = {
+    "url": "https://upos.example/video.mp4",
+    "size": 100,
+    "segments": 1,
+    "quality": 64,
+}
+
+
+class _BiliMediaParserManager:
+    """返回带 durl 直链信息的 B站解析桩。"""
+
+    async def parse(self, url):
+        return {
+            "platform": "bilibili",
+            "data": {
+                "title": "t",
+                "bvid": "BV1xx",
+                "download_url": dict(_BILI_DOWNLOAD_INFO),
+            },
+        }
+
+
+def _make_media_parse_inst(manager, video_enable=True):
+    inst = PluginCls.__new__(PluginCls)
+    inst._cross_group_enable = False
+    inst._cross_group_store = None
+    inst._media_parser = manager
+    inst._media_video_send_enable = video_enable
+    inst._media_video_max_mb = 100
+    return inst
+
+
+def test_media_parse_video_send_fallback_link():
+    """视频直发关闭时，回退输出直链文本。"""
+    inst = _make_media_parse_inst(_BiliMediaParserManager(), video_enable=False)
+    text = _texts(
+        _run_command(inst.media_parse_command(FakeEvent("/解析 https://b23.tv/x")))
+    )
+    assert "📥 下载：https://upos.example/video.mp4" in text, text
+
+
+def test_media_parse_video_direct_send_no_link():
+    """视频直发成功时不输出直链兜底（避免重复）。"""
+    inst = _make_media_parse_inst(_BiliMediaParserManager(), video_enable=True)
+    calls = []
+
+    async def _send_ok(event, platform, data):
+        calls.append((platform, data.get("bvid")))
+        return True
+
+    inst._send_parsed_video = _send_ok
+    text = _texts(
+        _run_command(inst.media_parse_command(FakeEvent("/解析 https://b23.tv/x")))
+    )
+    assert "📥 下载：" not in text, text
+    assert calls == [("bilibili", "BV1xx")], calls
+
+
+def test_parsed_video_source_and_fallback_guards():
+    """多段 durl 不直发（首段不完整）；直链必须带 Referer 头。"""
+    inst = PluginCls.__new__(PluginCls)
+    url, headers, stem = inst._parsed_video_source(
+        "bilibili", {"bvid": "BV1xx", "download_url": dict(_BILI_DOWNLOAD_INFO)}
+    )
+    assert url == _BILI_DOWNLOAD_INFO["url"] and stem == "BV1xx"
+    assert headers.get("Referer") == "https://www.bilibili.com/"
+    multi = dict(_BILI_DOWNLOAD_INFO, segments=3)
+    assert inst._parsed_video_source("bilibili", {"download_url": multi}) is None
+    assert "无法直接发送" in inst._parsed_video_fallback_text(
+        "bilibili", {"download_url": multi}
+    )
+    assert inst._parsed_video_fallback_text("xiaohongshu", {}) == ""
+
+
 TESTS = [
     # cross_group_memory
     test_legacy_string_records_migrate_on_load,
@@ -891,6 +965,10 @@ TESTS = [
     test_switch_on_scope_ordering_regression,
     test_switch_list_shows_scope_label,
     test_media_urls_extraction_and_batch_limit_message,
+    # 视频直发与兜底（v2.4.0）
+    test_media_parse_video_send_fallback_link,
+    test_media_parse_video_direct_send_no_link,
+    test_parsed_video_source_and_fallback_guards,
 ]
 
 

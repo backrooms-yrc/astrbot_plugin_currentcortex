@@ -168,6 +168,17 @@
     "default": 600,
     "slider": {"min": 60, "max": 3600, "step": 60}
   },
+  "media_video_send_enable": {
+    "description": "【视频直发】解析 B站/抖音/微博视频时，由机器人服务端代为下载视频流（自动携带 Referer 绕过防盗链）并直接发送视频消息，而不是甩一条聊天窗口里点不开的直链。下载失败、视频过长（多段流）或超出大小上限时自动回退为发送直链文本",
+    "type": "bool",
+    "default": true
+  },
+  "media_video_max_mb": {
+    "description": "视频直发的大小上限（MB）。超过上限的视频不下载，直接回退直链文本，避免大文件拖垮机器人或超出平台限制。默认 100",
+    "type": "int",
+    "default": 100,
+    "slider": {"min": 10, "max": 500, "step": 10}
+  },
   "group_switch_enable": {
     "description": "启用「按群聊独立开关插件」功能。开启后，可用 /开关 命令在单个群聊中关闭/开启本插件，支持只关某一类功能（如 /开关 off media 2h 只关媒体解析）",
     "type": "bool",
