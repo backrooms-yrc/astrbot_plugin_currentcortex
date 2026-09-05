@@ -164,8 +164,11 @@ class LeiZMediaAPI:
 
     BASE = "https://api.bileizhen.top"
 
-    def __init__(self, api_key: str = "", timeout: int = 20):
+    # B站目标清晰度代码：16=360P 32=480P 64=720P 80=1080P 112=1080P+
+    # 116=1080P60 120=4K 125=HDR 127=8K；请求不可用时 LeiZ 自动降级
+    def __init__(self, api_key: str = "", timeout: int = 20, bili_qn: int = 80):
         self._api_key = (api_key or "").strip()
+        self._bili_qn = max(16, min(127, int(bili_qn or 80)))
         self._timeout = aiohttp.ClientTimeout(total=timeout)
         self._headers = {
             "User-Agent": (
@@ -225,7 +228,8 @@ class LeiZMediaAPI:
         if not target:
             return None
         data = await self._get_json(
-            "/api/bilibili", {"url": target, "qn": "80", "codec": "avc"}
+            "/api/bilibili",
+            {"url": target, "qn": str(self._bili_qn), "codec": "avc"},
         )
         if not data or not data.get("bvid"):
             return None
@@ -558,10 +562,12 @@ class XiaoHongShuParser(BaseMediaParser):
 class BilibiliParser(BaseMediaParser):
     """B站视频解析器（优先 LeiZ API，失败回退官方接口）"""
 
-    def __init__(self, timeout: int = 20, leiz_api_key: str = ""):
+    def __init__(
+        self, timeout: int = 20, leiz_api_key: str = "", leiz_qn: int = 80
+    ):
         super().__init__(timeout)
         self._headers["Referer"] = "https://www.bilibili.com/"
-        self._leiz = LeiZMediaAPI(leiz_api_key, timeout)
+        self._leiz = LeiZMediaAPI(leiz_api_key, timeout, bili_qn=leiz_qn)
 
     async def parse(self, url_or_text: str) -> Dict[str, Any]:
         """解析B站链接"""
@@ -1120,9 +1126,12 @@ class MediaParserManager:
         cache_ttl: float = 600.0,
         cache_max_items: int = 128,
         leiz_api_key: str = "",
+        leiz_bili_qn: int = 80,
     ):
         self.xiaohongshu = XiaoHongShuParser(timeout)
-        self.bilibili = BilibiliParser(timeout, leiz_api_key=leiz_api_key)
+        self.bilibili = BilibiliParser(
+            timeout, leiz_api_key=leiz_api_key, leiz_qn=leiz_bili_qn
+        )
         self.douyin = DouyinParser(timeout, leiz_api_key=leiz_api_key)
         self.weibo = WeiboParser(timeout)
         self._cache = MediaParseCache(ttl_seconds=cache_ttl, max_items=cache_max_items) if cache_enable else None

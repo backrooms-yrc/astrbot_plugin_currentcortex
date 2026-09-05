@@ -175,6 +175,23 @@ def test_leiz_unavailable_without_key():
     assert LeiZMediaAPI("  ").available is False
 
 
+def test_leiz_bili_qn_passthrough_and_clamp():
+    """目标清晰度透传到请求参数，越界值钳制到 [16, 127]。"""
+    api = LeiZMediaAPI("k", bili_qn=120)
+    captured = {}
+
+    async def fake_get(path, params):
+        captured.update(params)
+        return _LEIZ_BILI_PAYLOAD
+
+    api._get_json = fake_get
+    asyncio.run(api.parse_bilibili("https://b23.tv/KZclOli"))
+    assert captured.get("qn") == "120", captured
+    assert LeiZMediaAPI("k", bili_qn=999)._bili_qn == 127
+    assert LeiZMediaAPI("k", bili_qn=1)._bili_qn == 16
+    assert LeiZMediaAPI("k")._bili_qn == 80  # 默认 1080P
+
+
 def test_extract_bilibili_classifies_b23_short_code():
     """b23.tv 短码必须标记为 'short'，而不是被误判为 av 号。"""
     assert URLExtractor.extract_bilibili("https://b23.tv/KZclOli") == {
@@ -309,6 +326,7 @@ TESTS = [
     test_bilibili_parser_prefers_leiz_and_falls_back,
     test_leiz_douyin_mapping_video_and_gallery,
     test_leiz_unavailable_without_key,
+    test_leiz_bili_qn_passthrough_and_clamp,
 ]
 
 

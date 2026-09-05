@@ -1236,6 +1236,10 @@ class CurrentCortexPlugin(Star):
         self._media_video_max_mb = max(
             1, int(config.get("media_video_max_mb", 100))
         )
+        # B站解析目标清晰度（经 LeiZ API，不可用时自动降级到可用档）
+        self._media_video_quality = max(
+            16, min(127, int(config.get("media_video_quality", 80)))
+        )
         # 链接自动解析：消息中侦测到受支持平台链接时无需命令直接解析
         self._media_auto_parse_enable = bool(
             config.get("media_auto_parse_enable", True)
@@ -1251,6 +1255,7 @@ class CurrentCortexPlugin(Star):
             cache_enable=self._media_parse_cache_enable,
             cache_ttl=float(self._media_parse_cache_ttl),
             leiz_api_key=leiz_api_key or "",
+            leiz_bili_qn=self._media_video_quality,
         )
 
         if not leiz_api_key:
@@ -5067,11 +5072,14 @@ class CurrentCortexPlugin(Star):
         known_size = 0
         prepare_url = ""
         status_url = ""
+        poll_seconds = 120
         if platform == "bilibili" and isinstance(data.get("download_url"), dict):
             info = data["download_url"]
             known_size = int(info.get("size", 0) or 0)
             prepare_url = info.get("prepare_url", "") or ""
             status_url = info.get("status_url", "") or ""
+            # 高清晰度（1080P60 及以上）合并显著更慢，等待预算放宽到 5 分钟
+            poll_seconds = 300 if int(info.get("quality", 0) or 0) >= 116 else 120
         path = await self._download_media_video_to_temp(
             url,
             stem,
@@ -5079,6 +5087,7 @@ class CurrentCortexPlugin(Star):
             known_size=known_size,
             prepare_url=prepare_url,
             status_url=status_url,
+            poll_seconds=poll_seconds,
         )
         if not path:
             return False
@@ -5094,14 +5103,21 @@ class CurrentCortexPlugin(Star):
             return False
 
     async def _prepare_leiz_stream(
-        self, prepare_url: str, status_url: str, headers: Dict[str, str]
+        self,
+        prepare_url: str,
+        status_url: str,
+        headers: Dict[str, str],
+        poll_seconds: int = 120,
     ) -> bool:
         """启动 LeiZ B站视频合并并等待就绪（POST prepare → 轮询 status 到 ready）。
 
         LeiZ 的完整 MP4 是服务端按票据异步合并的，不 prepare 直接下载会
-        425（MUX_NOT_READY）。轮询上限约 2 分钟，超时/失败返回 False。
+        425（MUX_NOT_READY）。高清晰度（1080P60+/4K）合并显著更慢，
+        poll_seconds 由调用方按目标档位放宽（默认 120 秒，4K 档 300 秒）。
+        超时/失败返回 False。
         """
         timeout = aiohttp.ClientTimeout(total=30)
+        attempts = max(1, poll_seconds // 3)
         try:
             async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
                 async with session.post(prepare_url) as resp:
@@ -5112,7 +5128,7 @@ class CurrentCortexPlugin(Star):
                             f"[MediaParse] LeiZ prepare 失败: HTTP {resp.status} {body[:120]}"
                         )
                         return False
-                for attempt in range(40):
+                for attempt in range(attempts):
                     await asyncio.sleep(3)
                     async with session.get(status_url) as resp:
                         if resp.status != 200:
@@ -5130,7 +5146,7 @@ class CurrentCortexPlugin(Star):
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.warning(f"[MediaParse] LeiZ prepare/status 请求失败: {e}")
             return False
-        logger.warning("[MediaParse] LeiZ 视频合并等待超时（约 2 分钟）")
+        logger.warning(f"[MediaParse] LeiZ 视频合并等待超时（{attempts * 3} 秒）")
         return False
 
     async def _download_media_video_to_temp(
@@ -5141,12 +5157,14 @@ class CurrentCortexPlugin(Star):
         known_size: int = 0,
         prepare_url: str = "",
         status_url: str = "",
+        poll_seconds: int = 120,
     ) -> Optional[str]:
         """把视频流下载到临时目录（astrbot_media），带大小上限与有限重试。
 
         上限通过已知 size / Content-Length 预检 + 流式累计双保险，
         超限立即中止并删除半成品文件。LeiZ B站票据流需先走
-        prepare → 轮询 ready 才能下载（见 _prepare_leiz_stream）。
+        prepare → 轮询 ready 才能下载（见 _prepare_leiz_stream，
+        poll_seconds 为合并等待预算）。
         """
         max_bytes = self._media_video_max_mb * 1024 * 1024
         if known_size and known_size > max_bytes:
@@ -5170,16 +5188,17 @@ class CurrentCortexPlugin(Star):
             # LeiZ 合并流：每次尝试前确保合并任务已就绪
             if prepare_url and status_url:
                 if not await self._prepare_leiz_stream(
-                    prepare_url, status_url, headers or {}
+                    prepare_url, status_url, headers or {}, poll_seconds=poll_seconds
                 ):
                     return None
             request_id = uuid.uuid4().hex[:12]
             temp_path = os.path.join(temp_dir, f"{safe_name}_{request_id}{ext}")
             downloaded = False
             try:
-                # 上限放大：100MB 级视频在慢速链路下可能远超 30s
+                # 上限放大：100MB 级视频在慢速链路下可能远超 30s；
+                # 高清晰度票据合并慢（边合并边推流），预算随之放宽
                 timeout = aiohttp.ClientTimeout(
-                    total=300, sock_connect=15, sock_read=90
+                    total=max(300, poll_seconds * 2), sock_connect=15, sock_read=90
                 )
                 async with aiohttp.ClientSession(
                     timeout=timeout, headers=headers or {"User-Agent": self._MEDIA_VIDEO_UA}

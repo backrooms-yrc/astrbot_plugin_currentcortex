@@ -179,6 +179,11 @@
     "default": 100,
     "slider": {"min": 10, "max": 500, "step": 10}
   },
+  "media_video_quality": {
+    "description": "B站视频解析目标清晰度（经 LeiZ API，需已配置 leiz_api_key）。16=360P、32=480P、64=720P、80=1080P、112=1080P+、116=1080P60、120=4K、125=HDR、127=8K。请求档位不可用时 LeiZ 自动降级到最高可用档。注意档位越高文件越大：4K 视频直发可能超出大小上限或下载超时，自动回退为发送直链。默认 80（1080P）",
+    "type": "int",
+    "default": 80
+  },
   "media_auto_parse_enable": {
     "description": "【链接自动解析】开启后，消息中侦测到 小红书/B站/抖音/微博 链接时自动解析并回复，无需发送 /解析 命令。命令消息不会重复触发；/开关 off media 可按群关闭（命令与自动解析一并关闭）",
     "type": "bool",
