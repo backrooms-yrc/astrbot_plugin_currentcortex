@@ -986,13 +986,28 @@ def test_media_parse_video_direct_send_no_link():
 
 
 def test_parsed_video_source_and_fallback_guards():
-    """多段 durl 不直发（首段不完整）；直链必须带 Referer 头。"""
+    """多段 durl 不直发（首段不完整）；下载头按域名定制（B站 CDN 要 Referer，LeiZ 要 Key）。"""
     inst = PluginCls.__new__(PluginCls)
-    url, headers, stem = inst._parsed_video_source(
-        "bilibili", {"bvid": "BV1xx", "download_url": dict(_BILI_DOWNLOAD_INFO)}
+    inst._leiz_api_key = "test-key"
+    bili_cdn = dict(
+        _BILI_DOWNLOAD_INFO,
+        url="https://upos-sz-mirrorcosov.bilivideo.com/upgcxcode/v.mp4",
     )
-    assert url == _BILI_DOWNLOAD_INFO["url"] and stem == "BV1xx"
+    url, headers, stem = inst._parsed_video_source(
+        "bilibili", {"bvid": "BV1xx", "download_url": bili_cdn}
+    )
+    assert url == bili_cdn["url"] and stem == "BV1xx"
     assert headers.get("Referer") == "https://www.bilibili.com/"
+    assert "x-api-key" not in headers
+    # LeiZ 票据流：带 x-api-key、不带 Referer
+    leiz = dict(
+        _BILI_DOWNLOAD_INFO, url="https://api.bileizhen.top/api/bilibili/stream?token=t"
+    )
+    _, headers2, _ = inst._parsed_video_source(
+        "bilibili", {"bvid": "BV1xx", "download_url": leiz}
+    )
+    assert headers2.get("x-api-key") == "test-key"
+    assert "Referer" not in headers2
     multi = dict(_BILI_DOWNLOAD_INFO, segments=3)
     assert inst._parsed_video_source("bilibili", {"download_url": multi}) is None
     assert "无法直接发送" in inst._parsed_video_fallback_text(

@@ -386,8 +386,10 @@ MEDIA_PARSER_HELP_TEXT = """🔍 媒体内容解析 使用说明
 
 📌 支持平台
   • 小红书（xiaohongshu）— 笔记图文/视频解析
-  • Bilibili（bilibili）— 视频解析并直接发送视频（失败时回退下载直链）
-  • 抖音（douyin）— 短视频解析并直接发送视频
+  • Bilibili（bilibili）— 视频解析并直接发送视频（LeiZ API 高清晰度，
+                        未配置 Key 时走官方接口，失败回退下载直链）
+  • 抖音（douyin）— 视频/图集解析并直接发送（LeiZ API 无水印，
+                    未配置 Key 时走网页解析）
   • 微博（weibo）— 帖子图文/视频解析，视频直接发送
 
 📌 基本命令
@@ -1248,6 +1250,7 @@ class CurrentCortexPlugin(Star):
             timeout=self._request_timeout,
             cache_enable=self._media_parse_cache_enable,
             cache_ttl=float(self._media_parse_cache_ttl),
+            leiz_api_key=leiz_api_key or "",
         )
 
         if not leiz_api_key:
@@ -5000,6 +5003,16 @@ class CurrentCortexPlugin(Star):
         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
 
+    def _media_video_download_headers(self, url: str) -> Dict[str, str]:
+        """按直链域名定制下载头：B站 CDN 要 Referer 防盗链，LeiZ 要 API Key。"""
+        headers = {"User-Agent": self._MEDIA_VIDEO_UA}
+        lowered = (url or "").lower()
+        if "bilibili.com" in lowered or "bilivideo.com" in lowered or "hdslb.com" in lowered:
+            headers["Referer"] = "https://www.bilibili.com/"
+        elif "api.bileizhen.top" in lowered and self._leiz_api_key:
+            headers["x-api-key"] = self._leiz_api_key
+        return headers
+
     def _parsed_video_source(
         self, platform: str, data: Dict[str, Any]
     ) -> Optional[tuple]:
@@ -5015,10 +5028,7 @@ class CurrentCortexPlugin(Star):
                 return None
             if int(info.get("segments", 0) or 0) > 1:
                 return None
-            headers = {
-                "User-Agent": self._MEDIA_VIDEO_UA,
-                "Referer": "https://www.bilibili.com/",
-            }
+            headers = self._media_video_download_headers(info["url"])
             return info["url"], headers, data.get("bvid") or "bilibili_video"
         if platform in ("douyin", "weibo"):
             url = data.get("video_url", "")
@@ -5055,10 +5065,20 @@ class CurrentCortexPlugin(Star):
         url, headers, stem = source
         # B站响应自带 size 可预检；其余平台在下载中按上限截断
         known_size = 0
+        prepare_url = ""
+        status_url = ""
         if platform == "bilibili" and isinstance(data.get("download_url"), dict):
-            known_size = int(data["download_url"].get("size", 0) or 0)
+            info = data["download_url"]
+            known_size = int(info.get("size", 0) or 0)
+            prepare_url = info.get("prepare_url", "") or ""
+            status_url = info.get("status_url", "") or ""
         path = await self._download_media_video_to_temp(
-            url, stem, headers=headers, known_size=known_size
+            url,
+            stem,
+            headers=headers,
+            known_size=known_size,
+            prepare_url=prepare_url,
+            status_url=status_url,
         )
         if not path:
             return False
@@ -5073,17 +5093,60 @@ class CurrentCortexPlugin(Star):
             logger.warning(f"[MediaParse] 视频消息发送失败: {e}", exc_info=True)
             return False
 
+    async def _prepare_leiz_stream(
+        self, prepare_url: str, status_url: str, headers: Dict[str, str]
+    ) -> bool:
+        """启动 LeiZ B站视频合并并等待就绪（POST prepare → 轮询 status 到 ready）。
+
+        LeiZ 的完整 MP4 是服务端按票据异步合并的，不 prepare 直接下载会
+        425（MUX_NOT_READY）。轮询上限约 2 分钟，超时/失败返回 False。
+        """
+        timeout = aiohttp.ClientTimeout(total=30)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                async with session.post(prepare_url) as resp:
+                    # 202 Accepted = 已受理进合并队列；429 = 限流排队中——都继续轮询
+                    if not (200 <= resp.status < 300) and resp.status != 429:
+                        body = await resp.text()
+                        logger.warning(
+                            f"[MediaParse] LeiZ prepare 失败: HTTP {resp.status} {body[:120]}"
+                        )
+                        return False
+                for attempt in range(40):
+                    await asyncio.sleep(3)
+                    async with session.get(status_url) as resp:
+                        if resp.status != 200:
+                            continue
+                        try:
+                            payload = await resp.json()
+                        except (aiohttp.ClientError, ValueError):
+                            continue
+                        state = (payload.get("data") or {}).get("state", "")
+                        if state == "ready":
+                            return True
+                        if state == "failed":
+                            logger.warning("[MediaParse] LeiZ 视频合并失败")
+                            return False
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            logger.warning(f"[MediaParse] LeiZ prepare/status 请求失败: {e}")
+            return False
+        logger.warning("[MediaParse] LeiZ 视频合并等待超时（约 2 分钟）")
+        return False
+
     async def _download_media_video_to_temp(
         self,
         url: str,
         name: str,
         headers: Optional[Dict[str, str]] = None,
         known_size: int = 0,
+        prepare_url: str = "",
+        status_url: str = "",
     ) -> Optional[str]:
         """把视频流下载到临时目录（astrbot_media），带大小上限与有限重试。
 
         上限通过已知 size / Content-Length 预检 + 流式累计双保险，
-        超限立即中止并删除半成品文件。
+        超限立即中止并删除半成品文件。LeiZ B站票据流需先走
+        prepare → 轮询 ready 才能下载（见 _prepare_leiz_stream）。
         """
         max_bytes = self._media_video_max_mb * 1024 * 1024
         if known_size and known_size > max_bytes:
@@ -5104,6 +5167,12 @@ class CurrentCortexPlugin(Star):
         backoff_base = 0.8
         last_error: Optional[str] = None
         for attempt in range(1, max_attempts + 1):
+            # LeiZ 合并流：每次尝试前确保合并任务已就绪
+            if prepare_url and status_url:
+                if not await self._prepare_leiz_stream(
+                    prepare_url, status_url, headers or {}
+                ):
+                    return None
             request_id = uuid.uuid4().hex[:12]
             temp_path = os.path.join(temp_dir, f"{safe_name}_{request_id}{ext}")
             downloaded = False
@@ -5532,6 +5601,11 @@ class CurrentCortexPlugin(Star):
         owner = data.get("owner", {})
         stat = data.get("stat", {})
         pages = data.get("pages", [])
+        # LeiZ 路径只带 page_count 不展开 pages 列表，分P数以此为准
+        page_count = int(data.get("page_count", 0) or 0) or len(pages)
+        quality_label = ""
+        if isinstance(data.get("download_url"), dict):
+            quality_label = data["download_url"].get("quality_label", "")
         owner_name = owner.get("name", "") if isinstance(owner, dict) else ""
         parts = ["📺 B站视频解析"]
         if title:
@@ -5541,8 +5615,10 @@ class CurrentCortexPlugin(Star):
         if duration:
             mins, secs = divmod(duration, 60)
             parts.append(f"⏱️ 时长：{mins}:{secs:02d}")
-        if pages and len(pages) > 1:
-            parts.append(f"📑 分P：共{len(pages)}P")
+        if quality_label:
+            parts.append(f"🎬 清晰度：{quality_label}")
+        if page_count > 1:
+            parts.append(f"📑 分P：共{page_count}P")
         stat_parts = []
         view = stat.get("view", 0) if isinstance(stat, dict) else 0
         like = stat.get("like", 0) if isinstance(stat, dict) else 0
@@ -5572,7 +5648,9 @@ class CurrentCortexPlugin(Star):
         shares = data.get("shares", "")
         cover = data.get("cover", "")
         url = data.get("url", "")
-        parts = ["🎵 抖音视频解析"]
+        images = data.get("images", [])
+        is_gallery = bool(images)
+        parts = ["📷 抖音图集解析" if is_gallery else "🎵 抖音视频解析"]
         if title:
             parts.append(f"📝 标题：{title}")
         if author:
@@ -5591,7 +5669,11 @@ class CurrentCortexPlugin(Star):
         if url:
             parts.append(f"🔗 链接：{url}")
         results = [event.plain_result("\n".join(parts))]
-        if cover:
+        if is_gallery:
+            for img_url in images[:9]:
+                if img_url:
+                    results.append(event.image_result(img_url))
+        elif cover:
             results.append(event.image_result(cover))
         return results
 

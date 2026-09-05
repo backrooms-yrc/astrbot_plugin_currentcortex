@@ -6,6 +6,21 @@
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-09-05
+
+- 刚开学没几天就加到了班群，我无疑是兴奋的
+- 趁着周末补了番，然后处理了一些积压下来的工作
+
+### 变更
+
+- **B站/抖音解析切换为 LeiZ API**（`leiz_api_key` 已配置时优先，失败自动回退原路径）：响应 LeiZ API 上线 B站/抖音解析接口（`/api/bilibili`、`/api/douyin`），这两个平台改走 LeiZ——站点服务端持有登录账号，B站可拿到游客身份拿不到的 1080P+ 清晰度（以账号权益为准），抖音拿无水印直链并支持图集/作品 ID/分享文案；解析请求不再直连平台官方接口，不受 B站风控（412/429）波及
+  - **B站视频直发走 LeiZ 合并管线**：完整 MP4 由 LeiZ 服务端按票据异步合并（DASH 音视频无损封装），机器人先 `POST prepare` 受理（202 Accepted / 429 排队均视为正常）、轮询 `status` 至 ready（上限约 2 分钟）再下载，下载无需 Referer 只需 API Key；票据约 1 小时过期，长于解析缓存 TTL。卡片新增「🎬 清晰度」行（如 高清 1080P），分P计数以 `pageCount` 为准
+  - **抖音新增图集支持**：`content_type=image` 的作品按图集解析（标题行改为「📷 抖音图集解析」），逐张发送 `image_urls` 原图（最多 9 张）；视频作品取 `nwm_url` 无水印直链直发，统计取 `digg_count`/`comment_count`/`share_count`
+  - **回退链**：未配置 `leiz_api_key` 或 LeiZ 请求失败（网络/Cloudflare 质询/业务错误）时自动回退原有官方接口/网页解析路径，记一条 INFO 日志，功能不中断；小红书/微博不受影响
+  - 下载头按直链域名定制：B站 CDN（`bilibili.com`/`bilivideo.com`/`hdslb.com`）带 Referer 防盗链，`api.bileizhen.top` 带 `x-api-key`
+  - **测试**：`test_media_parser.py` 新增 4 项 LeiZ 用例（B站映射与票据路径绝对化、LeiZ 优先与失败回退、抖音视频/图集映射、无 Key 不可用判定，共 13 项）；`test_memory_and_switch.py` 下载头域名分支用例重写（共 42 项）
+  - 真实链路验证：`b23.tv` 短链 → LeiZ 解析出「高清 1080P」元数据 → prepare 受理（HTTP 202）→ 轮询 ready → 下载 4.35MB 完整 MP4 → 视频消息发出
+
 ## [2.5.1] - 2026-09-05
 
 - 在维基百科（WikiPedia）上创建了条目：六安市田家炳实验中学

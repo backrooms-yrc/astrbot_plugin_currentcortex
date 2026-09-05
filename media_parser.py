@@ -150,6 +150,162 @@ class URLExtractor:
         return None
 
 
+class LeiZMediaAPI:
+    """LeiZ API 媒体解析客户端（B站/抖音，x-api-key 鉴权）。
+
+    站点前置 Cloudflare，必须携带浏览器 UA；任何失败（网络/非 JSON/
+    success=false/HTTP 非 200）一律返回 None 并记日志，由调用方回退到
+    平台官方路径解析——LeiZ 是增强而非硬依赖。
+
+    B站视频流是服务端合并产物：解析响应给出一组票据 URL（merged.*，
+    均为相对路径），完整 MP4 需先 POST prepareUrl 启动合并、轮询
+    statusUrl 到 ready 后才能从 url 下载；票据约 1 小时过期。
+    """
+
+    BASE = "https://api.bileizhen.top"
+
+    def __init__(self, api_key: str = "", timeout: int = 20):
+        self._api_key = (api_key or "").strip()
+        self._timeout = aiohttp.ClientTimeout(total=timeout)
+        self._headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json, text/plain, */*",
+        }
+
+    @property
+    def available(self) -> bool:
+        return bool(self._api_key)
+
+    def _abs(self, path: str) -> str:
+        """LeiZ 响应里的流地址是相对路径（/api/bilibili/stream?token=...）。"""
+        if not path:
+            return ""
+        if path.startswith("http://") or path.startswith("https://"):
+            return path
+        return self.BASE + path
+
+    async def _get_json(self, path: str, params: Dict[str, str]) -> Optional[Dict[str, Any]]:
+        """GET 并校验 {success, data} 包装；任何异常返回 None。"""
+        headers = {**self._headers, "x-api-key": self._api_key}
+        try:
+            async with aiohttp.ClientSession(
+                timeout=self._timeout, headers=headers
+            ) as session:
+                async with session.get(self.BASE + path, params=params, ssl=False) as resp:
+                    if resp.status != 200:
+                        text = await resp.text()
+                        logger.warning(
+                            f"[LeiZMedia] HTTP {resp.status} {path}: {text[:120]}"
+                        )
+                        return None
+                    try:
+                        payload = await resp.json()
+                    except (aiohttp.ClientError, ValueError, json.JSONDecodeError) as e:
+                        # Cloudflare 质询页/HTML 兜底页会走到这里
+                        logger.warning(f"[LeiZMedia] 响应非 JSON {path}: {e}")
+                        return None
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            logger.warning(f"[LeiZMedia] 请求失败 {path}: {e}")
+            return None
+        if not isinstance(payload, dict) or not payload.get("success"):
+            logger.warning(
+                f"[LeiZMedia] 业务失败 {path}: {str(payload.get('message'))[:120]}"
+            )
+            return None
+        data = payload.get("data")
+        return data if isinstance(data, dict) else None
+
+    async def parse_bilibili(self, url_or_text: str) -> Optional[Dict[str, Any]]:
+        """B站解析：直接把分享链接交给 LeiZ（b23.tv 短链也由它展开）。"""
+        match = re.search(r"https?://[^\s]+", url_or_text or "")
+        target = match.group(0).rstrip("，。,.！!）)") if match else (url_or_text or "").strip()
+        if not target:
+            return None
+        data = await self._get_json(
+            "/api/bilibili", {"url": target, "qn": "80", "codec": "avc"}
+        )
+        if not data or not data.get("bvid"):
+            return None
+        merged = data.get("merged") or {}
+        download = None
+        if merged.get("url"):
+            download = {
+                "url": self._abs(merged["url"]),
+                "prepare_url": self._abs(merged.get("prepareUrl", "")),
+                "status_url": self._abs(merged.get("statusUrl", "")),
+                "size": 0,
+                "segments": 1,
+                "quality": int(data.get("actualQuality", 0) or 0),
+                "quality_label": str(data.get("qualityLabel", "")),
+            }
+        return {
+            "bvid": data.get("bvid", ""),
+            "aid": data.get("aid", 0),
+            "title": data.get("title", ""),
+            "desc": "",
+            "cover": data.get("cover", ""),
+            "duration": int(data.get("duration", 0) or 0),
+            "pubdate": 0,
+            "link": f"https://www.bilibili.com/video/{data.get('bvid', '')}",
+            "owner": {
+                "name": data.get("owner", ""),
+                "mid": data.get("ownerUid", 0),
+                "face": data.get("ownerFace", ""),
+            },
+            "stat": {},
+            "pages": [
+                {
+                    "cid": data.get("cid", 0),
+                    "page": data.get("page", 1),
+                    "part": data.get("partTitle", ""),
+                    "duration": int(data.get("duration", 0) or 0),
+                }
+            ],
+            "page_count": int(data.get("pageCount", 1) or 1),
+            "download_url": download,
+            "source": "leiz",
+        }
+
+    async def parse_douyin(self, url_or_text: str) -> Optional[Dict[str, Any]]:
+        """抖音解析：支持分享链接/文案/作品 ID，返回无水印资源。"""
+        match = re.search(r"https?://[^\s]+", url_or_text or "")
+        target = match.group(0).rstrip("，。,.！!）)") if match else (url_or_text or "").strip()
+        if not target:
+            return None
+        data = await self._get_json("/api/douyin", {"url": target})
+        if not data:
+            return None
+        aweme_id = str(data.get("aweme_id", "") or "")
+        stats = data.get("statistics") or {}
+        qualities = data.get("qualities") or []
+        nwm_url = data.get("nwm_url") or (qualities[0].get("url", "") if qualities else "")
+        images = []
+        if data.get("content_type") == "image":
+            images = [
+                u for u in ((data.get("image_data") or {}).get("image_urls") or []) if u
+            ]
+        return {
+            "video_id": aweme_id,
+            "title": str(data.get("desc", "") or "")[:100],
+            "desc": str(data.get("desc", "") or ""),
+            "cover": data.get("cover_url", ""),
+            "video_url": nwm_url if data.get("content_type") != "image" else "",
+            "author": data.get("author_nickname", ""),
+            "author_avatar": data.get(
+                "author_avatar_url", (data.get("author") or {}).get("avatar_url", "")
+            ),
+            "likes": str(stats.get("digg_count", "") or ""),
+            "comments": str(stats.get("comment_count", "") or ""),
+            "shares": str(stats.get("share_count", "") or ""),
+            "images": images,
+            "url": f"https://www.douyin.com/video/{aweme_id}" if aweme_id else "",
+            "source": "leiz",
+        }
+
+
 class BaseMediaParser:
     """媒体解析基类"""
 
@@ -400,14 +556,22 @@ class XiaoHongShuParser(BaseMediaParser):
 
 
 class BilibiliParser(BaseMediaParser):
-    """B站视频解析器"""
+    """B站视频解析器（优先 LeiZ API，失败回退官方接口）"""
 
-    def __init__(self, timeout: int = 20):
+    def __init__(self, timeout: int = 20, leiz_api_key: str = ""):
         super().__init__(timeout)
         self._headers["Referer"] = "https://www.bilibili.com/"
+        self._leiz = LeiZMediaAPI(leiz_api_key, timeout)
 
     async def parse(self, url_or_text: str) -> Dict[str, Any]:
         """解析B站链接"""
+        # 优先走 LeiZ API：支持分享短链直达、站长账号可解锁 1080P+、
+        # 服务端合并 DASH 出完整 MP4（无 Referer 防盗链问题）
+        if self._leiz.available:
+            result = await self._leiz.parse_bilibili(url_or_text)
+            if result is not None:
+                return result
+            logger.info("[Bilibili] LeiZ 解析失败，回退官方接口")
         video_info = URLExtractor.extract_bilibili(url_or_text)
         # b23.tv 短码不是视频 ID，需要跟随跳转还原成 BV 号
         if not video_info or video_info["type"] == "short":
@@ -604,14 +768,21 @@ class BilibiliParser(BaseMediaParser):
 
 
 class DouyinParser(BaseMediaParser):
-    """抖音内容解析器"""
+    """抖音内容解析器（优先 LeiZ API，失败回退网页解析）"""
 
-    def __init__(self, timeout: int = 20):
+    def __init__(self, timeout: int = 20, leiz_api_key: str = ""):
         super().__init__(timeout)
         self._headers["Referer"] = "https://www.douyin.com/"
+        self._leiz = LeiZMediaAPI(leiz_api_key, timeout)
 
     async def parse(self, url_or_text: str) -> Dict[str, Any]:
         """解析抖音链接"""
+        # 优先走 LeiZ API：无水印直链、图集、评论与统计，覆盖分享文案
+        if self._leiz.available:
+            result = await self._leiz.parse_douyin(url_or_text)
+            if result is not None:
+                return result
+            logger.info("[Douyin] LeiZ 解析失败，回退网页解析")
         video_id = URLExtractor.extract_douyin(url_or_text)
         if not video_id:
             # 尝试短链接
@@ -948,10 +1119,11 @@ class MediaParserManager:
         cache_enable: bool = True,
         cache_ttl: float = 600.0,
         cache_max_items: int = 128,
+        leiz_api_key: str = "",
     ):
         self.xiaohongshu = XiaoHongShuParser(timeout)
-        self.bilibili = BilibiliParser(timeout)
-        self.douyin = DouyinParser(timeout)
+        self.bilibili = BilibiliParser(timeout, leiz_api_key=leiz_api_key)
+        self.douyin = DouyinParser(timeout, leiz_api_key=leiz_api_key)
         self.weibo = WeiboParser(timeout)
         self._cache = MediaParseCache(ttl_seconds=cache_ttl, max_items=cache_max_items) if cache_enable else None
 

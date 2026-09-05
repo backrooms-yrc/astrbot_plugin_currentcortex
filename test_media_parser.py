@@ -59,9 +59,120 @@ sys.modules["aiohttp"] = aiohttp_stub
 
 from media_parser import (  # noqa: E402
     BilibiliParser,
+    DouyinParser,
+    LeiZMediaAPI,
     MediaParserError,
     URLExtractor,
 )
+
+_LEIZ_BILI_PAYLOAD = {
+    "kind": "video",
+    "aid": 117,
+    "bvid": "BV1pD4U62E85",
+    "cid": 414,
+    "page": 1,
+    "pageCount": 2,
+    "title": "标题",
+    "partTitle": "P1",
+    "cover": "http://i2.hdslb.com/cover.jpg",
+    "duration": 20,
+    "owner": "UP主",
+    "ownerUid": 150,
+    "ownerFace": "http://i2.hdslb.com/face.jpg",
+    "actualQuality": 80,
+    "qualityLabel": "高清 1080P",
+    "merged": {
+        "url": "/api/bilibili/stream?token=t1",
+        "prepareUrl": "/api/bilibili/stream/prepare?token=t1",
+        "statusUrl": "/api/bilibili/stream/status?token=t1",
+    },
+}
+
+
+def test_leiz_bilibili_mapping_and_paths():
+    """LeiZ B站响应映射：票据相对路径绝对化、download_url 带预拉取字段。"""
+    api = LeiZMediaAPI("test-key")
+
+    async def fake_get(path, params):
+        assert path == "/api/bilibili"
+        assert params.get("url") == "https://b23.tv/KZclOli"
+        return _LEIZ_BILI_PAYLOAD
+
+    api._get_json = fake_get
+    result = asyncio.run(api.parse_bilibili("看这个 https://b23.tv/KZclOli"))
+    assert result["bvid"] == "BV1pD4U62E85"
+    assert result["owner"]["name"] == "UP主"
+    assert result["page_count"] == 2
+    assert result["source"] == "leiz"
+    du = result["download_url"]
+    assert du["url"] == "https://api.bileizhen.top/api/bilibili/stream?token=t1"
+    assert du["prepare_url"].endswith("/stream/prepare?token=t1")
+    assert du["status_url"].endswith("/stream/status?token=t1")
+    assert du["quality"] == 80 and du["quality_label"] == "高清 1080P"
+
+
+def test_bilibili_parser_prefers_leiz_and_falls_back():
+    """配置 Key 后优先走 LeiZ；LeiZ 失败回退官方路径。"""
+    parser = BilibiliParser(leiz_api_key="test-key")
+    assert parser._leiz.available
+
+    async def fake_leiz(url_or_text):
+        return {"bvid": "BV1leiz", "title": "leiz", "download_url": None, "source": "leiz"}
+
+    parser._leiz.parse_bilibili = fake_leiz
+    data = asyncio.run(parser.parse("https://b23.tv/KZclOli"))
+    assert data["bvid"] == "BV1leiz"
+
+    async def failed_leiz(url_or_text):
+        return None
+
+    async def fake_resolve(short_url):
+        return "BV1official"
+
+    async def fake_detail(bvid):
+        return {"bvid": bvid}
+
+    parser._leiz.parse_bilibili = failed_leiz
+    parser._resolve_short_link = fake_resolve
+    parser._fetch_video_detail = fake_detail
+    data2 = asyncio.run(parser.parse("https://b23.tv/KZclOli"))
+    assert data2["bvid"] == "BV1official"
+
+
+def test_leiz_douyin_mapping_video_and_gallery():
+    """LeiZ 抖音响应映射：视频取 nwm_url，图集取 image_urls 且不发视频。"""
+    api = LeiZMediaAPI("test-key")
+    payload = {
+        "content_type": "video",
+        "aweme_id": "7123456789012345678",
+        "desc": "文案",
+        "cover_url": "http://cover.jpg",
+        "author_nickname": "作者",
+        "nwm_url": "http://nwm.mp4",
+        "statistics": {"digg_count": 11, "comment_count": 22, "share_count": 33},
+    }
+
+    async def fake_get(path, params):
+        return payload
+
+    api._get_json = fake_get
+    result = asyncio.run(api.parse_douyin("https://v.douyin.com/abc/"))
+    assert result["video_url"] == "http://nwm.mp4"
+    assert result["likes"] == "11" and result["shares"] == "33"
+    assert result["images"] == []
+    assert result["url"].endswith("/video/7123456789012345678")
+
+    payload["content_type"] = "image"
+    payload["image_data"] = {"image_urls": ["http://1.jpg", "http://2.jpg"]}
+    payload["nwm_url"] = ""
+    result2 = asyncio.run(api.parse_douyin("https://v.douyin.com/abc/"))
+    assert result2["images"] == ["http://1.jpg", "http://2.jpg"]
+    assert result2["video_url"] == ""
+
+
+def test_leiz_unavailable_without_key():
+    assert LeiZMediaAPI("").available is False
+    assert LeiZMediaAPI("  ").available is False
 
 
 def test_extract_bilibili_classifies_b23_short_code():
@@ -194,6 +305,10 @@ TESTS = [
     test_bilibili_resolve_short_link_rejects_text_without_url,
     test_fetch_download_url_uses_durl_with_fnval0,
     test_fetch_download_url_dash_only_returns_none,
+    test_leiz_bilibili_mapping_and_paths,
+    test_bilibili_parser_prefers_leiz_and_falls_back,
+    test_leiz_douyin_mapping_video_and_gallery,
+    test_leiz_unavailable_without_key,
 ]
 
 
