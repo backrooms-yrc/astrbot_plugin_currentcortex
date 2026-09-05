@@ -408,67 +408,93 @@ async def test_send_music_file_failure_keeps_event_unhandled(temp_dir: Path):
     assert event._has_send_oper is False
 
 
+class _RetryResp:
+    def __init__(self, status=200, body=b""):
+        self.status = status
+        self._body = body
+
+    async def _iter(self, _n):
+        yield self._body
+
+    @property
+    def content(self):
+        return types.SimpleNamespace(iter_chunked=self._iter)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+
+class _FirstCallTimeoutSession:
+    """首次 GET 抛 TimeoutError、其后返回 payload 的会话桩（验证下载重试）。"""
+
+    def __init__(self, payload: bytes):
+        self.payload = payload
+        self.hits = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    def get(self, url):
+        self.hits += 1
+        if self.hits == 1:
+
+            class _Boom:
+                async def __aenter__(self):
+                    raise asyncio.TimeoutError()
+
+                async def __aexit__(self, *args):
+                    return False
+
+            return _Boom()
+        return _RetryResp(200, self.payload)
+
+
+async def _no_sleep(_seconds):
+    return None
+
+
 async def test_raw_download_retries_on_timeout(temp_dir: Path):
-    payload = b"retry-success-audio"
-    hits = {"n": 0}
-
-    class _Resp:
-        def __init__(self, status=200, body=b""):
-            self.status = status
-            self._body = body
-
-        async def _iter(self, _n):
-            yield self._body
-
-        @property
-        def content(self):
-            return types.SimpleNamespace(iter_chunked=self._iter)
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *args):
-            return False
-
-    class _Session:
-        def __init__(self, *a, **k):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *args):
-            return False
-
-        def get(self, url):
-            hits["n"] += 1
-            if hits["n"] == 1:
-
-                class _Boom:
-                    async def __aenter__(self):
-                        raise asyncio.TimeoutError()
-
-                    async def __aexit__(self, *args):
-                        return False
-
-                return _Boom()
-            return _Resp(200, payload)
-
-    async def _no_sleep(_seconds):
-        return None
+    session = _FirstCallTimeoutSession(b"retry-success-audio")
 
     with (
         patch.object(main.tempfile, "gettempdir", return_value=str(temp_dir)),
-        patch.object(main.aiohttp, "ClientSession", _Session),
+        patch.object(main.aiohttp, "ClientSession", lambda *a, **k: session),
         patch.object(main.asyncio, "sleep", side_effect=_no_sleep),
     ):
         result = await TestPlugin()._download_source_audio_to_temp(
             "http://example.test/a.flac", "RetrySong", "flac"
         )
     assert result is not None
-    assert hits["n"] >= 2
+    assert session.hits >= 2
     output = Path(result)
-    assert output.read_bytes() == payload
+    assert output.read_bytes() == session.payload
+    output.unlink()
+
+
+async def test_voice_download_retries_on_timeout(temp_dir: Path):
+    """语音条路径复用带回试的下载器（回归：旧实现 total=30 无重试，偶发超时即失败）。"""
+    session = _FirstCallTimeoutSession(b"voice-retry-success")
+
+    with (
+        patch.object(main.tempfile, "gettempdir", return_value=str(temp_dir)),
+        patch.object(main.aiohttp, "ClientSession", lambda *a, **k: session),
+        patch.object(main.asyncio, "sleep", side_effect=_no_sleep),
+        patch.object(TestPlugin, "_compress_for_voice", return_value=None),
+    ):
+        result = await TestPlugin()._download_audio_to_temp(
+            "http://example.test/a.flac", "RetryVoice"
+        )
+    assert result is not None
+    assert session.hits >= 2, session.hits
+    output = Path(result)
+    assert output.name.endswith("_source.flac")
+    assert output.read_bytes() == session.payload
     output.unlink()
 
 
@@ -487,10 +513,11 @@ def main_test():
         run(test_send_music_file_private_upload_and_fallback(temp_dir))
         run(test_send_music_file_failure_keeps_event_unhandled(temp_dir))
         run(test_raw_download_retries_on_timeout(temp_dir))
+        run(test_voice_download_retries_on_timeout(temp_dir))
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-    print("✅ 音乐音频回归测试通过（12 项）")
+    print("✅ 音乐音频回归测试通过（13 项）")
 
 
 if __name__ == "__main__":

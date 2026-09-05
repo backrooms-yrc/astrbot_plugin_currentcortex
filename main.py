@@ -4450,74 +4450,25 @@ class CurrentCortexPlugin(Star):
 
         无论上游返回何种格式（mp3/flac/wav/m4a），下载后一律经 ffmpeg
         压缩为 64kbps 单声道 MP3，确保语音条不超平台大小限制。
+        下载复用文件模式的 _download_source_audio_to_temp（单次 90s、
+        超时/网络错误重试 3 次）：旧实现 total=30 且无重试，慢 CDN 或
+        大文件（无损常见 15~40MB）时偶发「下载音频超时」导致语音条失败。
         """
-        try:
-            ext = ".mp3"
-            if ".flac" in url.lower():
-                ext = ".flac"
-            elif ".wav" in url.lower():
-                ext = ".wav"
-            elif ".m4a" in url.lower():
-                ext = ".m4a"
-
-            temp_dir = os.path.join(tempfile.gettempdir(), "astrbot_music")
-            os.makedirs(temp_dir, exist_ok=True)
-
-            self._cleanup_old_audio_files(temp_dir)
-
-            safe_name = re.sub(r"[^\w\-.]", "_", name)[:50] or "music"
-            request_id = uuid.uuid4().hex[:12]
-            temp_path = os.path.join(temp_dir, f"{safe_name}_{request_id}_source{ext}")
-
-            timeout = aiohttp.ClientTimeout(total=30)
-            # LeiZ 接口要求所有请求携带 API Key（鉴权头为 x-api-key）。
-            # 歌曲下载地址可能经 LeiZ 代理，因此附加统一的 x-api-key 头；
-            # 对非 LeiZ 的 CDN 地址多带此头无副作用。
-            dl_headers = {"User-Agent": "AstrBot-Music-Plugin/1.0"}
-            if self._leiz_api_key:
-                dl_headers["x-api-key"] = self._leiz_api_key
-            async with aiohttp.ClientSession(
-                timeout=timeout, headers=dl_headers
-            ) as session:
-                async with session.get(url) as resp:
-                    if resp.status != 200:
-                        logger.warning(f"[Music] 下载音频失败: HTTP {resp.status}")
-                        return None
-
-                    with open(temp_path, "wb") as f:
-                        async for chunk in resp.content.iter_chunked(8192):
-                            f.write(chunk)
-
-            # 一律压缩为 64kbps 单声道 MP3，避免语音条超平台大小限制。
-            # 源文件已是 .mp3 时仍需重压（上游常见 320kbps，体积过大）。
-            src_mb = os.path.getsize(temp_path) / (1024 * 1024)
-            logger.debug(f"[Music] 原始音频已下载: {temp_path} ({src_mb:.2f}MB)")
-            compressed = await self._compress_for_voice(temp_path, temp_dir, safe_name)
-            if compressed:
-                return compressed
-
-            logger.warning(
-                "[Music] 语音压缩失败，回退发送原始音频（可能受平台大小/格式限制）: %s",
-                temp_path,
-            )
-            return temp_path
-
-        except asyncio.TimeoutError:
-            logger.warning("[Music] 下载音频超时（30秒）: %s", name)
-            if "temp_path" in locals():
-                self._remove_file(temp_path)
+        source_path = await self._download_source_audio_to_temp(url, name)
+        if not source_path:
             return None
-        except Exception as e:
-            logger.warning(
-                "[Music] 下载音频异常 [%s] %r: %s",
-                type(e).__name__,
-                e,
-                name,
-                exc_info=True,
-            )
-            if "temp_path" in locals():
-                self._remove_file(temp_path)
-            return None
+
+        temp_dir = os.path.dirname(source_path)
+        safe_name = re.sub(r"[^\w\-.]", "_", name)[:50] or "music"
+        compressed = await self._compress_for_voice(source_path, temp_dir, safe_name)
+        if compressed:
+            return compressed
+
+        logger.warning(
+            "[Music] 语音压缩失败，回退发送原始音频（可能受平台大小/格式限制）: %s",
+            source_path,
+        )
+        return source_path
 
     async def _compress_for_voice(
         self, source_path: str, temp_dir: str, safe_name: str
@@ -5730,6 +5681,13 @@ class CurrentCortexPlugin(Star):
 
     async def terminate(self):
         logger.info("CurrentCortexPlugin is being terminated")
+        # 跨群记忆为后台线程异步刷盘，停用前必须同步做最终落盘
+        if getattr(self, "_cross_group_store", None) is not None:
+            try:
+                self._cross_group_store.close()
+                logger.info("✅ 跨群聊记忆已刷盘并停止后台写盘线程")
+            except Exception as e:
+                logger.warning(f"[CrossGroupMemory] 停止刷盘线程失败: {e}")
         if hasattr(self, "_dglab_webui") and self._dglab_webui:
             await self._dglab_webui.stop()
             logger.info("✅ CCDG WebUI 已停止")

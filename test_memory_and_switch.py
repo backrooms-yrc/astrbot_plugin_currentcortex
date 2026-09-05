@@ -315,6 +315,7 @@ def test_record_persists_dict_format_roundtrip():
     try:
         store = CrossGroupMemoryStore(data_dir=d)
         store.record("p1", "内容X", max_records=5)
+        store.flush()  # record 只改内存，读盘前需显式刷盘
         raw = _read_json(os.path.join(d, "currentcortex_cross_group.json"))
         rec = raw["p1"][0]
         assert set(rec.keys()) == {"ts", "tag", "content"}, rec
@@ -322,6 +323,7 @@ def test_record_persists_dict_format_roundtrip():
         # 重新加载仍是新格式
         store2 = CrossGroupMemoryStore(data_dir=d)
         assert store2.get_recent("p1", 5) == ["内容X"]
+        store2.close()
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
@@ -377,8 +379,48 @@ def test_forget_keyword_case_insensitive():
         assert removed == 2, removed
         assert store.get_recent("p1", 10) == ["今天天气不错"]
         # 删除已刷盘
+        store.flush()
         raw = _read_json(os.path.join(d, "currentcortex_cross_group.json"))
         assert len(raw["p1"]) == 1
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def test_record_defers_write_and_background_flush_persists():
+    """record() 不得同步写盘（曾把事件循环卡 30 秒）；由后台线程延迟合并落盘。"""
+    d = _tmp_data_dir()
+    store = None
+    try:
+        path = os.path.join(d, "currentcortex_cross_group.json")
+        store = CrossGroupMemoryStore(data_dir=d, flush_interval_seconds=0.05)
+        store.record("p1", "第一条", max_records=5)
+        # 消息热路径只改内存：此刻文件还不存在
+        assert not os.path.exists(path), path
+        store.record("p1", "第二条", max_records=5)
+        # 后台线程在间隔到期后自动刷盘
+        deadline = time.time() + 2
+        while not os.path.exists(path) and time.time() < deadline:
+            time.sleep(0.02)
+        assert os.path.exists(path), path
+        raw = _read_json(path)
+        assert [r["content"] for r in raw["p1"]] == ["第一条", "第二条"]
+    finally:
+        if store is not None:
+            store.close()
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def test_close_flushes_pending_changes():
+    """停用插件（close）必须把未落盘的变更同步写入，否则会丢最近的记录。"""
+    d = _tmp_data_dir()
+    try:
+        path = os.path.join(d, "currentcortex_cross_group.json")
+        store = CrossGroupMemoryStore(data_dir=d, flush_interval_seconds=60)
+        store.record("p1", "待刷盘", max_records=5)
+        assert not os.path.exists(path)  # 间隔很长，后台不会先写
+        store.close()
+        raw = _read_json(path)
+        assert raw["p1"][0]["content"] == "待刷盘"
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
@@ -1051,6 +1093,9 @@ TESTS = [
     test_forget_keyword_case_insensitive,
     test_forget_keyword_empty_or_no_match,
     test_clear_and_get_recent_limit,
+    # 后台刷盘（v2.5.1：record 不再同步写盘）
+    test_record_defers_write_and_background_flush_persists,
+    test_close_flushes_pending_changes,
     # group_switch_store
     test_set_disabled_permanent,
     test_timed_disable_auto_recovers,

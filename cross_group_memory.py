@@ -1,9 +1,16 @@
 """跨群聊记忆 - 同一平台实例下所有群聊共享的滚动记忆。
 
 存储后端为 JSON 文件（data/currentcortex_cross_group.json），用 threading.Lock
-保护读写，与插件内 UserStore/DeviceStore 的持久化风格一致，完全自包含、不依赖
+保护内存读写，与插件内 UserStore/DeviceStore 的持久化风格一致，完全自包含、不依赖
 AstrBot 核心数据库。每个平台实例（platform_id）一份独立的记录列表，同平台下所有
 群聊共享这份记忆，重启后保留。
+
+落盘策略（v2.5.1 起）：变更方法（record/clear/forget_keyword）只改内存并置脏标记，
+由常驻后台线程每 _DEFAULT_FLUSH_INTERVAL_SECONDS 合并刷盘一次。此前的实现在
+每条群消息的处理协程里同步重写整个 JSON 文件，磁盘高峰期曾把事件循环卡住 30 秒
+（见 event_loop_watchdog.log），拖垮同时在途的点歌下载等异步请求；消息热路径因此
+绝不允许再出现磁盘 I/O。代价是进程被硬杀时最多丢一个刷盘间隔内的最新记录（插件
+正常停用经 close() 刷盘，不受影响）。
 
 记录结构（每条记录为一个 dict）：
     {"ts": <unix 时间戳:float>, "tag": <话题标签:str|None>, "content": <文本:str>}
@@ -22,6 +29,10 @@ from typing import Optional
 
 from astrbot.api import logger
 
+# 后台刷盘间隔：窗口内的多次变更合并为一次写盘（聊天高峰每秒多条消息，
+# 逐条写盘既慢又放大 I/O 压力）。
+_DEFAULT_FLUSH_INTERVAL_SECONDS = 2.0
+
 
 class CrossGroupMemoryStore:
     """按 platform_id 分桶的持久化跨群聊记忆存储。
@@ -30,14 +41,25 @@ class CrossGroupMemoryStore:
         data_dir: 数据目录（通常为 "data"）。
     """
 
-    def __init__(self, data_dir: str = "data") -> None:
+    def __init__(self, data_dir: str = "data",
+                 flush_interval_seconds: float = _DEFAULT_FLUSH_INTERVAL_SECONDS) -> None:
         self._data_dir = data_dir
         self._file_path = os.path.join(data_dir, "currentcortex_cross_group.json")
         self._lock = threading.Lock()
         # platform_id -> deque[dict]，dict 结构见模块 docstring
         self._buffers: dict[str, deque] = {}
+        # 脏标记与后台刷盘线程：见模块 docstring 的落盘策略说明
+        self._dirty = False
+        self._flush_interval = max(0.01, float(flush_interval_seconds))
+        self._stop = threading.Event()
+        self._flusher = threading.Thread(
+            target=self._flush_loop,
+            name="cc-cross-group-flush",
+            daemon=True,
+        )
         self._ensure_data_dir()
         self._load()
+        self._flusher.start()
 
     def _ensure_data_dir(self) -> None:
         os.makedirs(self._data_dir, exist_ok=True)
@@ -82,9 +104,16 @@ class CrossGroupMemoryStore:
         except (json.JSONDecodeError, OSError) as e:
             logger.warning(f"[CrossGroupMemory] 加载历史记忆失败: {e}")
 
-    def _save(self) -> None:
-        """将内存镜像刷盘（调用方需持有锁）。"""
-        data = {pid: list(buf) for pid, buf in self._buffers.items()}
+    def _snapshot_locked(self) -> dict:
+        """导出全部内存记录的浅拷贝（调用方需持有锁）。"""
+        return {pid: list(buf) for pid, buf in self._buffers.items()}
+
+    def _write_snapshot(self, data: dict) -> None:
+        """把快照写入 JSON 文件（含 .tmp 原子替换）。
+
+        仅允许后台刷盘线程与 flush()/close() 调用；消息热路径（事件循环线程）
+        不得调用——同步写盘曾阻塞事件循环 30 秒，见模块 docstring。
+        """
         tmp_path = self._file_path + ".tmp"
         try:
             with open(tmp_path, "w", encoding="utf-8") as f:
@@ -93,6 +122,35 @@ class CrossGroupMemoryStore:
         except OSError as e:
             logger.warning(f"[CrossGroupMemory] 保存记忆失败: {e}")
 
+    def _flush_loop(self) -> None:
+        """后台刷盘线程主循环：周期性把脏数据合并写盘。"""
+        while not self._stop.wait(self._flush_interval):
+            with self._lock:
+                if not self._dirty:
+                    continue
+                data = self._snapshot_locked()
+                self._dirty = False
+            self._write_snapshot(data)
+
+    def flush(self) -> None:
+        """立即把未落盘的变更刷到磁盘（同步）。
+
+        供停机与测试使用；消息热路径不要调用（会同步写盘）。
+        """
+        with self._lock:
+            if not self._dirty:
+                return
+            data = self._snapshot_locked()
+            self._dirty = False
+        self._write_snapshot(data)
+
+    def close(self) -> None:
+        """停止后台刷盘线程并做最终刷盘（插件停用时调用）。"""
+        self._stop.set()
+        if self._flusher.is_alive():
+            self._flusher.join(timeout=5)
+        self.flush()
+
     def record(
         self,
         platform_id: str,
@@ -100,7 +158,7 @@ class CrossGroupMemoryStore:
         max_records: int,
         tag: Optional[str] = None,
     ) -> None:
-        """追加一条记录并裁剪到 max_records，然后刷盘。
+        """追加一条记录并裁剪到 max_records（仅改内存，后台线程异步刷盘）。
 
         Args:
             platform_id: 平台适配器实例 id（UMO 第一段）。
@@ -116,7 +174,7 @@ class CrossGroupMemoryStore:
             buf.append({"ts": time.time(), "tag": tag, "content": content})
             while len(buf) > max_records:
                 buf.popleft()
-            self._save()
+            self._dirty = True
 
     def get_recent(
         self,
@@ -166,9 +224,9 @@ class CrossGroupMemoryStore:
         with self._lock:
             buf = self._buffers.get(platform_id)
             cnt = len(buf) if buf else 0
-            if buf is not None:
+            if cnt:
                 buf.clear()
-            self._save()
+                self._dirty = True
             return cnt
 
     def forget_keyword(self, platform_id: str, keyword: str) -> int:
@@ -194,5 +252,5 @@ class CrossGroupMemoryStore:
             removed = len(buf) - len(kept)
             if removed > 0:
                 self._buffers[platform_id] = kept
-                self._save()
+                self._dirty = True
             return removed
