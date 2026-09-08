@@ -424,6 +424,14 @@ const SETTINGS_META = {
   music_default_source: { name: "默认音源", hint: "auto = 网易云优先、失败自动换酷狗；netease = 只用网易云；kugou = 只用酷狗。" },
   // —— LeiZ ——
   leiz_api_key: { name: "LeiZ API 密钥", hint: "图库、点歌、一言、天气等接口的密钥。留空 = 这些功能全部禁用。" },
+  // —— 媒体解析 ——
+  media_auto_parse_enable: { name: "链接自动解析", hint: "群里有人发 小红书/B站/抖音/微博 的链接时，不用发命令、机器人自动解析并回复。" },
+  media_auto_parse_dedup_min: { name: "自动解析去重（分钟）", hint: "同一条链接在同一个群里，多少分钟内只自动解析一次，防止反复转发刷屏。0 = 每次都解析。" },
+  media_video_send_enable: { name: "视频直接发出来", hint: "解析到视频时直接把视频发到聊天里，不用自己点链接。发不出去时自动改为发链接。" },
+  media_video_max_mb: { name: "视频大小上限（MB）", hint: "超过这个大小的视频就不发、只给链接，免得大文件卡住机器人。" },
+  media_video_quality: { name: "B站视频清晰度", hint: "下拉选择：480P / 720P / 1080P / 4K / 自动最高。4K 文件很大，长视频可能发不动、自动改为只发链接。需要配置 LeiZ API 密钥。" },
+  media_parse_cache_enable: { name: "解析结果缓存", hint: "同一条链接短时间内再发，直接用上次的结果，不去重复请求、不容易触发平台反爬。" },
+  media_parse_cache_ttl: { name: "缓存有效期（秒）", hint: "解析结果缓存多久过期。默认 600（10 分钟）。" },
   // —— 郊狼 ——
   dglab_server_url: { name: "郊狼服务器地址", hint: "DG-LAB 中转服务器，格式如 ws://192.168.1.100:9999。填了之后 /dglab bind 可省略地址。" },
   dglab_heartbeat_interval: { name: "心跳间隔（秒）", hint: "多久和服务器报一次到，防止连接被判定掉线。建议 30~120。" },

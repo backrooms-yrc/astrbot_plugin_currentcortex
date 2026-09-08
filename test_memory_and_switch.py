@@ -1098,6 +1098,19 @@ def test_auto_parse_respects_switch_and_disable():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def test_media_video_quality_parsing():
+    """清晰度配置解析：下拉文本、历史数字、乱值兜底。"""
+    P = PluginCls
+    assert P._parse_media_video_quality("4K") == 120
+    assert P._parse_media_video_quality("1080P") == 80
+    assert P._parse_media_video_quality("自动最高") == 127
+    assert P._parse_media_video_quality(80) == 80  # 历史数字配置
+    assert P._parse_media_video_quality("80") == 80
+    assert P._parse_media_video_quality(999) == 127  # 越界钳制
+    assert P._parse_media_video_quality("乱写") == 80
+    assert P._parse_media_video_quality(None) == 80
+
+
 TESTS = [
     # cross_group_memory
     test_legacy_string_records_migrate_on_load,
@@ -1148,6 +1161,8 @@ TESTS = [
     test_auto_parse_skips_commands_and_unsupported_links,
     test_auto_parse_dedup_same_link_same_chat,
     test_auto_parse_respects_switch_and_disable,
+    # 清晰度配置解析（v2.6.2）
+    test_media_video_quality_parsing,
 ]
 
 

@@ -83,6 +83,20 @@ _CONFIG_GROUPS: List[Dict[str, Any]] = [
         "items": ["leiz_api_key"],
     },
     {
+        "key": "media",
+        "title": "媒体解析",
+        "icon": "link",
+        "items": [
+            "media_auto_parse_enable",
+            "media_auto_parse_dedup_min",
+            "media_video_send_enable",
+            "media_video_max_mb",
+            "media_video_quality",
+            "media_parse_cache_enable",
+            "media_parse_cache_ttl",
+        ],
+    },
+    {
         "key": "coyote",
         "title": "DG-LAB（郊狼）",
         "icon": "bolt",

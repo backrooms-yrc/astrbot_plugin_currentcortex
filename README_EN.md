@@ -265,7 +265,7 @@ Fetches random Pixiv artwork through LeiZ API, with rich filtering and search op
 
 ### 2. Media Content Parsing (`/xhs` `/bilibili` `/douyin`)
 
-Auto-detects the platform behind Xiaohongshu, Bilibili, Douyin, and Weibo links and returns watermark-free images / video info.
+Auto-detects the platform behind Xiaohongshu, Bilibili, Douyin, and Weibo links and returns watermark-free images and videos (videos are sent directly into the chat — no link clicking). Posting a link in a group triggers parsing automatically, no command needed.
 
 #### Basic Commands
 
@@ -301,18 +301,26 @@ Auto-detects the platform behind Xiaohongshu, Bilibili, Douyin, and Weibo links 
 #### What You Get Back
 
 - **Xiaohongshu**: title, author, likes, description, watermark-free full-resolution images, video link (if any)
-- **Bilibili**: title, uploader, duration, views/likes, cover, part (P) info, video download link (if any)
-- **Douyin**: title, author, likes/comments/shares, watermark-free video link
-- **Weibo**: text, author, reposts/comments/likes, images (up to 9), video link (if any)
+- **Bilibili**: title, uploader, duration, quality label, cover — the video is **sent directly into the chat** (see "Video direct-send" below)
+- **Douyin**: title, author, likes/comments/shares, watermark-free video **sent directly**; gallery posts send the original images one by one (up to 9)
+- **Weibo**: text, author, reposts/comments/likes, images (up to 9), video sent directly (if any)
 
 #### Parsing Enhancements
 
+- **Automatic link parsing (no command)**: when someone posts a Xiaohongshu/Bilibili/Douyin/Weibo link in a group, the bot parses and replies automatically — no `/解析` needed. Command messages never trigger twice; the same link in the same group is parsed only once every 30 minutes by default (adjustable) to prevent spam from re-sharing, while the `/解析` command can always force a re-parse; `/开关 off media` disables both commands and auto-parsing per group.
+- **Video direct-send**: parsed videos are sent straight into the chat instead of a hotlink-protected URL nobody can open. Bilibili videos are fetched through the LeiZ API as a server-merged MP4 (quality selectable in config: 480P / 720P / 1080P / 4K / Auto-max, default 1080P); Douyin videos are watermark-free. Videos that are too large or fail to download fall back to a plain link. Temp files live in `/tmp/astrbot_media` and are cleaned up after 1 hour.
+- **LeiZ API parsing (Bilibili/Douyin)**: with `leiz_api_key` configured, Bilibili/Douyin parsing goes through the LeiZ API first — Bilibili unlocks higher qualities than guest access (up to 4K, subject to the site's account entitlements and the video source), Douyin returns watermark-free links and gallery support; requests bypass the platforms' official APIs and their rate limiting. If LeiZ is unavailable, the plugin automatically falls back to the original parsing path.
 - **Graded failure hints**: parse failures no longer dump raw exception text — they are classified by cause (link expired, content deleted/private, platform anti-scraping, network timeout, unrecognized format, etc.) so you can tell link problems from network problems.
 - **Result caching**: the same link returns the previous parse result within the validity window (10 minutes by default, adjustable via `media_parse_cache_ttl`), reducing request frequency to target platforms and the chance of triggering anti-scraping/IP bans; only successful results are cached — failures retry in real time.
 - **Cross-group memory integration**: with cross-group memory enabled, every successful parse is recorded with the `media` tag ("who parsed what"), so later conversations can naturally refer back to "that video you just sent".
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
+| `media_auto_parse_enable` | bool | true | [Auto-parse] parse supported-platform links posted in chat automatically, no command needed |
+| `media_auto_parse_dedup_min` | int | 30 | [Auto-parse] the same link is auto-parsed only once per this many minutes in the same chat. 0 = always parse |
+| `media_video_send_enable` | bool | true | [Video direct-send] send parsed videos straight into the chat; falls back to a link when sending fails |
+| `media_video_max_mb` | int | 100 | [Video direct-send] maximum video size (MB) to send; larger videos get a link instead |
+| `media_video_quality` | string | 1080P | [Video direct-send] Bilibili quality dropdown (480P / 720P / 1080P / 4K / Auto-max). Requires `leiz_api_key`; 4K files are large — long videos may fall back to a link |
 | `media_parse_cache_enable` | bool | true | Enable the parse result cache |
 | `media_parse_cache_ttl` | int | 600 | Cache validity in seconds. Download/stream links themselves expire — don't set this too long |
 

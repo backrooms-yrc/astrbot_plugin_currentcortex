@@ -1237,8 +1237,8 @@ class CurrentCortexPlugin(Star):
             1, int(config.get("media_video_max_mb", 100))
         )
         # B站解析目标清晰度（经 LeiZ API，不可用时自动降级到可用档）
-        self._media_video_quality = max(
-            16, min(127, int(config.get("media_video_quality", 80)))
+        self._media_video_quality = self._parse_media_video_quality(
+            config.get("media_video_quality", "1080P")
         )
         # 链接自动解析：消息中侦测到受支持平台链接时无需命令直接解析
         self._media_auto_parse_enable = bool(
@@ -4924,6 +4924,40 @@ class CurrentCortexPlugin(Star):
 
     # 单条消息最多解析的链接数（防刷屏与平台限流）
     _MEDIA_BATCH_LIMIT = 5
+
+    # 配置面板「B站视频清晰度」下拉文本 → LeiZ qn 代码
+    # （自动最高 = 请求 8K 档，LeiZ 按视频源与账号权益自动降到最高可用档）
+    _MEDIA_VIDEO_QUALITY_QN = {
+        "自动最高": 127,
+        "8k": 127,
+        "hdr": 125,
+        "4k": 120,
+        "1080p60": 116,
+        "1080p高码率": 112,
+        "1080p+": 112,
+        "1080p": 80,
+        "720p": 64,
+        "480p": 32,
+        "360p": 16,
+    }
+
+    @classmethod
+    def _parse_media_video_quality(cls, value: Any) -> int:
+        """把配置里的清晰度转成 LeiZ qn 代码。
+
+        接受下拉文本（如 "4K"、"自动最高"）；兼容历史版本的数字配置
+        （如 80）与数字字符串。无法识别时回退默认 1080P。
+        """
+        if isinstance(value, bool) or value is None:
+            return 80
+        if isinstance(value, int):
+            return max(16, min(127, value))
+        text = str(value).strip()
+        if not text:
+            return 80
+        if text.isdigit():
+            return max(16, min(127, int(text)))
+        return cls._MEDIA_VIDEO_QUALITY_QN.get(text.lower(), 80)
 
     # 失败原因分级 → 用户可读提示（MediaParserError.kind 映射）
     _MEDIA_ERROR_HINTS = {
