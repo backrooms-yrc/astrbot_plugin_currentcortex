@@ -2,6 +2,8 @@
 
 **[简体中文](README.md)** | **[English](README_EN.md)** | **[日本語](README_JA.md)** | **[繁體中文](README_ZH-TW.md)**
 
+[![アクセス数](https://komarev.com/ghpvc/?username=astrbot_plugin_currentcortex&label=%E3%82%A2%E3%82%AF%E3%82%BB%E3%82%B9%E6%95%B0&color=blueviolet&style=flat-square)](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
+
 > [!IMPORTANT]
 > ## 🔒 ご利用の前に、必ず公式 QQ グループへご参加ください
 >
