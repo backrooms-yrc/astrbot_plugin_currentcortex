@@ -2,6 +2,8 @@
 
 **[简体中文](README.md)** | **[English](README_EN.md)** | **[日本語](README_JA.md)** | **[繁體中文](README_ZH-TW.md)**
 
+[![Visitors](https://komarev.com/ghpvc/?username=astrbot_plugin_currentcortex&label=Visitors&color=blueviolet&style=flat-square)](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
+
 > [!IMPORTANT]
 > ## 🔒 Please Join the Official QQ Group Before Using This Plugin
 >
