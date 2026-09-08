@@ -2,7 +2,7 @@
 
 **[简体中文](README.md)** | **[English](README_EN.md)** | **[日本語](README_JA.md)** | **[繁體中文](README_ZH-TW.md)**
 
-[![訪問量](https://komarev.com/ghpvc/?username=currentcortex-views&label=%E8%A8%AA%E5%95%8F%E9%87%8F&color=blueviolet&style=flat-square)](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
+![訪問量](https://count.getloli.com/get/@backrooms-yrc-currentcortex?theme=moebooru)
 
 > [!IMPORTANT]
 > ## 🔒 使用本插件前，請務必加入官方 QQ 群
