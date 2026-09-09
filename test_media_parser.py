@@ -192,6 +192,45 @@ def test_leiz_bili_qn_passthrough_and_clamp():
     assert LeiZMediaAPI("k")._bili_qn == 80  # 默认 1080P
 
 
+def test_leiz_get_json_retries_transient_5xx():
+    """CF 502 等瞬时故障自动重试一次后成功。"""
+    api = LeiZMediaAPI("k")
+    calls = []
+
+    async def fake_once(path, params):
+        calls.append(1)
+        if len(calls) == 1:
+            return (True, None, "HTTP 502")
+        return (False, {"title": "ok"}, "")
+
+    api._request_json_once = fake_once
+    data = asyncio.run(api._get_json("/api/bilibili", {}, backoff=0.01))
+    assert data == {"title": "ok"} and len(calls) == 2
+
+
+def test_leiz_get_json_no_retry_on_business_error():
+    """4xx/业务错误重试无意义：单次即返回 None。"""
+    api = LeiZMediaAPI("k")
+    calls = []
+
+    async def fake_once(path, params):
+        calls.append(1)
+        return (False, None, "业务失败 视频不存在")
+
+    api._request_json_once = fake_once
+    assert asyncio.run(api._get_json("/api/bilibili", {}, backoff=0.01)) is None
+    assert len(calls) == 1
+
+    async def fake_502_forever(path, params):
+        calls.append(1)
+        return (True, None, "HTTP 502")
+
+    calls.clear()
+    api._request_json_once = fake_502_forever
+    assert asyncio.run(api._get_json("/api/bilibili", {}, backoff=0.01)) is None
+    assert len(calls) == 2  # 重试一次后放弃
+
+
 def test_extract_bilibili_classifies_b23_short_code():
     """b23.tv 短码必须标记为 'short'，而不是被误判为 av 号。"""
     assert URLExtractor.extract_bilibili("https://b23.tv/KZclOli") == {
@@ -327,6 +366,8 @@ TESTS = [
     test_leiz_douyin_mapping_video_and_gallery,
     test_leiz_unavailable_without_key,
     test_leiz_bili_qn_passthrough_and_clamp,
+    test_leiz_get_json_retries_transient_5xx,
+    test_leiz_get_json_no_retry_on_business_error,
 ]
 
 

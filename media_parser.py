@@ -190,36 +190,76 @@ class LeiZMediaAPI:
             return path
         return self.BASE + path
 
-    async def _get_json(self, path: str, params: Dict[str, str]) -> Optional[Dict[str, Any]]:
-        """GET 并校验 {success, data} 包装；任何异常返回 None。"""
+    # 可重试的瞬时故障：服务端 5xx（含 Cloudflare 52x）；4xx 鉴权/业务错误不重试
+    _RETRYABLE_STATUS = frozenset(
+        {500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530}
+    )
+
+    async def _request_json_once(
+        self, path: str, params: Dict[str, str]
+    ) -> tuple:
+        """单次请求，返回 ``(retryable, data, note)``。
+
+        data 非 None 即成功（{success,data} 包装已校验）；失败时 retryable
+        表示该故障是否值得重试（5xx/网络抖动/CF 质询页瞬时常见，4xx 与
+        业务错误重试无意义），note 为给日志的简短原因。
+        """
         headers = {**self._headers, "x-api-key": self._api_key}
         try:
             async with aiohttp.ClientSession(
                 timeout=self._timeout, headers=headers
             ) as session:
-                async with session.get(self.BASE + path, params=params, ssl=False) as resp:
+                async with session.get(
+                    self.BASE + path, params=params, ssl=False
+                ) as resp:
                     if resp.status != 200:
-                        text = await resp.text()
-                        logger.warning(
-                            f"[LeiZMedia] HTTP {resp.status} {path}: {text[:120]}"
+                        return (
+                            resp.status in self._RETRYABLE_STATUS,
+                            None,
+                            f"HTTP {resp.status}",
                         )
-                        return None
                     try:
                         payload = await resp.json()
-                    except (aiohttp.ClientError, ValueError, json.JSONDecodeError) as e:
-                        # Cloudflare 质询页/HTML 兜底页会走到这里
-                        logger.warning(f"[LeiZMedia] 响应非 JSON {path}: {e}")
-                        return None
+                    except (aiohttp.ClientError, ValueError, json.JSONDecodeError):
+                        # Cloudflare 质询页/HTML 兜底页；多为瞬时，可重试
+                        return (True, None, "响应非 JSON")
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            logger.warning(f"[LeiZMedia] 请求失败 {path}: {e}")
-            return None
+            return (True, None, f"网络错误 {e}")
         if not isinstance(payload, dict) or not payload.get("success"):
-            logger.warning(
-                f"[LeiZMedia] 业务失败 {path}: {str(payload.get('message'))[:120]}"
-            )
-            return None
+            message = str((payload or {}).get("message"))[:120] if isinstance(payload, dict) else "响应格式异常"
+            return (False, None, f"业务失败 {message}")
         data = payload.get("data")
-        return data if isinstance(data, dict) else None
+        if not isinstance(data, dict):
+            return (False, None, "data 字段缺失")
+        return (False, data, "")
+
+    async def _get_json(
+        self,
+        path: str,
+        params: Dict[str, str],
+        max_attempts: int = 2,
+        backoff: float = 2.0,
+    ) -> Optional[Dict[str, Any]]:
+        """GET 并校验 {success, data} 包装；瞬时故障自动重试一次。
+
+        LeiZ 前置 Cloudflare，偶发 502/质询页通常几秒内自愈；一次瞬时
+        失败就回退的话，B站官方路径若正被风控（412/429）会级联成彻底
+        失败——所以先原地重试一次，仍失败再交给调用方回退。
+        任何失败最终返回 None。
+        """
+        for attempt in range(1, max_attempts + 1):
+            retryable, data, note = await self._request_json_once(path, params)
+            if data is not None:
+                return data
+            if not retryable or attempt == max_attempts:
+                logger.warning(f"[LeiZMedia] {note} {path}")
+                return None
+            logger.warning(
+                f"[LeiZMedia] {note} {path} "
+                f"(attempt {attempt}/{max_attempts}，{backoff}s 后重试)"
+            )
+            await asyncio.sleep(backoff)
+        return None
 
     async def parse_bilibili(self, url_or_text: str) -> Optional[Dict[str, Any]]:
         """B站解析：直接把分享链接交给 LeiZ（b23.tv 短链也由它展开）。"""
