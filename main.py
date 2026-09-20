@@ -2,6 +2,7 @@ import re
 import json
 import random
 import asyncio
+import hashlib
 import time
 import shutil
 import uuid
@@ -48,6 +49,14 @@ NETEASE_SEARCH_URL = "https://api.bileizhen.top/api/netease/search"
 KUGOU_API_URL = "https://api.bileizhen.top/api/kugou"
 KUGOU_SEARCH_URL = "https://api.bileizhen.top/api/kugou/search"
 PIXIV_ARTWORK_URL = "https://www.pixiv.net/artworks/{}"
+
+# 插件校验码（自 2026-09-20 起强制）：因插件滥用行为导致的一系列问题，
+# 部署者须加入官方 QQ 群 PLUGIN_OFFICIAL_GROUP 获取校验码填入配置项
+# verify_code。源码中只存放校验码的 SHA-256 摘要（明文不出现在仓库里），
+# 校验时对用户填写值做同样哈希后比对；留空/错误时所有指令仅返回入群
+# 提示（见 _verify_code_matches / on_message_verify_guard）。
+VERIFY_CODE_DIGEST = "4a8eec4925826f4b60526d7ac3c0a9b61ef54ac19233bafce2f4a13eb49395d2"
+PLUGIN_OFFICIAL_GROUP = "1106353813"
 
 HITOKOTO_CATEGORIES = {
     "a": "动画",
@@ -1171,11 +1180,45 @@ def _remove_file_safe(file_path: str) -> None:
     "astrbot_plugin_currentcortex",
     "Rcst20",
     "多功能 AstrBot 插件（CurrentCortex）—— Pixiv 随机图片 ·网易云点歌 ·小红书/B站/抖音媒体解析 ·每日一言 ·天气 ·男娘 ·DG-LAB（郊狼） 设备管理 ·Wikidot 站点管理 ·跨群聊记忆 ·按群聊开关。基于 LeiZ API。",
-    "2.3.1",
+    "2.7.0",
 )
 class CurrentCortexPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
+
+        # 校验码门禁：填写值哈希后与源码内摘要比对，一致才解锁全部指令。
+        # 留空与填错分别提示；_verify_ok 为 False 时本插件所有命令、LLM
+        # 工具与链接自动解析均被拦截（见 on_message_verify_guard 等）。
+        raw_verify_code = str(config.get("verify_code", "")).strip()
+        self._verify_ok = self._verify_code_matches(raw_verify_code)
+        if self._verify_ok:
+            logger.info("[Verify] 校验码已通过，插件功能解锁")
+        elif not raw_verify_code:
+            self._verify_notice = (
+                "尊敬的用户，您好！由于插件滥用行为导致的一系列问题，"
+                "自 2026 年 9 月 20 日起，您必须加入 CurrentCortex 插件官方 QQ 群"
+                f"（{PLUGIN_OFFICIAL_GROUP}）获取校验码，"
+                "然后将其填写在插件配置的「校验码」（verify_code）一项中。\n"
+                "💡 获取校验码完全免费，捐赠全凭自愿，"
+                "捐赠用户与普通用户的权益没有任何区别。"
+            )
+            logger.warning(
+                "[Verify] 校验码（verify_code）未填写，本插件全部指令已锁定，"
+                "仅返回入群提示。请加入官方 QQ 群 "
+                f"{PLUGIN_OFFICIAL_GROUP} 获取校验码后填写到插件配置中"
+            )
+        else:
+            self._verify_notice = (
+                "❌ 校验码错误，插件功能已被锁定。请加入 CurrentCortex 插件"
+                f"官方 QQ 群（{PLUGIN_OFFICIAL_GROUP}）确认正确的校验码，"
+                "并更新插件配置中「校验码」（verify_code）一项。\n"
+                "💡 获取校验码完全免费，捐赠全凭自愿，"
+                "捐赠用户与普通用户的权益没有任何区别。"
+            )
+            logger.warning(
+                "[Verify] 校验码（verify_code）填写错误，本插件全部指令已锁定。"
+                f"请加入官方 QQ 群 {PLUGIN_OFFICIAL_GROUP} 确认正确的校验码"
+            )
 
         self._default_r18 = int(config.get("default_r18", 0))
         self._default_num = max(1, min(20, int(config.get("default_num", 1))))
@@ -1649,6 +1692,33 @@ class CurrentCortexPlugin(Star):
 
     # 关闭期间「仅提醒一次」的节流间隔（同一群同一域）
     _SWITCH_HINT_INTERVAL_SECONDS = 3600.0
+
+    @staticmethod
+    def _verify_code_matches(raw: str) -> bool:
+        """用户填写的校验码是否正确：SHA-256 后与源码内摘要比对。"""
+        return (
+            hashlib.sha256((raw or "").encode("utf-8")).hexdigest()
+            == VERIFY_CODE_DIGEST
+        )
+
+    @filter.event_message_type(EventMessageType.ALL, priority=20)
+    async def on_message_verify_guard(self, event: AstrMessageEvent):
+        """校验码门禁：verify_code 未正确填写时拦截本插件全部指令。
+
+        priority=20 高于分级开关守卫（10）与普通命令处理器（默认 0），最先
+        执行：命中本插件命令即回复入群提示并 stop_event，后续处理器全部短路。
+        非本插件的消息（闲聊、其他插件/框架指令）不受影响，不会越权拦截。
+        """
+        if self._verify_ok:
+            return
+        try:
+            if self._is_plugin_command(event.message_str) or self._is_switch_command(
+                event.message_str
+            ):
+                await event.send(event.plain_result(self._verify_notice))
+                event.stop_event()
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"[Verify] 门禁处理异常（默认放行）: {e}")
 
     @filter.event_message_type(EventMessageType.ALL, priority=10)
     async def on_message_group_switch_guard(self, event: AstrMessageEvent):
@@ -2487,6 +2557,8 @@ class CurrentCortexPlugin(Star):
 
     def _llm_tool_guard(self) -> Optional[str]:
         """LLM 工具执行前的统一开关检查；返回提示字符串则拦截。"""
+        if not self._verify_ok:
+            return self._verify_notice
         if not self._llm_tools_enable:
             return "该工具已被管理员关闭（llm_tools_enable 未开启）"
         return None
@@ -5374,11 +5446,14 @@ class CurrentCortexPlugin(Star):
     async def on_media_link_auto_parse(self, event: AstrMessageEvent):
         """侦测到消息含受支持平台的链接时自动解析，无需 /解析 命令。
 
-        守卫顺序：总开关 → 命令消息跳过（已由命令处理器接管，避免双重回复）
+        守卫顺序：校验码门禁 → 总开关 → 命令消息跳过（已由命令处理器接管，避免双重回复）
         → media 域分级开关（/开关 off media 同时关闭命令与自动解析）
         → 提取受支持平台的链接 → 同会话去重（同链接反复转发不刷屏）
         → 共用 _respond_media_parse（含视频直发与跨群记忆）。
         """
+        if not self._verify_ok:
+            # 未通过校验：链接不是指令，不刷提示，静默停用自动解析即可
+            return
         if not self._media_auto_parse_enable:
             return
         try:

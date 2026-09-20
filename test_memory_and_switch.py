@@ -227,6 +227,7 @@ class FakeEvent:
     def __init__(self, message_str, umo="aiocqhttp:GroupMessage:10000", admin=True):
         self.message_str = message_str
         self.unified_msg_origin = umo
+        self.stopped = False
 
     def get_message_type(self):
         return _FakeMessageType.GROUP_MESSAGE
@@ -250,6 +251,9 @@ class FakeEvent:
 
     def plain_result(self, text):
         return ("plain", text)
+
+    def stop_event(self):
+        self.stopped = True
 
 
 def _run_command(gen):
@@ -1030,6 +1034,7 @@ def _make_auto_parse_inst(
     inst._media_auto_parse_seen = {}
     inst._group_switch_enable = switch_store is not None
     inst._group_switch_store = switch_store
+    inst._verify_ok = True
     return inst
 
 
@@ -1111,6 +1116,88 @@ def test_media_video_quality_parsing():
     assert P._parse_media_video_quality(None) == 80
 
 
+def test_verify_code_matches_rejects_wrong_inputs():
+    """校验码走 SHA-256 摘要比对：空串与常见错误猜测均不匹配。"""
+    P = PluginCls
+    assert P._verify_code_matches("") is False
+    assert P._verify_code_matches("   ") is False
+    for guess in ("123456", "000000", "111111", "654321", "999999", "abc", "test"):
+        assert P._verify_code_matches(guess) is False, guess
+    # 摘要格式自检：64 位十六进制
+    import hashlib as _hl
+
+    assert len(main_mod.VERIFY_CODE_DIGEST) == 64
+    assert main_mod.VERIFY_CODE_DIGEST != _hl.sha256(b"").hexdigest()
+
+
+def _make_verify_guard_inst(verify_ok=True):
+    inst = PluginCls.__new__(PluginCls)
+    inst._verify_ok = verify_ok
+    inst._verify_notice = "入群提示"
+    return inst
+
+
+def test_verify_guard_blocks_plugin_commands():
+    """校验码未通过：本插件命令（含 /开关 与中文别名）一律拦截并返回提示。"""
+    inst = _make_verify_guard_inst(verify_ok=False)
+    for msg in (
+        "/pixiv",
+        "图片",
+        "/解析 https://b23.tv/abc",
+        "点歌 周杰伦",
+        "/开关 on",
+        "cc",
+    ):
+        ev = FakeEvent(msg)
+        asyncio.run(inst.on_message_verify_guard(ev))
+        assert ev.stopped, msg
+        assert "入群提示" in _sent_texts(ev), msg
+
+
+def test_verify_guard_passes_non_plugin_messages():
+    """校验码未通过：闲聊、其他插件/框架指令、无关链接不受影响。"""
+    inst = _make_verify_guard_inst(verify_ok=False)
+    for msg in (
+        "今天天气不错",
+        "/plugin",
+        "/reset",
+        "看看 https://github.com/example/repo 挺不错",
+    ):
+        ev = FakeEvent(msg)
+        asyncio.run(inst.on_message_verify_guard(ev))
+        assert not ev.stopped, msg
+        assert not getattr(ev, "sent", []), msg
+
+
+def test_verify_guard_allows_when_verified():
+    """校验码通过：命令不再被门卫拦截。"""
+    inst = _make_verify_guard_inst(verify_ok=True)
+    ev = FakeEvent("/pixiv")
+    asyncio.run(inst.on_message_verify_guard(ev))
+    assert not ev.stopped
+    assert not getattr(ev, "sent", [])
+
+
+def test_llm_tool_guard_requires_verify():
+    """LLM 工具门禁：校验码优先于 llm_tools_enable 开关。"""
+    inst = _make_verify_guard_inst(verify_ok=False)
+    assert inst._llm_tool_guard() == "入群提示"
+    inst._verify_ok = True
+    inst._llm_tools_enable = False
+    assert "关闭" in inst._llm_tool_guard()
+    inst._llm_tools_enable = True
+    assert inst._llm_tool_guard() is None
+
+
+def test_auto_parse_silent_when_unverified():
+    """校验码未通过：链接自动解析静默停用（链接非指令，不刷提示）。"""
+    inst = _make_auto_parse_inst(_BiliMediaParserManager())
+    inst._verify_ok = False
+    ev = FakeEvent("看看这个 https://b23.tv/abc 哈哈哈")
+    asyncio.run(inst.on_media_link_auto_parse(ev))
+    assert not getattr(ev, "sent", [])
+
+
 TESTS = [
     # cross_group_memory
     test_legacy_string_records_migrate_on_load,
@@ -1163,6 +1250,13 @@ TESTS = [
     test_auto_parse_respects_switch_and_disable,
     # 清晰度配置解析（v2.6.2）
     test_media_video_quality_parsing,
+    # 校验码门禁（2026-09-20）
+    test_verify_code_matches_rejects_wrong_inputs,
+    test_verify_guard_blocks_plugin_commands,
+    test_verify_guard_passes_non_plugin_messages,
+    test_verify_guard_allows_when_verified,
+    test_llm_tool_guard_requires_verify,
+    test_auto_parse_silent_when_unverified,
 ]
 
 

@@ -48,6 +48,12 @@ def _load_schema() -> Dict[str, Dict[str, Any]]:
 # 配置 key 分组（前端「设置」页用，key 必须存在于 schema）
 _CONFIG_GROUPS: List[Dict[str, Any]] = [
     {
+        "key": "verify",
+        "title": "校验码（必填）",
+        "icon": "verified",
+        "items": ["verify_code"],
+    },
+    {
         "key": "basic",
         "title": "基础",
         "icon": "settings",
@@ -338,6 +344,8 @@ async def page_status(plugin):
                 cfg[key] = bool(plugin.config.get(key, False))
             except Exception:
                 cfg[key] = False
+        # 校验码门禁状态（非配置开关，来自插件运行时判定）
+        cfg["verify_ok"] = bool(getattr(plugin, "_verify_ok", False))
 
         started_at = float(getattr(plugin, "_started_at", time.time()))
         uptime_sec = int(time.time() - started_at)

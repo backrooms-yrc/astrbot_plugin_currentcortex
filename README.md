@@ -29,15 +29,15 @@ Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云�
 ---
 
 > [!IMPORTANT]
-> **🔒 使用本插件前，请务必加入官方 QQ 群**
+> **🔒 自 2026 年 9 月 20 日起，使用本插件必须填写校验码**
 >
-> **所有用户请务必加入官方 QQ 群 1106353813**（[点击加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFBR1hSV1djMSswSHI4MEpmQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)）。
+> 由于插件滥用行为导致的一系列问题，自 **2026-09-20** 起，所有部署本插件的用户必须加入官方 QQ 群 **1106353813**（[点击加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFBR1hSV1djMSswSHI4MEpmQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)）获取**校验码**，并填写到插件配置的 `verify_code`（校验码）一项中。
 >
-> - **更新与紧急公告**：版本更新、上游接口/协议变动、故障通知均在群内第一时间发布
-> - **问题反馈**：遇到 bug 直接在群里 @维护者，跟进速度远快于 GitHub Issues
-> - **使用答疑**：开发者与热心群友常驻答疑，欢迎交流使用心得
+> - **校验码未填写或填写错误时，插件全部指令将被锁定**——机器人只会返回入群获取校验码的提示，所有功能（命令 / AI 工具 / 链接自动解析）均不可用
+> - 校验码在群公告中发布，填写正确后保存配置即可自动解锁，无需其他操作
+> - **获取校验码完全免费，捐赠全凭自愿，捐赠用户与普通用户的权益没有任何区别**——门禁只为遏制滥用、让公告和故障通知能触达用户，不是付费墙
 >
-> 入群后请先阅读群公告。未加群的用户遇到问题时可能无法获得及时支持。
+> 加群同时也能获得：**更新与紧急公告**（版本更新、上游接口/协议变动、故障通知均群内第一时间发布）、**问题反馈**（bug 直接 @维护者，跟进速度远快于 GitHub Issues）、**使用答疑**（开发者与热心群友常驻答疑）。入群后请先阅读群公告。
 
 > [!NOTE]
 > **📢 紧急招募：DG-LAB 远控功能急缺真机测试志愿者**
@@ -57,7 +57,7 @@ Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云�
 >
 > 官方中转服务端在今年 5~7 月间迁移到了 v3 / v4 协议(6月2日 旧版 v2 服务端从官方仓库移除)。这期间使用新中转的用户一直无法正常绑定设备(报 `等待服务器分配 clientId 超时` 或 `HTTP 404`),**这是我跟进上游变更不及时的失误——没有主动关注官方仓库的动向,直到 8月13日 [#3](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/issues/3) 有用户反馈才发现问题,让大家等了两个多月。对此真诚地向各位道歉。**
 >
-> 问题已在 [v2.0.0](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/releases/tag/v2.0.0) 彻底修复:协议客户端重写为 V3 / V4 自动识别(旧 v2 中转同样兼容),无需改任何配置,升级即用;v4 中转需使用 **DG-LAB 4 APP** 扫描新版二维码,详见 [DG-LAB 章节](#7-dg-lab-设备管理--dglab-别名电击)。
+> 问题已在 [v2.0.0](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/releases/tag/v2.0.0) 彻底修复:协议客户端重写为 V3 / V4 自动识别(旧 v2 中转同样兼容),无需改任何配置,升级即用;v4 中转需使用 **DG-LAB 4 APP** 扫描新版二维码,详见 [DG-LAB 章节](#7-dg-lab-设备管理-dglab别名-电击)。
 >
 > 为避免同类问题再次发生,我已订阅上游仓库的变更通知,并为本模块补上了 36 个协议回归测试——今后官方协议再有调整,可以第一时间跟进、不再依赖用户报障。再次感谢 issue #3 的反馈,也感谢大家的包容。
 >
@@ -79,20 +79,20 @@ Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云�
 - [✨ 核心特性](#-核心特性)
 - [🚀 快速开始](#-快速开始)
 - [🎯 功能详解](#-功能详解)
-  - [1. Pixiv 随机图片](#1-pixiv-随机图片--pixiv-别名图片)
-  - [2. 媒体内容解析](#2-媒体内容解析--解析-别名小红书b站抖音)
-  - [3. 网易云音乐](#3-网易云音乐--music-别名音乐)
-  - [4. 每日一言](#4-每日一言--hitokoto-别名一言)
-  - [5. 天气查询](#5-天气查询--weather-别名天气)
-  - [6. 男娘图片](#6-男娘图片--femboy-别名男娘)
-  - [7. DG-LAB 设备管理](#7-dg-lab-设备管理--dglab-别名电击)
-  - [8. Wikidot 站点管理](#8-wikidot-站点管理--wikidot-别名wd-维基)
+  - [1. Pixiv 随机图片](#1-pixiv-随机图片-pixiv别名-图片)
+  - [2. 媒体内容解析](#2-媒体内容解析-解析别名-小红书-b站-抖音)
+  - [3. 网易云音乐](#3-音乐点歌-music别名-音乐)
+  - [4. 每日一言](#4-每日一言-hitokoto别名-一言)
+  - [5. 天气查询](#5-天气查询-weather别名-天气)
+  - [6. 男娘图片](#6-男娘图片-femboy别名-男娘)
+  - [7. DG-LAB 设备管理](#7-dg-lab-设备管理-dglab别名-电击)
+  - [8. Wikidot 站点管理](#8-wikidot-站点管理-wikidot别名-wd-维基)
 - [🖥️ 总 Pages](#️-总-pages)
 - [🧩 按群聊开关](#-按群聊独立开关)
 - [✂️ 分段回复](#️-分段回复)
 - [🤖 LLM 工具](#-llm-工具)
 - [🧠 跨群聊记忆](#-跨群聊记忆)
-- [⚡ 接口连通性测试](#-接口连通性测试--apitest)
+- [⚡ 接口连通性测试](#-接口连通性测试-apitest)
 - [⚙️ 配置项](#️-配置项)
 - [❓ 常见问题](#-常见问题)
 - [🛠️ 技术架构](#️-技术架构)
@@ -140,7 +140,19 @@ cd AstrBot/data/plugins
 git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 ```
 
-### 2. 配置 API Key（必填）
+### 2. 填写校验码（必填）
+
+> 🔒 自 **2026-09-20** 起，因插件滥用行为导致的一系列问题，本插件启用校验码机制。
+
+1. 加入插件官方 QQ 群 **1106353813**（README 顶部有加群链接），在校验码发布处获取校验码；
+2. 打开 AstrBot 管理面板 → 插件管理 → 本插件 → 配置，把校验码填入第一项 **`verify_code`（校验码）**，保存即自动生效。
+
+**未填写或填写错误时，插件全部指令（命令 / AI 工具 / 链接自动解析）均被锁定**，任何指令只会返回入群获取校验码的提示：
+
+> 尊敬的用户，您好！由于插件滥用行为导致的一系列问题，自 2026 年 9 月 20 日起，您必须加入 CurrentCortex 插件官方 QQ 群（1106353813）获取校验码，然后将其填写在插件配置的「校验码」（verify_code）一项中。
+> 💡 获取校验码完全免费，捐赠全凭自愿，捐赠用户与普通用户的权益没有任何区别。
+
+### 3. 配置 API Key（必填）
 
 > 🔐 **LeiZ API 鉴权要求**：自最新版本起，**所有接口（含免费接口）均需携带 API Key**，请求头格式为 `x-api-key: <API-Key>`。
 
@@ -162,7 +174,7 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 
 > **旧版迁移**：v1.3.x 及更早版本的 `femboy_api_key` 已合并为统一的 `leiz_api_key`。若未填新字段但保留了旧字段，插件会自动作为统一 Key 使用并提示迁移，建议尽快改填到 `leiz_api_key`。
 
-### 3. 安装依赖
+### 4. 安装依赖
 
 ```bash
 pip install aiohttp>=3.8.0
@@ -826,6 +838,12 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 
 路径：AstrBot 管理面板 → 插件管理 → 本插件 → 配置。
 
+### 校验码（必填）
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `verify_code` | string | （空） | **校验码，必填**。自 2026-09-20 起须加入官方 QQ 群 [1106353813](#-自-2026-年-9-月-20-日起使用本插件必须填写校验码) 获取（**完全免费**，捐赠自愿、权益无差别）并填写在此。留空或填写错误时插件全部指令锁定，只会返回入群提示 |
+
 ### Pixiv 相关
 
 | 配置项 | 类型 | 默认值 | 说明 |
@@ -903,7 +921,7 @@ v1.2.0 及更早版本使用 JSON 字符串配置（已弃用）：
 
 ### Wikidot
 
-见 [8. Wikidot 站点管理](#8-wikidot-站点管理--wikidot-别名wd-维基) 章节。
+见 [8. Wikidot 站点管理](#8-wikidot-站点管理-wikidot别名-wd-维基) 章节。
 
 | 配置项 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |

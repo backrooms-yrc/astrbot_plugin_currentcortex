@@ -409,6 +409,8 @@ function copyGroupNo() {
 // 每个配置 key 的「碳基生物能看懂」的中文名 + 人话解释。
 // 后端返回的 description/hint 作为补充说明展示。
 const SETTINGS_META = {
+  // —— 校验码 ——
+  verify_code: { name: "校验码（必填）", hint: "加入官方 QQ 群 1106353813 获取校验码填在这里——完全免费，捐赠自愿、权益无差别。留空或填错 = 插件全部功能锁定，机器人只会回复入群提示。" },
   // —— 基础 ——
   llm_tools_enable: { name: "AI 自动操作开关", hint: "开启后，AI 可以直接帮你发图、点歌、电击等（比如你说“来张图”）。关闭则只能手动用斜杠命令。" },
   // —— Pixiv ——
@@ -557,6 +559,7 @@ const TEMPLATE = /* html */ `
           <mdui-card class="cc-panel">
             <h2 class="cc-panel-title">功能开关</h2>
             <div class="cc-flags">
+              <mdui-chip :selected="!!status.feature_flags.verify_ok">校验码已通过</mdui-chip>
               <mdui-chip :selected="!!status.feature_flags.llm_tools_enable">LLM 工具</mdui-chip>
               <mdui-chip :selected="!!status.feature_flags.dglab_webui_enabled">郊狼 WebUI</mdui-chip>
               <mdui-chip :selected="!!status.feature_flags.cross_group_enable">跨群记忆</mdui-chip>
@@ -955,6 +958,7 @@ const TEMPLATE = /* html */ `
 function groupIcon(icon) {
   // 后端分组 icon 名 -> Material Icons
   const map = {
+    verified: "verified",
     settings: "tune",
     image: "image",
     book: "menu_book",

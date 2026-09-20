@@ -1309,6 +1309,7 @@ def test_tool_list_members_and_settings():
 
 def _make_plugin(enable=True, handler=None, client=None):
     inst = PluginCls.__new__(PluginCls)
+    inst._verify_ok = True
     inst._wikidot_enable = enable
     inst._wikidot_handler = handler
     inst._wikidot_client = client
