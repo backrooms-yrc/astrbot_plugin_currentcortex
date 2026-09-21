@@ -5,15 +5,23 @@
 ![訪問量](https://count.getloli.com/get/@backrooms-yrc-currentcortex?theme=moebooru)
 
 > [!IMPORTANT]
-> ## 🔒 使用本插件前，請務必加入官方 QQ 群
+> **🔒 自 2026-09-20 起使用本插件必須填寫檢驗碼**——加入官方 QQ 群 **1106353813** **免費**獲取，填入設定 `verify_code` 即解鎖全部功能。詳見 [快速開始 · 第 2 步](#2-填寫檢驗碼必填)。
+
+<details>
+<summary><b>📜 置頂公告歸檔</b>（點擊展開）</summary>
+
+<br>
+
+> [!IMPORTANT]
+> ## 🔒 自 2026 年 9 月 20 日起，使用本插件必須填寫檢驗碼
 >
-> **所有使用者請務必加入官方 QQ 群 1106353813**（[點擊加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFBR1hSV1djMSswSHI4MEpmQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)）。
+> 由於插件濫用行為導致的一系列問題，自 **2026-09-20** 起，所有部署本插件的使用者必須加入官方 QQ 群 **1106353813**（[點擊加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFBR1hSV1djMSswSHI4MEpmQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)）獲取**檢驗碼**，並填寫到插件設定的 `verify_code`（檢驗碼）一項中。
 >
-> - **更新與緊急公告**：版本更新、上游 API／協定變動、故障通知都會在群內第一時間發布
-> - **問題回饋**：遇到 bug 直接在群裡 @ 維護者，跟進速度遠快於 GitHub Issues
-> - **使用答疑**：開發者與熱心群友常駐答疑，歡迎交流使用心得
+> - **檢驗碼未填寫或填寫錯誤時，插件全部指令將被鎖定**——機器人只會回傳入群獲取檢驗碼的提示，所有功能（指令 / AI 工具 / 連結自動解析）均不可用
+> - 檢驗碼在群公告中發布，填寫正確後儲存設定即可自動解鎖，無需其他操作
+> - **獲取檢驗碼完全免費，捐贈全憑自願，捐贈使用者與普通使用者的權益沒有任何區別**——門禁只為遏制濫用、讓公告和故障通知能觸達使用者，不是付費牆
 >
-> 入群後請先閱讀群公告。未加群的使用者遇到問題時，可能無法獲得及時支援。
+> 加群同時也能獲得：**更新與緊急公告**（版本更新、上游 API／協定變動、故障通知均群內第一時間發布）、**問題回饋**（bug 直接 @維護者，跟進速度遠快於 GitHub Issues）、**使用答疑**（開發者與熱心群友常駐答疑）。入群後請先閱讀群公告。
 
 > [!NOTE]
 > ## 📢 緊急招募：DG-LAB 遠控功能急缺實機測試志工
@@ -38,6 +46,8 @@
 > 為避免同類問題再次發生，我已訂閱上游儲存庫的變更通知，並為本模組補上了 36 個協定回歸測試——今後官方協定再有調整，可以第一時間跟進、不再依賴使用者回報障礙。再次感謝 issue #3 的回饋，也感謝大家的包容。
 >
 > —— Rcst20 · 2026年8月15日
+
+</details>
 
 <div align="center">
 
@@ -65,7 +75,7 @@ Pixiv 隨機圖片 · 每日一言 · 天氣查詢 · 男娘圖片 · 網易雲�
 - [🎯 功能詳解](#-功能詳解)
   - [1. Pixiv 隨機圖片](#1-pixiv-隨機圖片-pixiv別名-图片)
   - [2. 媒體內容解析](#2-媒體內容解析-解析別名-小红书-b站-抖音)
-  - [3. 網易雲音樂](#3-音樂點歌-music別名-音乐)
+  - [3. 音樂點歌](#3-音樂點歌-music別名-音乐)
   - [4. 每日一言](#4-每日一言-hitokoto別名-一言)
   - [5. 天氣查詢](#5-天氣查詢-weather別名-天气)
   - [6. 男娘圖片](#6-男娘圖片-femboy別名-男娘)
@@ -91,7 +101,7 @@ Pixiv 隨機圖片 · 每日一言 · 天氣查詢 · 男娘圖片 · 網易雲�
 | 🎨 **Pixiv 隨機圖片** | 隨機圖 / R18 / 標籤篩選 / 關鍵字搜尋 / 指定作者 / 長寬比篩選 / 排除 AI |
 | 🔍 **媒體解析** | 小紅書圖文影片 · B站影片資訊 · 抖音無浮水印影片 · 微博圖文影片 |
 | 📚 **媒體內容解析** | 小紅書 / B站 / 抖音 / 微博連結解析 |
-| 🎵 **網易雲點歌** | 點歌、搜尋、語音訊息、原始檔案、依 ID 取得 |
+| 🎵 **音樂點歌** | 三音源並行擇優（自建網易雲SVIP／網易雲／酷狗）· 無損／Hi-Res／臻音全景聲／沉浸環繞聲／超清母帶 · 數字檔位指定 · 語音條／原始檔案 · 下載進度播報 |
 | ✨ **每日一言** | 12 種分類（動畫／漫畫／遊戲／文學／詩詞／影視…） |
 | 🌤️ **天氣查詢** | 即時天氣＋未來 3 天預報 |
 | 👗 **男娘圖片** | 隨機男娘主題圖片（WebP） |
@@ -123,9 +133,21 @@ cd AstrBot/data/plugins
 git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 ```
 
-### 2. 設定 API Key (必填)
+### 2. 填寫檢驗碼（必填）
 
-> 🔐 **LeiZ API 驗證要求**：自最新版本起，**所有 API（含免費 API）均需攜帶 API Key**，請求頭格式為 `x-api-key: <API-Key>`。
+> 🔒 自 **2026-09-20** 起，因插件濫用行為導致的一系列問題，本插件啟用檢驗碼機制。
+
+1. 加入插件官方 QQ 群 **1106353813**（README 頂部有加群連結），在檢驗碼發布處獲取檢驗碼；
+2. 開啟 AstrBot 管理後台 → 插件管理 → 本插件 → 設定，把檢驗碼填入第一項 **`verify_code`（檢驗碼）**，儲存即自動生效。
+
+**未填寫或填寫錯誤時，插件全部指令（指令 / AI 工具 / 連結自動解析）均被鎖定**，任何指令只會回傳入群獲取檢驗碼的提示：
+
+> 尊敬的使用者，您好！由於插件濫用行為導致的一系列問題，自 2026 年 9 月 20 日起，您必須加入 CurrentCortex 插件官方 QQ 群（1106353813）獲取檢驗碼，然後將其填寫在插件設定的「檢驗碼」（verify_code）一項中。
+> 💡 獲取檢驗碼完全免費，捐贈全憑自願，捐贈使用者與普通使用者的權益沒有任何區別。
+
+### 3. 設定 API Key (可選)
+
+> 🔐 **LeiZ API Key 非必填**：未填寫時，與 LeiZ 無關的功能（B站／抖音／小紅書／微博解析、DG-LAB、跨群記憶等）正常使用；**點歌自動路由到自建網易雲SVIP音源**（不依賴此 Key，最高可達超清母帶）；Pixiv／每日一言／天氣／男娘／網易雲／酷狗 等基於 LeiZ 的功能觸發時會提示填寫。
 
 #### 第一步：取得 API Key
 
@@ -139,13 +161,13 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 
 開啟 AstrBot 管理後台 → 插件管理 → 本插件 → 設定，把上一步取得的 Key 填入 **`leiz_api_key`** 欄位，儲存後重新啟動插件。
 
-未設定時，Pixiv / 一言 / 天氣 / 男娘 / 點歌等全部 LeiZ API 指令將無法使用，呼叫時會給予設定引導提示。
+未設定時，Pixiv / 一言 / 天氣 / 男娘 / 網易雲 / 酷狗 等 LeiZ 相關指令會給出設定引導提示；點歌不受影響（自動路由到自建網易雲SVIP音源）。
 
 > ⚠️ **本插件是基於 LeiZ API 的社群（第三方）插件，與 LeiZ API 官方相互獨立**。API Key 的註冊／取得、API 計費、額度、上游故障等問題請到 [LeiZ API 官網](https://api.bileizhen.top) 及其官方管道諮詢；本插件的交流群僅處理插件本身的使用問題。
 
 > **舊版移轉**：v1.3.x 及更早版本的 `femboy_api_key` 已合併為統一的 `leiz_api_key`。若未填新欄位但保留了舊欄位，插件會自動將其作為統一 Key 使用並提示移轉，建議盡快改填到 `leiz_api_key`。
 
-### 3. 安裝相依套件
+### 4. 安裝相依套件
 
 ```bash
 pip install aiohttp>=3.8.0
@@ -178,9 +200,9 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 | `/bilibili` | `/B站` `/b站` | B站影片解析 |
 | `/douyin` | `/抖音` | 抖音影片解析 |
 | `/weibo` | `/微博` | 微博貼文解析 |
-| `/music` | `/音乐` | 音樂點歌（網易雲／酷狗） |
+| `/music` | `/音乐` | 音樂點歌（三音源並行擇優，最高超清母帶） |
 | `/点歌` | — | 快捷點歌（僅語音訊息） |
-| `/音源` | — | 切換點歌音源（auto／網易雲／酷狗） |
+| `/音源` | — | 查看／切換點歌音源（auto／網易雲SVIP／網易雲／酷狗） |
 | `/hitokoto` | `/一言` | 每日一言 |
 | `/weather` | `/天气` | 天氣查詢 |
 | `/femboy` | `/男娘` | 男娘圖片 |
@@ -336,18 +358,37 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 
 ### 3. 音樂點歌 (`/music`，別名 `/音乐`)
 
-透過 LeiZ API 實現點歌、搜尋與播放連結取得，支援**網易雲**與**酷狗**雙音源，並提供 `auto` 自動路由（網易雲優先，失敗轉酷狗）。
+支援**三音源**，`auto`（預設）時並行探測、自動取音質最佳者（回覆會註明實際使用的音源）：
+
+| 音源 | 說明 |
+| --- | --- |
+| **網易雲SVIP（自建，`ncm`）** | 自建 api-enhanced 服務（設定 `ncm_api_base`）。**不依賴 LeiZ API Key**，可取無損／Hi-Res／臻音全景聲／沉浸環繞聲／超清母帶等最高音質 |
+| **網易雲**（`netease`） | 經 LeiZ API，需設定 `leiz_api_key` |
+| **酷狗**（`kugou`） | 經 LeiZ API，需設定 `leiz_api_key` |
+
+> auto 擇優規則：碼率優先（無損格式與體積作次級）；自建源為「基準源」——它出結果之前其他音源即使先到無損檔也不提前成交，避免快源的普通無損搶跑截斷更高檔位。**未設定 LeiZ Key 時，所有點歌請求自動路由到自建源**，開箱即用。
 
 #### 音源切換 (`/音源`)
 
 | 指令 | 說明 |
 | --- | --- |
 | `/音源` | 查看目前音源＋可選項 |
-| `/音源 auto`（自動） | **預設**。網易雲優先，VIP／無版權／逾時自動轉酷狗 |
-| `/音源 网易云` | 僅網易雲 |
-| `/音源 酷狗` | 僅酷狗 |
+| `/音源 auto`（自動） | **預設**。三音源並行探測，取音質最佳 |
+| `/音源 网易云SVIP`（`svip` / `ncm` / `自建` / `母带`） | 僅自建 SVIP 源（最高音質） |
+| `/音源 网易云` | 僅網易雲（需 LeiZ Key） |
+| `/音源 酷狗` | 僅酷狗（需 LeiZ Key） |
 
 音源按**會話（群組／私訊）記憶**，互不影響；重新啟動後重設為預設（`music_default_source` 設定項，預設 auto）。
+
+#### 音質檔位（`/音乐 文件<數字>`）
+
+僅自建 SVIP 源支援。等級標準（數字越小音質越高）：
+
+**1 超清母帶 ≥ 2 臻音全景聲 ≥ 3 沉浸環繞聲 ＞ 4 高清臻音（Hi-Res） ＞ 5 無損 ＞ 6 極高 ＞ 7 標準**
+
+- 不指定數字時自動取目前可用的最高檔位（等同按 1 處理）；
+- 請求檔位不可用時自動降級到可用最高檔，回覆中註明實際檔位；
+- 部分歌曲存在僅隨「沉浸環繞聲」發布的空間音訊獨立資產（普通無損請求拿不到），自動探測會一併發現。
 
 #### 基本指令
 
@@ -356,30 +397,34 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 | `/music <歌曲名>`（`/音乐`） | 點歌（搜尋並回傳第一首的詳細資訊） |
 | `/music direct <歌曲名>`（`/音乐 直接`） | 僅回傳轉碼後的語音訊息 |
 | `/点歌 <歌曲名>` | 快捷指令，等同 `/音乐 直接`，僅回傳語音訊息 |
-| `/music file <歌曲名>`（`/音乐 文件`） | 回傳未經轉碼的原始音樂檔案 |
-| `/music id:<歌曲ID>` | 透過 ID 取得詳細資訊 |
-| `/music search <關鍵字>` | 搜尋歌曲清單 |
+| `/music file[1-7] <歌曲名>`（`/音乐 文件`） | 回傳原始音樂檔案，數字指定音質檔位（可緊跟或空格分隔） |
+| `/music id:<歌曲ID>`（`/音乐 编号:`） | 透過 ID 取得詳細資訊（優先走自建源） |
+| `/music search <關鍵字>`（`/音乐 搜索`） | 搜尋歌曲清單 |
 | `/music help` | 顯示說明 |
 
 #### 使用範例
 
 ```text
-/music 孤勇者              # 點歌
+/music 孤勇者              # 點歌（auto 自動選音質最佳）
 /music 周杰伦 晴天         # 搜尋「周杰伦 晴天」
 /music direct 孤勇者       # 僅回傳語音訊息
 /点歌 孤勇者               # 快捷指令
-/music file 孤勇者         # 回傳原始音檔附件
+/music file 孤勇者         # 原始音檔附件（自動取最高檔位）
+/music file1 Reply         # 超清母帶檔位的原始檔案
+/music file5 孤勇者        # 無損檔位的原始檔案
 /music id:1901371647       # 透過 ID 取得
 /music search 陈奕迅       # 搜尋歌曲清單
 ```
 
 #### 回傳資訊
 
-歌曲名稱、演出者、專輯、封面、音質（位元率／格式／等級）、檔案大小、播放連結。在 QQ 平台會自動將播放連結解析為**語音訊息**傳送（依賴框架 `Record` 訊息段；不支援時降級為文字連結）。
+歌曲名稱、演出者、專輯、封面、音質（檔位／位元率／格式）、檔案大小、播放連結；auto 模式下附「音源：xxx」行。在 QQ 平台會自動將播放連結解析為**語音訊息**傳送（依賴框架 `Record` 訊息段；不支援時降級為文字連結）。
 
-> ⚠️ 部分 VIP 歌曲可能無法取得播放連結；播放連結有時效性，請及時使用。語音功能依賴系統 `ffmpeg`。
+> ⚠️ 部分 VIP 歌曲與部分曲庫（如某些港台歌手）存在版權或地區限制，可能無法取得播放連結；播放連結有時效性，請及時使用。語音功能依賴系統 `ffmpeg`。
 
-> 📦 **檔案模式與大檔案**：`/音乐 文件` 在 QQ／NapCat 下優先走 OneBot 本地上傳（`upload_group_file` / `upload_private_file`），避免 `Comp.File` 經錯誤的 `callback_api_base` 轉成 HTTP 回呼後被二次下載失敗（日誌常見「下載檔案失敗」）。原始音檔（尤其無損 flac）體積可能很大；當檔案超過 `music_file_max_bytes`（預設 25MB）時，插件會自動轉碼為 128kbps MP3 後再傳送（需 `ffmpeg`），體積可縮小約 90%。如需傳送原始無損檔案，可在設定中調高該門檻（但不建議，容易傳送失敗）。下載側對逾時／網路錯誤會自動重試。
+> 📦 **檔案模式與大檔案**：`/音乐 文件` 始終以最高音質**直接傳送原始檔案，不做預壓縮**；僅當傳送失敗時（QQ／NapCat 對大檔案上傳常以 `retcode=1200` 拒絕）自動降級壓縮為 128kbps MP3 重發並提示。傳送優先走 OneBot 本地上傳（`upload_group_file` / `upload_private_file`），繞過 `Comp.File` 的 HTTP 回呼坑。下載側對逾時／網路錯誤會自動重試。
+
+> 📊 **下載進度播報**（設定 `music_download_progress_mode`，預設「簡略」）：大檔案下載期間提示「正在下載音訊檔案。受限於伺服器頻寬，高音質檔案下載耗時可能較長，請耐心等待...」，完成後提示「音訊檔案下載完成！準備傳送...」；「詳細」檔每完成 10% 播報一條百分比；「關閉」檔全程靜默。秒下的小檔案任何檔位都不播報。
 
 > 🚫 **防連點過載**：為避免使用者短時間連點觸發大量並行下載／轉碼拖垮伺服器，點歌指令內建「處理中去重＋冷卻」（`music_cooldown`，預設 3 秒）。同一會話上一首還在處理時再次點歌會提示「請稍候」，剛點完立刻再點會提示「點得太快啦」。不同群組／私訊互不影響。
 
@@ -438,7 +483,7 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 /femboy help     # 顯示說明
 ```
 
-> 使用前必須設定 `leiz_api_key`，詳見[快速開始](#2-設定-api-key-必填)。
+> 使用前必須設定 `leiz_api_key`，詳見[快速開始](#3-設定-api-key-可選)。
 
 ---
 
@@ -761,16 +806,24 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 
 | 設定項 | 類型 | 預設值 | 說明 |
 | --- | --- | --- | --- |
-| `leiz_api_key` | string | （空） | **LeiZ API 統一金鑰**（請求頭 `x-api-key`），**必填**。在 [LeiZ API 官網](https://api.bileizhen.top) 註冊後取得，所有 LeiZ API 均需 |
+| `leiz_api_key` | string | （空） | **LeiZ API 統一金鑰**（請求頭 `x-api-key`），**非必填**。在 [LeiZ API 官網](https://api.bileizhen.top) 註冊後取得；Pixiv／一言／天氣／男娘／網易雲／酷狗等 LeiZ API 需要。未填寫時這些功能會提示設定，點歌自動路由到自建網易雲SVIP音源，其餘功能不受影響 |
 | `request_timeout` | int | 15 | API 請求逾時時間（秒），影響所有功能 |
 
-### 網易雲音樂
+### 檢驗碼（必填）
 
 | 設定項 | 類型 | 預設值 | 說明 |
 | --- | --- | --- | --- |
-| `music_file_max_bytes` | int | 26214400 | `/音乐 文件` 單檔體積上限（位元組，預設 25MB）。超過則自動轉碼為 128kbps MP3 再傳送（需 ffmpeg）；設為 0 不限制（不建議，容易傳送失敗） |
+| `verify_code` | string | （空） | **檢驗碼，必填**。自 2026-09-20 起須加入官方 QQ 群 [1106353813](#-自-2026-年-9-月-20-日起使用本插件必須填寫檢驗碼) 獲取（**完全免費**，捐贈自願、權益無差別）並填寫在此。留空或填寫錯誤時插件全部指令鎖定，只會回傳入群提示 |
+
+### 音樂點歌
+
+| 設定項 | 類型 | 預設值 | 說明 |
+| --- | --- | --- | --- |
+| `ncm_api_base` | string | http://music.20110208.xyz | 自建網易雲 SVIP 音源位址（api-enhanced 服務）。提供無損／Hi-Res／超清母帶等最高音質，不依賴 LeiZ Key |
+| `ncm_cookie_path` | string | /opt/ncm-api/.ncm-cookie | 自建音源的登入 cookie 檔案路徑（伺服器每日自動刷新，插件按檔案改動自動跟隨）。留空 = 匿名（僅免費音質） |
+| `music_default_source` | string | auto | 點歌預設音源：`auto`（三音源並行擇優）/ `ncm`（自建網易雲SVIP）/ `netease` / `kugou`（後兩者需 LeiZ Key）。使用者仍可用 `/音源` 按會話覆寫 |
 | `music_cooldown` | int | 3 | 同一會話連續點歌的最小間隔秒數，防止使用者連點觸發大量並行下載／轉碼拖垮伺服器。處理中的請求會被提示「請稍候」；設為 0 不限制（不建議） |
-| `music_default_source` | string | auto | 點歌預設音源：`auto`（網易雲優先，失敗轉酷狗）/ `netease`（僅網易雲）/ `kugou`（僅酷狗）。使用者仍可用 `/音源` 按會話覆寫 |
+| `music_download_progress_mode` | string | 簡略 | `/音乐 文件` 下載進度播報：`關閉`（全程靜默）/ `簡略`（下載前後各一條提示）/ `詳細`（每完成 10% 播報一條）。秒下的小檔案不播報 |
 
 ### DG-LAB
 
@@ -860,7 +913,7 @@ v1.2.0 及更早版本使用 JSON 字串設定（已棄用）：
 <details>
 <summary><b>呼叫指令提示「功能未啟用 / 未設定 API Key」？</b></summary>
 
-需先在 [LeiZ API 官網](https://api.bileizhen.top) 取得 API Key（見[設定 API Key](#2-設定-api-key-必填)），再填入設定面板的 `leiz_api_key` 欄位，儲存後重新啟動插件。可用 `/apitest` 驗證各 API 連通性。Pixiv / 一言 / 天氣 / 男娘 / 點歌 均依賴此 Key。
+需先在 [LeiZ API 官網](https://api.bileizhen.top) 取得 API Key（見[設定 API Key](#3-設定-api-key-可選)），再填入設定面板的 `leiz_api_key` 欄位，儲存後重新啟動插件。可用 `/apitest` 驗證各 API 連通性。Pixiv / 一言 / 天氣 / 男娘 / 點歌 均依賴此 Key。
 
 </details>
 

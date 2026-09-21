@@ -29,9 +29,17 @@ Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云�
 ---
 
 > [!IMPORTANT]
+> **🔒 自 2026-09-20 起使用本插件必须填写校验码**——加入官方 QQ 群 **1106353813** **免费**获取，填入配置 `verify_code` 即解锁全部功能。详见 [快速开始 · 第 2 步](#2-填写校验码必填)。
+
+<details>
+<summary><b>📜 置顶公告归档</b>（点击展开）</summary>
+
+<br>
+
+> [!IMPORTANT]
 > **🔒 自 2026 年 9 月 20 日起，使用本插件必须填写校验码**
 >
-> 由于插件滥用行为导致的一系列问题，自 **2026-09-20** 起，所有部署本插件的用户必须加入官方 QQ 群 **1106353813**（[点击加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFBR1hSV1djMSswSHI4MEpmQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)）获取**校验码**，并填写到插件配置的 `verify_code`（校验码）一项中。
+> 由于插件滥用行为导致的一系列问题，自 **2026-09-20** 起，所有部署本插件的用户必须加入官方 QQ 群 **1106353813**（[点击加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEpmQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)）获取**校验码**，并填写到插件配置的 `verify_code`（校验码）一项中。
 >
 > - **校验码未填写或填写错误时，插件全部指令将被锁定**——机器人只会返回入群获取校验码的提示，所有功能（命令 / AI 工具 / 链接自动解析）均不可用
 > - 校验码在群公告中发布，填写正确后保存配置即可自动解锁，无需其他操作
@@ -45,7 +53,7 @@ Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云�
 > DG-LAB（郊狼）**远控功能目前缺少真机测试，急需志愿者参与实测**——没有真实设备反馈，bug 只能盲修、迭代只能停滞。如果你手头有 **郊狼脉冲主机 3.0**，请务必加入官方群参与测试：
 >
 > - **测试内容**：设备绑定 · 远程控制指令 · CCDG WebUI 控制面板 · 中转服务器部署（V3 / V4 协议）
-> - **参与方式**：加入官方 QQ 群 **1106353813**（[点击加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFBR1hSV1djMSswSHI4MEpmQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)），入群说明来意或直接 @维护者
+> - **参与方式**：加入官方 QQ 群 **1106353813**（[点击加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFHR1hSV1djMSswSHI4MEpmQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)），入群说明来意或直接 @维护者
 > - **测试反馈**：问题第一时间跟进修复，贡献者记入更新日志致谢
 >
 > 没有设备的朋友也欢迎进群围观，或帮忙转发扩散 🙏
@@ -62,6 +70,8 @@ Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云�
 > 为避免同类问题再次发生,我已订阅上游仓库的变更通知,并为本模块补上了 36 个协议回归测试——今后官方协议再有调整,可以第一时间跟进、不再依赖用户报障。再次感谢 issue #3 的反馈,也感谢大家的包容。
 >
 > —— Rcst20 · 2026年8月15日
+
+</details>
 
 ---
 
@@ -81,7 +91,7 @@ Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云�
 - [🎯 功能详解](#-功能详解)
   - [1. Pixiv 随机图片](#1-pixiv-随机图片-pixiv别名-图片)
   - [2. 媒体内容解析](#2-媒体内容解析-解析别名-小红书-b站-抖音)
-  - [3. 网易云音乐](#3-音乐点歌-music别名-音乐)
+  - [3. 音乐点歌](#3-音乐点歌-music别名-音乐)
   - [4. 每日一言](#4-每日一言-hitokoto别名-一言)
   - [5. 天气查询](#5-天气查询-weather别名-天气)
   - [6. 男娘图片](#6-男娘图片-femboy别名-男娘)
@@ -108,7 +118,7 @@ Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云�
 | 🎨 **Pixiv 随机图片** | 随机图 / R18 / 标签筛选 / 关键词搜索 / 指定作者 / 长宽比筛选 / 排除 AI |
 | 🔍 **媒体解析** | 小红书图文视频 · B站视频信息 · 抖音无水印视频 · 微博图文视频 |
 | 📚 **媒体内容解析** | 小红书 / B站 / 抖音 / 微博链接解析 |
-| 🎵 **网易云点歌** | 点歌、搜索、语音条、原始文件、按 ID 获取 |
+| 🎵 **音乐点歌** | 三音源并行择优（自建网易云SVIP / 网易云 / 酷狗）· 无损/Hi-Res/臻音全景声/沉浸环绕声/超清母带 · 数字档位指定 · 语音条/原始文件 · 下载进度播报 |
 | ✨ **每日一言** | 12 种分类（动画/漫画/游戏/文学/诗词/影视…） |
 | 🌤️ **天气查询** | 实时天气 + 未来 3 天预报 |
 | 👗 **男娘图片** | 随机男娘主题图片（WebP） |
@@ -152,9 +162,9 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 > 尊敬的用户，您好！由于插件滥用行为导致的一系列问题，自 2026 年 9 月 20 日起，您必须加入 CurrentCortex 插件官方 QQ 群（1106353813）获取校验码，然后将其填写在插件配置的「校验码」（verify_code）一项中。
 > 💡 获取校验码完全免费，捐赠全凭自愿，捐赠用户与普通用户的权益没有任何区别。
 
-### 3. 配置 API Key（必填）
+### 3. 配置 API Key（可选）
 
-> 🔐 **LeiZ API 鉴权要求**：自最新版本起，**所有接口（含免费接口）均需携带 API Key**，请求头格式为 `x-api-key: <API-Key>`。
+> 🔐 **LeiZ API Key 非必填**：未填写时，与 LeiZ 无关的功能（B站/抖音/小红书/微博解析、DG-LAB、Wikidot、跨群记忆等）正常使用；**点歌自动路由到自建网易云SVIP音源**（不依赖本 Key，最高可到超清母带）；Pixiv / 每日一言 / 天气 / 男娘 / 网易云 / 酷狗 等基于 LeiZ 的功能触发时会提示填写。
 
 #### 第一步：获取 API Key
 
@@ -168,7 +178,7 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 
 打开 AstrBot 管理面板 → 插件管理 → 本插件 → 配置，把上一步获取的 Key 填入 **`leiz_api_key`** 字段，保存后重启插件。
 
-未配置时，Pixiv / 一言 / 天气 / 男娘 / 点歌 等全部 LeiZ 接口命令将不可用，调用时会给出配置引导提示。
+未配置时，Pixiv / 一言 / 天气 / 男娘 / 网易云 / 酷狗 等 LeiZ 相关命令会给出配置引导提示；点歌不受影响（自动路由到自建网易云SVIP音源）。
 
 > ⚠️ **本插件是基于 LeiZ API 的社区（第三方）插件，与 LeiZ API 官方相互独立**。API Key 的注册/获取、接口计费、额度、上游故障等问题请到 [LeiZ API 官网](https://api.bileizhen.top) 及其官方渠道咨询；本插件的交流群仅处理插件本身的使用问题。
 
@@ -207,9 +217,9 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 | `/bilibili` | `/B站` `/b站` | B站视频解析 |
 | `/douyin` | `/抖音` | 抖音视频解析 |
 | `/weibo` | `/微博` | 微博帖子解析 |
-| `/music` | `/音乐` | 音乐点歌（网易云/酷狗） |
+| `/music` | `/音乐` | 音乐点歌（三音源并行择优，最高超清母带） |
 | `/点歌` | — | 快捷点歌（仅语音条） |
-| `/音源` | — | 切换点歌音源（auto/网易云/酷狗） |
+| `/音源` | — | 查看/切换点歌音源（auto/网易云SVIP/网易云/酷狗） |
 | `/hitokoto` | `/一言` | 每日一言 |
 | `/weather` | `/天气` | 天气查询 |
 | `/femboy` | `/男娘` | 男娘图片 |
@@ -366,18 +376,37 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 
 ### 3. 音乐点歌 (`/music`，别名 `/音乐`)
 
-通过 LeiZ API 实现点歌、搜索与播放链接获取，支持**网易云**与**酷狗**双音源，并提供 `auto` 自动路由（网易云优先，失败转酷狗）。
+支持**三音源**，`auto`（默认）时并行探测、自动取音质最佳者（回复会注明实际使用的音源）：
+
+| 音源 | 说明 |
+| --- | --- |
+| **网易云SVIP（自建，`ncm`）** | 自建 api-enhanced 服务（配置 `ncm_api_base`）。**不依赖 LeiZ API Key**，可取无损 / Hi-Res / 臻音全景声 / 沉浸环绕声 / 超清母带等最高音质 |
+| **网易云**（`netease`） | 经 LeiZ API，需配置 `leiz_api_key` |
+| **酷狗**（`kugou`） | 经 LeiZ API，需配置 `leiz_api_key` |
+
+> auto 择优规则：码率优先（无损格式与体积作次级）；自建源为「基准源」——它出结果之前其他音源即使先到无损档也不提前成交，避免快源的普通无损抢跑截断更高档位。**未配置 LeiZ Key 时，所有点歌请求自动路由到自建源**，开箱即用。
 
 #### 音源切换 (`/音源`)
 
 | 指令 | 说明 |
 | --- | --- |
 | `/音源` | 查看当前音源 + 可选项 |
-| `/音源 auto`（自动） | **默认**。网易云优先，VIP/无版权/超时自动转酷狗 |
-| `/音源 网易云` | 仅网易云 |
-| `/音源 酷狗` | 仅酷狗 |
+| `/音源 auto`（自动） | **默认**。三音源并行探测，取音质最佳 |
+| `/音源 网易云SVIP`（`svip` / `ncm` / `自建` / `母带`） | 仅自建 SVIP 源（最高音质） |
+| `/音源 网易云` | 仅网易云（需 LeiZ Key） |
+| `/音源 酷狗` | 仅酷狗（需 LeiZ Key） |
 
 音源按**会话（群/私聊）记忆**，互不影响；重启后重置为默认（`music_default_source` 配置项，默认 auto）。
+
+#### 音质档位（`/音乐 文件<数字>`）
+
+仅自建 SVIP 源支持。等级标准（数字越小音质越高）：
+
+**1 超清母带 ≥ 2 臻音全景声 ≥ 3 沉浸环绕声 ＞ 4 高清臻音（Hi-Res） ＞ 5 无损 ＞ 6 极高 ＞ 7 标准**
+
+- 不指定数字时自动取当前可用的最高档位（等同按 1 处理）；
+- 请求档位不可用时自动降级到可用最高档，回复中注明实际档位；
+- 部分歌曲存在仅随「沉浸环绕声」发布的空间音频独立资产（普通无损请求拿不到），自动探测会一并发现。
 
 #### 基本指令
 
@@ -386,30 +415,34 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 | `/music <歌曲名>`（`/音乐`） | 点歌（搜索并返回第一首的详细信息） |
 | `/music direct <歌曲名>`（`/音乐 直接`） | 仅返回转码后的语音条 |
 | `/点歌 <歌曲名>` | 快捷命令，等效 `/音乐 直接`，仅返回语音条 |
-| `/music file <歌曲名>`（`/音乐 文件`） | 返回未经转码的原始音乐文件 |
-| `/music id:<歌曲ID>`（`/音乐 编号:`） | 通过 ID 获取详细信息 |
+| `/music file[1-7] <歌曲名>`（`/音乐 文件`） | 返回原始音乐文件，数字指定音质档位（可紧跟或空格分隔） |
+| `/music id:<歌曲ID>`（`/音乐 编号:`） | 通过 ID 获取详细信息（优先走自建源） |
 | `/music search <关键词>`（`/音乐 搜索`） | 搜索歌曲列表 |
 | `/music help` | 显示帮助 |
 
 #### 使用示例
 
 ```text
-/music 孤勇者              # 点歌
+/music 孤勇者              # 点歌（auto 自动选音质最佳）
 /music 周杰伦 晴天         # 搜索「周杰伦 晴天」
 /music direct 孤勇者       # 仅返回语音条
 /点歌 孤勇者               # 快捷命令
-/music file 孤勇者         # 返回原始音频附件
+/music file 孤勇者         # 原始音频附件（自动取最高档位）
+/music file1 Reply         # 超清母带档位的原始文件
+/music file5 孤勇者        # 无损档位的原始文件
 /music id:1901371647       # 通过 ID 获取
 /music search 陈奕迅       # 搜索歌曲列表
 ```
 
 #### 返回信息
 
-歌曲名称、艺术家、专辑、封面、音质（码率/格式/等级）、文件大小、播放链接。在 QQ 平台会自动将播放链接解析为**语音条**发送（依赖框架 `Record` 消息段；不支持时降级为文本链接）。
+歌曲名称、艺术家、专辑、封面、音质（档位/码率/格式）、文件大小、播放链接；auto 模式下附「音源：xxx」行。在 QQ 平台会自动将播放链接解析为**语音条**发送（依赖框架 `Record` 消息段；不支持时降级为文本链接）。
 
-> ⚠️ 部分 VIP 歌曲可能无法获取播放链接；播放链接有时效性，请及时使用。语音条功能依赖系统 `ffmpeg`。
+> ⚠️ 部分 VIP 歌曲与部分曲库（如某些港台歌手）存在版权或地区限制，可能无法获取播放链接；播放链接有时效性，请及时使用。语音条功能依赖系统 `ffmpeg`。
 
-> 📦 **文件模式与大文件**：`/音乐 文件` 在 QQ/NapCat 下优先走 OneBot 本地上传（`upload_group_file` / `upload_private_file`），避免 `Comp.File` 经错误 `callback_api_base` 转成 HTTP 回调后被二次下载失败（日志常见「下载文件失败」）。原始音频（尤其无损 flac）体积可能很大；当文件超过 `music_file_max_bytes`（默认 25MB）时，插件会自动转码为 128kbps MP3 后再发送（需 `ffmpeg`），体积可缩小约 90%。如需发送原始无损文件，可在配置中调大该阈值（但不推荐，易发送失败）。下载侧对超时/网络错误会自动重试。
+> 📦 **文件模式与大文件**：`/音乐 文件` 始终以最高音质**直接发送原始文件，不做预压缩**；仅当发送失败时（QQ/NapCat 对大文件上传常以 `retcode=1200` 拒绝）自动降级压缩为 128kbps MP3 重发并提示。发送优先走 OneBot 本地上传（`upload_group_file` / `upload_private_file`），绕过 `Comp.File` 的 HTTP 回调坑。下载侧对超时/网络错误会自动重试。
+
+> 📊 **下载进度播报**（配置 `music_download_progress_mode`，默认「简略」）：大文件下载期间提示「正在下载音频文件。受限于服务器带宽，高音质文件下载耗时可能较长，请耐心等待...」，完成后提示「音频文件下载完成！准备发送...」；「详细」档每完成 10% 播报一条百分比；「关闭」档全程静默。秒下的小文件任何档位都不播报。
 
 > 🚫 **防连点过载**：为避免用户短时间连点触发大量并发下载/转码拖垮服务器，点歌命令内置「进行中去重 + 冷却」（`music_cooldown`，默认 3 秒）。同一会话上一首还在处理时再次点歌会提示「请稍候」，刚点完立刻再点会提示「点得太快啦」。不同群/私聊互不影响。
 
@@ -468,7 +501,7 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 /femboy help     # 显示帮助
 ```
 
-> 使用前必须配置 `leiz_api_key`，详见 [快速开始](#2-配置-api-key必填)。
+> 使用前必须配置 `leiz_api_key`，详见 [快速开始](#3-配置-api-key可选)。
 
 ---
 
@@ -858,16 +891,18 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 
 | 配置项 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `leiz_api_key` | string | （空） | **LeiZ API 统一密钥**（请求头 `x-api-key`），**必填**。在 [LeiZ API 官网](https://api.bileizhen.top) 注册后获取，所有 LeiZ 接口均需 |
+| `leiz_api_key` | string | （空） | **LeiZ API 统一密钥**（请求头 `x-api-key`），**非必填**。在 [LeiZ API 官网](https://api.bileizhen.top) 注册后获取；Pixiv/一言/天气/男娘/网易云/酷狗等 LeiZ 接口需要。未填写时这些功能会提示配置，点歌自动路由到自建网易云SVIP音源，其余功能不受影响 |
 | `request_timeout` | int | 15 | API 请求超时时间（秒），影响所有功能 |
 
-### 网易云音乐
+### 音乐点歌
 
 | 配置项 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `music_file_max_bytes` | int | 26214400 | `/音乐 文件` 单文件体积上限（字节，默认 25MB）。超过则自动转码为 128kbps MP3 再发送（需 ffmpeg）；设为 0 不限制（不推荐，易发送失败） |
+| `ncm_api_base` | string | http://music.20110208.xyz | 自建网易云 SVIP 音源地址（api-enhanced 服务）。提供无损/Hi-Res/超清母带等最高音质，不依赖 LeiZ Key |
+| `ncm_cookie_path` | string | /opt/ncm-api/.ncm-cookie | 自建音源的登录 cookie 文件路径（服务器每日自动刷新，插件按文件改动自动跟随）。留空 = 匿名（仅免费音质） |
+| `music_default_source` | string | auto | 点歌默认音源：`auto`（三音源并行择优）/ `ncm`（自建网易云SVIP）/ `netease` / `kugou`（后两者需 LeiZ Key）。用户仍可用 `/音源` 按会话覆盖 |
 | `music_cooldown` | int | 3 | 同一会话连续点歌的最小间隔秒数，防止用户连点触发大量并发下载/转码拖垮服务器。处理中的请求会被提示「请稍候」；设为 0 不限制（不推荐） |
-| `music_default_source` | string | auto | 点歌默认音源：`auto`（网易云优先，失败转酷狗）/ `netease`（仅网易云）/ `kugou`（仅酷狗）。用户仍可用 `/音源` 按会话覆盖 |
+| `music_download_progress_mode` | string | 简略 | `/音乐 文件` 下载进度播报：`关闭`（全程静默）/ `简略`（下载前后各一条提示）/ `详细`（每完成 10% 播报一条）。秒下的小文件不播报 |
 
 ### DG-LAB
 
@@ -970,7 +1005,7 @@ v1.2.0 及更早版本使用 JSON 字符串配置（已弃用）：
 <details>
 <summary><b>调用命令提示「功能未启用 / 未配置 API Key」？</b></summary>
 
-需先在 [LeiZ API 官网](https://api.bileizhen.top) 获取 API Key（见 [配置 API Key](#2-配置-api-key必填)），再填入配置面板的 `leiz_api_key` 字段，保存后重启插件。可用 `/apitest` 验证各接口连通性。Pixiv / 一言 / 天气 / 男娘 / 点歌 均依赖此 Key。
+需先在 [LeiZ API 官网](https://api.bileizhen.top) 获取 API Key（见 [配置 API Key](#3-配置-api-key可选)），再填入配置面板的 `leiz_api_key` 字段，保存后重启插件。可用 `/apitest` 验证各接口连通性。Pixiv / 一言 / 天气 / 男娘 / 点歌 均依赖此 Key。
 
 </details>
 

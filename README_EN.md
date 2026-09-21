@@ -5,6 +5,14 @@
 ![Visitors](https://count.getloli.com/get/@backrooms-yrc-currentcortex?theme=moebooru)
 
 > [!IMPORTANT]
+> **🔒 Since 2026-09-20, using this plugin requires a verification code** — get one **free of charge** by joining the official QQ group **1106353813** and fill it into the `verify_code` config option to unlock all features. See [Quick Start · Step 2](#2-fill-in-the-verification-code-required).
+
+<details>
+<summary><b>📜 Pinned announcements archive</b> (click to expand)</summary>
+
+<br>
+
+> [!IMPORTANT]
 > ## 🔒 Please Join the Official QQ Group Before Using This Plugin
 >
 > **All users are strongly encouraged to join the official QQ group 1106353813** ([click to join](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFBR1hSV1djMSswSHI4MEpmQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)).
@@ -39,6 +47,8 @@
 >
 > — Rcst20 · August 15, 2026
 
+</details>
+
 <div align="center">
 
 **An all-in-one AstrBot plugin** — content fetching, media parsing, device control, and cross-group memory in a single package.
@@ -65,7 +75,7 @@ Pixiv random images · Hitokoto quotes · Weather · Femboy images · NetEase Cl
 - [🎯 Feature Guide](#-feature-guide)
   - [1. Pixiv Random Images](#1-pixiv-random-images-pixiv)
   - [2. Media Content Parsing](#2-media-content-parsing-xhs-bilibili-douyin)
-  - [3. NetEase Cloud Music](#3-netease-cloud-music-music)
+  - [3. Song Requests](#3-song-requests-music)
   - [4. Hitokoto](#4-hitokoto-hitokoto)
   - [5. Weather](#5-weather-weather)
   - [6. Femboy Images](#6-femboy-images-femboy)
@@ -91,7 +101,7 @@ Pixiv random images · Hitokoto quotes · Weather · Femboy images · NetEase Cl
 | 🎨 **Pixiv Random Images** | Random picks / R18 / tag filtering / keyword search / by-author / aspect-ratio filtering / exclude AI works |
 | 🔍 **Media Parsing** | Xiaohongshu posts & videos · Bilibili video info · Douyin videos without watermark · Weibo posts & videos |
 | 📚 **Media Content Parsing** | Link parsing for Xiaohongshu / Bilibili / Douyin / Weibo |
-| 🎵 **Song Requests** | Request, search, voice clips, raw files, fetch by ID (NetEase / Kugou) |
+| 🎵 **Song Requests** | Song requests · three parallel sources with best-quality selection (self-hosted NetEase SVIP / NetEase / Kugou) · Lossless/Hi-Res/Panoramic/Immersive Surround/Master tiers · numeric tier selection · voice clip / original file · download progress notices |
 | ✨ **Hitokoto** | 12 categories (anime / manga / games / literature / poetry / film …) |
 | 🌤️ **Weather** | Current conditions + 3-day forecast |
 | 👗 **Femboy Images** | Random femboy-themed images (WebP) |
@@ -123,9 +133,21 @@ cd AstrBot/data/plugins
 git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 ```
 
-### 2. Configure Your API Key (Required)
+### 2. Fill In the Verification Code (Required)
 
-> 🔐 **LeiZ API authentication**: as of the latest version, **every endpoint (including the free ones) requires an API Key**, sent via the `x-api-key: <API-Key>` request header.
+> 🔒 Since **2026-09-20**, due to a series of problems caused by plugin abuse, this plugin uses a verification-code gate.
+
+1. Join the official plugin QQ group **1106353813** (join links at the top of this README) and get the verification code from the group announcement;
+2. Open the AstrBot admin panel → Plugin Management → this plugin → Config, fill the code into the first option, **`verify_code` (verification code)**, and save — it takes effect immediately.
+
+**If the code is missing or wrong, every plugin command (commands / AI tools / link auto-parsing) is locked** — any command only returns a notice pointing you to the group for the code:
+
+> Dear user: due to a series of problems caused by plugin abuse, since September 20, 2026, you must join the CurrentCortex plugin's official QQ group (1106353813) to obtain a verification code, then fill it into the plugin config's `verify_code` (verification code) option.
+> 💡 Obtaining the code is completely free and donations are strictly voluntary — donors and regular users enjoy exactly the same privileges.
+
+### 3. Configure Your API Key (Optional)
+
+> 🔐 **LeiZ API Key is optional**: without it, non-LeiZ features work normally; **song requests automatically route to the self-hosted NetEase SVIP source** (which doesn't depend on this key — quality goes up to Ultra-Clear Master); LeiZ-based features (Pixiv / Hitokoto / weather / femboy / NetEase / Kugou) prompt the user to configure it when triggered.
 
 #### Step 1: Get an API Key
 
@@ -139,13 +161,13 @@ Register / log in, open the "Console / API Keys" page, create a key and copy it 
 
 Open the AstrBot admin panel → Plugin Management → this plugin → Config, paste the key into the **`leiz_api_key`** field, save, and reload the plugin.
 
-Without a key, all LeiZ-endpoint commands (Pixiv / Hitokoto / weather / femboy / song requests) are disabled; invoking them shows a guided message about the missing key.
+Without a key, LeiZ-based commands (Pixiv / Hitokoto / weather / femboy / NetEase / Kugou) show a guided message about the missing key; song requests are unaffected (they automatically route to the self-hosted NetEase SVIP source).
 
 > ⚠️ **This plugin is a community (third-party) plugin built on LeiZ API and is independent of LeiZ API itself**. For API key registration, billing, quotas, and upstream outages, please consult the [LeiZ API website](https://api.bileizhen.top) and its official channels; this plugin's group only handles issues with the plugin itself.
 
 > **Migrating from older versions**: the `femboy_api_key` from v1.3.x and earlier has been merged into a unified `leiz_api_key`. If you left the new field empty but kept the old one, the plugin will automatically use it as the unified key and remind you to migrate — please move it into `leiz_api_key` soon.
 
-### 3. Install Dependencies
+### 4. Install Dependencies
 
 ```bash
 pip install aiohttp>=3.8.0
@@ -178,9 +200,9 @@ Every command accepts both Chinese and English aliases:
 | `/bilibili` | `/B站` `/b站` | Bilibili video parsing |
 | `/douyin` | `/抖音` | Douyin video parsing |
 | `/weibo` | `/微博` | Weibo post parsing |
-| `/music` | `/音乐` | Song requests (NetEase / Kugou) |
+| `/music` | `/音乐` | Song requests (three parallel sources, best quality, up to Ultra-Clear Master) |
 | `/点歌` | — | Quick song request (voice clip only) |
-| `/音源` | — | Switch song source (auto / NetEase / Kugou) |
+| `/音源` | — | View/switch song source (auto / NetEase SVIP / NetEase / Kugou) |
 | `/hitokoto` | `/一言` | Hitokoto quote |
 | `/weather` | `/天气` | Weather lookup |
 | `/femboy` | `/男娘` | Femboy image |
@@ -334,20 +356,39 @@ Auto-detects the platform behind Xiaohongshu, Bilibili, Douyin, and Weibo links 
 
 ---
 
-### 3. NetEase Cloud Music (`/music`)
+### 3. Song Requests (`/music`)
 
-Song requests, search, and playback links via LeiZ API, with **NetEase** and **Kugou** as dual sources plus an `auto` routing mode (NetEase first, fall back to Kugou on failure).
+Supports **three sources**; in `auto` mode (the default) they are probed in parallel and the best-quality result wins (the reply notes the source actually used):
+
+| Source | Notes |
+| --- | --- |
+| **Self-hosted NetEase SVIP** (`ncm`) | Self-hosted api-enhanced service (configured via `ncm_api_base`). **Does not require the LeiZ API Key**; serves the highest qualities — Lossless / Hi-Res / Panoramic Sound / Immersive Surround / Ultra-Clear Master |
+| **NetEase** (`netease`) | Via the LeiZ API; requires `leiz_api_key` |
+| **Kugou** (`kugou`) | Via the LeiZ API; requires `leiz_api_key` |
+
+> Auto best-quality rules: bitrate first (lossless format and file size as tie-breakers); the self-hosted source is the "baseline source" — until it has returned, the other sources never accept early even if they reach a lossless tier first, preventing a fast source's plain lossless from stealing a higher tier. **Without a LeiZ Key, every song request automatically routes to the self-hosted source** — it works out of the box.
 
 #### Switching Sources (`/音源`)
 
 | Command | Description |
 | --- | --- |
 | `/音源` | Show the current source + available options |
-| `/音源 auto` | **Default**. NetEase first; VIP / unavailable / timeout falls back to Kugou |
-| `/音源 网易云` | NetEase only |
-| `/音源 酷狗` | Kugou only |
+| `/音源 auto` | **Default**. Probes all three sources in parallel and takes the best quality |
+| `/音源 网易云SVIP` (`svip` / `ncm` / `自建` / `母带`) | Self-hosted SVIP source only (highest quality) |
+| `/音源 网易云` | NetEase only (requires the LeiZ Key) |
+| `/音源 酷狗` | Kugou only (requires the LeiZ Key) |
 
 The source is remembered **per conversation (group / DM)** without cross-talk; it resets to the default after a restart (`music_default_source`, default `auto`).
+
+#### Quality Tiers (`/music file<1-7>`)
+
+Self-hosted SVIP source only. Tier standard (the lower the number, the higher the quality):
+
+**1 Ultra-Clear Master ≥ 2 Panoramic Sound ≥ 3 Immersive Surround > 4 Hi-Res > 5 Lossless > 6 Extreme (320kbps) > 7 Standard**
+
+- Without a number, the highest tier currently available is picked automatically (equivalent to specifying 1);
+- If the requested tier is unavailable, it downgrades automatically to the best available tier, and the reply notes the tier actually used;
+- Some songs have spatial-audio assets released only alongside "Immersive Surround" (unreachable through a plain lossless request) — the automatic probing discovers them as well.
 
 #### Basic Commands
 
@@ -356,30 +397,34 @@ The source is remembered **per conversation (group / DM)** without cross-talk; i
 | `/music <song>` (`/音乐`) | Request a song (searches and returns full details for the first hit) |
 | `/music direct <song>` (`/音乐 直接`) | Return only a transcoded voice clip |
 | `/点歌 <song>` | Shortcut, equivalent to `/音乐 直接` — voice clip only |
-| `/music file <song>` (`/音乐 文件`) | Return the original, un-transcoded audio file |
-| `/music id:<song ID>` | Fetch details by ID |
+| `/music file[1-7] <song>` (`/音乐 文件`) | Return the original music file; the number selects the quality tier (attached directly or space-separated) |
+| `/music id:<song ID>` | Fetch details by ID (self-hosted source preferred) |
 | `/music search <keyword>` | Search and list songs |
 | `/music help` | Show help |
 
 #### Examples
 
 ```text
-/music 孤勇者              # request a song
+/music 孤勇者              # request a song (auto picks the best quality)
 /music 周杰伦 晴天         # search "周杰伦 晴天" (Jay Chou - Sunny Day)
 /music direct 孤勇者       # voice clip only
 /点歌 孤勇者               # shortcut
-/music file 孤勇者         # original audio as attachment
+/music file 孤勇者         # original audio as attachment (highest tier picked automatically)
+/music file1 Reply         # original file at the Ultra-Clear Master tier
+/music file5 孤勇者        # original file at the Lossless tier
 /music id:1901371647       # fetch by ID
 /music search 陈奕迅       # search and list songs
 ```
 
 #### What You Get Back
 
-Song name, artist, album, cover, quality (bitrate / format / level), file size, and playback link. On QQ the playback link is automatically resolved into a **voice clip** (relies on the framework's `Record` message segment; falls back to a text link when unsupported).
+Song name, artist, album, cover, quality (tier / bitrate / format), file size, and playback link; in auto mode a "Source: xxx" line is appended. On QQ the playback link is automatically resolved into a **voice clip** (relies on the framework's `Record` message segment; falls back to a text link when unsupported).
 
-> ⚠️ Some VIP songs may not expose a playback link; links are time-limited, so use them promptly. The voice-clip feature requires `ffmpeg` on the system.
+> ⚠️ Some VIP songs and parts of some catalogs (certain Hong Kong / Taiwan artists, for example) are subject to copyright or regional restrictions and may not expose a playback link; links are time-limited, so use them promptly. The voice-clip feature requires `ffmpeg` on the system.
 
-> 📦 **File mode & large files**: under QQ/NapCat, `/音乐 文件` prefers the OneBot local upload path (`upload_group_file` / `upload_private_file`), avoiding the `Comp.File` HTTP-callback round trip through a misconfigured `callback_api_base` that often fails with "download file failed" in the logs. Original audio (especially lossless flac) can be huge; when the file exceeds `music_file_max_bytes` (default 25MB) the plugin automatically transcodes it to a 128kbps MP3 before sending (requires `ffmpeg`), typically shrinking it by ~90%. Raise the threshold if you really need the untouched lossless file (not recommended — sends often fail). Downloads automatically retry on timeout / network errors.
+> 📦 **File mode & large files**: `/音乐 文件` always sends the original file at the highest quality **as-is, with no pre-compression**; only when sending fails (QQ/NapCat commonly rejects large-file uploads with `retcode=1200`) does it automatically fall back to compressing the file into a 128kbps MP3 and resending it with a notice. Sending prefers the OneBot local upload path (`upload_group_file` / `upload_private_file`), bypassing the `Comp.File` HTTP-callback pitfalls. Downloads automatically retry on timeout / network errors.
+
+> 📊 **Download progress notices** (config `music_download_progress_mode`, default 简略 "Brief"): while a large file is downloading, a notice says "Downloading the audio file. High-quality files can take a while due to server bandwidth — please be patient...", and another one says "Audio file download complete! Preparing to send..." when it finishes; the 详细 "Detailed" mode reports a progress percentage every 10%; the 关闭 "Off" mode stays silent throughout. Files that download instantly never announce in any mode.
 
 > 🚫 **Anti-spam protection**: to stop rapid-fire requests from spawning masses of concurrent downloads/transcodes, song requests have built-in in-flight deduplication plus a cooldown (`music_cooldown`, default 3 seconds). Requesting again while the previous song is still processing gets a "please wait" message; requesting again immediately after one finishes gets a "that was fast!" message. Different groups / DMs don't affect each other.
 
@@ -438,7 +483,7 @@ Returns a random femboy-themed image (WebP).
 /femboy help     # show help
 ```
 
-> Requires `leiz_api_key` to be configured first — see [Quick Start](#2-configure-your-api-key-required).
+> Requires `leiz_api_key` to be configured first — see [Quick Start](#3-configure-your-api-key-optional).
 
 ---
 
@@ -761,16 +806,18 @@ Path: AstrBot admin panel → Plugin Management → this plugin → Config.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `leiz_api_key` | string | (empty) | **Unified LeiZ API key** (`x-api-key` header), **required**. Obtain it after registering on the [LeiZ API website](https://api.bileizhen.top); needed by every LeiZ endpoint |
+| `leiz_api_key` | string | (empty) | **Unified LeiZ API key** (`x-api-key` header), **optional — not required**. Obtain it after registering on the [LeiZ API website](https://api.bileizhen.top); needed by the LeiZ endpoints (Pixiv / Hitokoto / weather / femboy / NetEase / Kugou). Without it those features prompt for configuration, song requests automatically route to the self-hosted NetEase SVIP source, and everything else keeps working |
 | `request_timeout` | int | 15 | API request timeout (seconds); affects all features |
 
-### Music
+### Song Requests
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `music_file_max_bytes` | int | 26214400 | Size cap per file for `/音乐 文件` (bytes, default 25MB). Larger files are transcoded to 128kbps MP3 before sending (requires ffmpeg); `0` = no limit (not recommended — sends often fail) |
+| `ncm_api_base` | string | http://music.20110208.xyz | Base URL of the self-hosted NetEase SVIP source (api-enhanced service). Serves the highest qualities — Lossless / Hi-Res / Ultra-Clear Master, etc. — without the LeiZ Key |
+| `ncm_cookie_path` | string | /opt/ncm-api/.ncm-cookie | Path to the self-hosted source's login cookie file (refreshed daily on the server; the plugin follows file changes automatically). Empty = anonymous (free qualities only) |
+| `music_default_source` | string | auto | Default song source: `auto` (three parallel sources, best quality wins) / `ncm` (self-hosted NetEase SVIP) / `netease` / `kugou` (the latter two need the LeiZ Key). Users can still override per conversation with `/音源` |
 | `music_cooldown` | int | 3 | Minimum interval between song requests in the same conversation, to stop rapid-fire requests from spawning masses of concurrent downloads/transcodes. In-flight requests get a "please wait"; `0` = no limit (not recommended) |
-| `music_default_source` | string | auto | Default song source: `auto` (NetEase first, fall back to Kugou) / `netease` (NetEase only) / `kugou` (Kugou only). Users can still override per conversation with `/音源` |
+| `music_download_progress_mode` | string | 简略 | Download progress notices for `/音乐 文件`: `关闭` (Off — silent throughout) / `简略` (Brief — one notice when the download starts and one when it finishes) / `详细` (Detailed — a progress line every 10%). Instant downloads never announce |
 
 ### DG-LAB
 
@@ -860,7 +907,7 @@ The plugin ships with the official group number **1106353813** built in — acti
 <details>
 <summary><b>Commands say "feature not enabled / API key not configured"?</b></summary>
 
-Get an API Key from the [LeiZ API website](https://api.bileizhen.top) first (see [Configure Your API Key](#2-configure-your-api-key-required)), paste it into the `leiz_api_key` field in the config panel, save, and reload the plugin. `/apitest` verifies each endpoint's connectivity. Pixiv / Hitokoto / weather / femboy / songs all depend on this key.
+Get an API Key from the [LeiZ API website](https://api.bileizhen.top) first (see [Configure Your API Key](#3-configure-your-api-key-optional)), paste it into the `leiz_api_key` field in the config panel, save, and reload the plugin. `/apitest` verifies each endpoint's connectivity. Pixiv / Hitokoto / weather / femboy / songs all depend on this key.
 
 </details>
 
