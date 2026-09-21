@@ -20,15 +20,13 @@ import uuid
 import asyncio
 import time
 import tempfile
-import logging
 from typing import Optional, Tuple, List, Union
 from datetime import datetime
 
 import qrcode
 
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
-
-logger = logging.getLogger(__name__)
 
 from .dglab_device_store import DeviceBinding
 
@@ -261,7 +259,7 @@ class DGLabCommandHandler:
         connection_pool,
         device_store,
         default_server_url: str = "",
-        data_dir: str = "data",
+        data_dir: str = os.path.join("data", "plugin_data", "astrbot_plugin_currentcortex"),
         default_protocol: str = "auto",
     ):
         self._pool = connection_pool

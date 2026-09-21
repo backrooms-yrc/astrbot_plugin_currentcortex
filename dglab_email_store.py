@@ -47,7 +47,7 @@ class EmailStore:
       data/dglab_verification_codes.json - 验证码（key: "email:code"）
     """
 
-    def __init__(self, data_dir: str = "data"):
+    def __init__(self, data_dir: str = os.path.join("data", "plugin_data", "astrbot_plugin_currentcortex")):
         self._data_dir = data_dir
         self._smtp_path = os.path.join(data_dir, "dglab_smtp_config.json")
         self._codes_path = os.path.join(data_dir, "dglab_verification_codes.json")

@@ -7,6 +7,14 @@ Page 前端（pages/cc-dashboard）通过 ``window.AstrBotPluginPage`` 调用。
 - 所有 handler 返回 ``json_response({...})``；异常统一 ``error_response``。
 - 配置写入走白名单（仅 ``_conf_schema.json`` 中存在的 key）。
 - 写配置后自动 ``save_config_async`` + ``star_manager.reload`` 热重载。
+
+安全边界说明（针对「一键部署 DG-LAB 中转」等系统级操作）：
+- 本模块全部路由注册于 AstrBot WebUI 后端（``register_web_api``），
+  仅 AstrBot 管理员登录后可达，不对公网匿名开放。
+- 系统级操作（git clone / bun / systemctl / ufw / 写 systemd 单元）仅用于
+  部署本机 DG-LAB 中转服务，命令参数全部为代码内固定白名单常量
+  （RELAY_REPO/RELAY_PORTS/版本号），不含任何来自请求的自由文本拼接；
+  每次执行均通过 logger 留下审计日志（命令 + 返回码）。
 """
 
 from __future__ import annotations
@@ -708,6 +716,9 @@ async def _run_cmd(
 
     if _shutil.which(cmd[0]) is None and not os.path.isabs(cmd[0]):
         return 127, "", f"{cmd[0]}: command not found"
+    # 审计日志：系统级操作（部署/卸载/防火墙/服务管理）必须可追溯。
+    # cmd 均为代码内白名单常量，不含请求侧自由文本，无注入面。
+    logger.info(f"[CCPages] 执行系统命令: {' '.join(cmd)}")
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -717,6 +728,7 @@ async def _run_cmd(
             stderr=asyncio.subprocess.PIPE,
         )
     except Exception as e:
+        logger.warning(f"[CCPages] 命令启动失败: {' '.join(cmd)} — {e!r}")
         return 1, "", repr(e)
     try:
         out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
@@ -725,9 +737,15 @@ async def _run_cmd(
             proc.kill()
         except Exception:
             pass
+        logger.warning(f"[CCPages] 命令超时({timeout}s): {' '.join(cmd)}")
         return 124, "", f"timeout after {timeout}s"
+    rc = proc.returncode or 0
+    if rc != 0:
+        logger.warning(
+            f"[CCPages] 命令返回 {rc}: {' '.join(cmd)} — {err.decode('utf-8', 'replace').strip()[:200]}"
+        )
     return (
-        proc.returncode or 0,
+        rc,
         out.decode("utf-8", "replace").strip(),
         err.decode("utf-8", "replace").strip(),
     )

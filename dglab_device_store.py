@@ -43,7 +43,7 @@ class DeviceStore:
     符合Astrbot插件开发规范：持久化数据存储于data目录
     """
 
-    def __init__(self, data_dir: str = "data"):
+    def __init__(self, data_dir: str = os.path.join("data", "plugin_data", "astrbot_plugin_currentcortex")):
         self._data_dir = data_dir
         self._file_path = os.path.join(data_dir, "dglab_bindings.json")
         self._lock = threading.Lock()

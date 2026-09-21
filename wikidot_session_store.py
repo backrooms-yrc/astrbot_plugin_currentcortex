@@ -25,7 +25,7 @@ class WikidotSessionStore:
         data_dir: 数据目录（通常为 "data"）。
     """
 
-    def __init__(self, data_dir: str = "data") -> None:
+    def __init__(self, data_dir: str = os.path.join("data", "plugin_data", "astrbot_plugin_currentcortex")) -> None:
         self._data_dir = data_dir
         self._file_path = os.path.join(
             data_dir, "currentcortex_wikidot_session.json"

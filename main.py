@@ -73,6 +73,61 @@ MUSIC_SOURCE_LABELS = {
     "kugou": "酷狗",
 }
 
+# 插件数据目录（遵循 AstrBot 规范：插件数据须写入 data/plugin_data/<plugin_name>，
+# 不允许直接写 AstrBot 根 data/）。各存储类默认值与此保持一致；旧版散落在根
+# data/ 下的文件由 _migrate_legacy_plugin_data() 在初始化时自动迁移。
+PLUGIN_DATA_DIR = os.path.join("data", "plugin_data", "astrbot_plugin_currentcortex")
+# 旧版（≤v2.8.0）直接写在根 data/ 下的插件数据文件清单
+LEGACY_PLUGIN_DATA_FILES = (
+    "dglab_bindings.json",
+    "dglab_users.json",
+    "dglab_sessions.json",
+    "dglab_smtp_config.json",
+    "dglab_verification_codes.json",
+    "dglab_conversations.json",
+    "dglab_messages.json",
+    "dglab_friend_requests.json",
+    "dglab_group_members.json",
+    "dglab_group_invites.json",
+    "dglab_public_group.json",
+    "dglab_permissions.json",
+    "dglab_turnstile_config.json",
+    "dglab_posts.json",
+    "currentcortex_group_switch.json",
+    "currentcortex_cross_group.json",
+    "currentcortex_wikidot_session.json",
+)
+
+
+def _migrate_legacy_plugin_data() -> None:
+    """把 ≤v2.8.0 散落在 AstrBot 根 data/ 下的插件数据一次性迁移到 PLUGIN_DATA_DIR。
+
+    仅当新位置不存在同名文件时才移动（os.replace 跨目录原子搬移），
+    不覆盖任何已有数据；目录 dglab_qrcodes（扫码图片缓存）一并迁移。
+    """
+    import shutil
+
+    try:
+        os.makedirs(PLUGIN_DATA_DIR, exist_ok=True)
+        moved = []
+        for name in LEGACY_PLUGIN_DATA_FILES:
+            src = os.path.join("data", name)
+            dst = os.path.join(PLUGIN_DATA_DIR, name)
+            if os.path.exists(src) and not os.path.exists(dst):
+                os.replace(src, dst)
+                moved.append(name)
+        src_dir = os.path.join("data", "dglab_qrcodes")
+        dst_dir = os.path.join(PLUGIN_DATA_DIR, "dglab_qrcodes")
+        if os.path.isdir(src_dir) and not os.path.exists(dst_dir):
+            shutil.move(src_dir, dst_dir)
+            moved.append("dglab_qrcodes/")
+        if moved:
+            logger.info(
+                f"[CurrentCortex] 已将 {len(moved)} 项旧版数据从 data/ 迁移到 {PLUGIN_DATA_DIR}: {moved}"
+            )
+    except OSError as e:
+        logger.warning(f"[CurrentCortex] 旧版数据迁移失败（不影响新数据写入）: {e}")
+
 
 def _parse_music_progress_mode(config: Dict[str, Any]) -> str:
     """解析下载进度播报档位，返回 off（关闭）/ brief（简略）/ detail（详细）。
@@ -1626,7 +1681,9 @@ class CurrentCortexPlugin(Star):
                     "[DGLab] 已从旧版 dglab JSON 配置迁移到新的独立配置项，建议更新配置面板"
                 )
 
-        self._device_store = DeviceStore(data_dir="data")
+        # 先迁移旧版根 data/ 下的插件数据，再初始化各存储类
+        _migrate_legacy_plugin_data()
+        self._device_store = DeviceStore(data_dir=PLUGIN_DATA_DIR)
         self._connection_pool = DeviceConnectionPool(
             device_store=self._device_store,
             max_connections=200,
@@ -1640,8 +1697,8 @@ class CurrentCortexPlugin(Star):
             default_protocol=dglab_protocol,
         )
 
-        self._user_store = UserStore(data_dir="data")
-        self._permission_store = PermissionStore(data_dir="data")
+        self._user_store = UserStore(data_dir=PLUGIN_DATA_DIR)
+        self._permission_store = PermissionStore(data_dir=PLUGIN_DATA_DIR)
 
         webui_enabled = bool(config.get("dglab_webui_enabled", False))
         webui_host = str(config.get("dglab_webui_host", "127.0.0.1")).strip()
@@ -1699,7 +1756,7 @@ class CurrentCortexPlugin(Star):
         self._wikidot_client: Optional[WikidotClient] = None
         self._wikidot_handler: Optional[WikidotCommandHandler] = None
         if self._wikidot_enable:
-            self._wikidot_store = WikidotSessionStore(data_dir="data")
+            self._wikidot_store = WikidotSessionStore(data_dir=PLUGIN_DATA_DIR)
             self._wikidot_client = WikidotClient(
                 site=str(config.get("wikidot_site", "")).strip(),
                 username=str(config.get("wikidot_username", "")).strip(),
@@ -1753,7 +1810,7 @@ class CurrentCortexPlugin(Star):
         self._cross_group_store: "CrossGroupMemoryStore | None" = None
         if self._cross_group_enable:
             try:
-                self._cross_group_store = CrossGroupMemoryStore(data_dir="data")
+                self._cross_group_store = CrossGroupMemoryStore(data_dir=PLUGIN_DATA_DIR)
                 logger.info(
                     f"[CrossGroupMemory] 已启用跨群聊记忆 "
                     f"(max_cnt={self._cross_group_max_cnt}, inject_cnt={self._cross_group_inject_cnt}, "
@@ -1782,7 +1839,7 @@ class CurrentCortexPlugin(Star):
         self._group_switch_store: "GroupSwitchStore | None" = None
         if self._group_switch_enable:
             try:
-                self._group_switch_store = GroupSwitchStore(data_dir="data")
+                self._group_switch_store = GroupSwitchStore(data_dir=PLUGIN_DATA_DIR)
                 logger.info(
                     "[GroupSwitch] 已启用按群聊开关功能"
                     f"（admin_only={self._group_switch_admin_only}, "

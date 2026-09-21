@@ -45,7 +45,7 @@ class Session:
 
 
 class UserStore:
-    def __init__(self, data_dir: str = "data"):
+    def __init__(self, data_dir: str = os.path.join("data", "plugin_data", "astrbot_plugin_currentcortex")):
         self._data_dir = data_dir
         self._file_path = os.path.join(data_dir, "dglab_users.json")
         self._sessions_path = os.path.join(data_dir, "dglab_sessions.json")

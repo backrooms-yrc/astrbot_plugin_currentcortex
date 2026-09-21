@@ -29,7 +29,7 @@ class TurnstileStore:
       data/dglab_turnstile_config.json - Turnstile 配置（单个对象）
     """
 
-    def __init__(self, data_dir: str = "data"):
+    def __init__(self, data_dir: str = os.path.join("data", "plugin_data", "astrbot_plugin_currentcortex")):
         self._data_dir = data_dir
         self._config_path = os.path.join(data_dir, "dglab_turnstile_config.json")
         self._lock = threading.Lock()

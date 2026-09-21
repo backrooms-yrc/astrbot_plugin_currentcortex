@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-09-21
+
+### 修复
+
+- **插件市场合规整改（v2.8.0 自动安全审查驳回的三项）**
+  - **日志规范**：`dglab_commands.py` 改用 `from astrbot.api import logger`，移除内置 `logging.getLogger`（审查要求 logger 必须且只能来自 astrbot.api）
+  - **数据持久化位置**：全部 11 个存储类（DG-LAB 绑定/用户/权限/聊天/邮件/帖子/turnstile、跨群记忆、按群开关、Wikidot 会话）的默认 `data_dir` 由 AstrBot 根 `data/` 改为 **`data/plugin_data/astrbot_plugin_currentcortex/`**；`main.py` 初始化时执行 `_migrate_legacy_plugin_data()` 自动把 ≤v2.8.0 散落在根 `data/` 的 17 个 JSON 文件与 `dglab_qrcodes/` 目录原子搬移（`os.replace`，**不覆盖**新位置已有数据），迁移一次性完成并打日志
+  - **`_pages_api.py` 系统级操作加固**：docstring 增补安全边界说明（全部路由注册于 AstrBot WebUI 后端、仅管理员可达；部署命令参数均为代码内白名单常量，无请求侧自由文本拼接）；`_run_cmd()` 增加审计日志——每条系统命令（git/bun/systemctl/ufw）执行前记录命令行，非零返回码/超时/启动失败记录告警，全部可追溯
+
 ## [2.8.0] - 2026-09-21
 
 - 🎉明天是周二！！😋
