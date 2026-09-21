@@ -74,12 +74,14 @@ _CONFIG_GROUPS: List[Dict[str, Any]] = [
     },
     {
         "key": "music",
-        "title": "网易云/酷狗 点歌",
+        "title": "点歌（自建网易云SVIP / 网易云 / 酷狗）",
         "icon": "music",
         "items": [
-            "music_file_max_bytes",
-            "music_cooldown",
+            "ncm_api_base",
+            "ncm_cookie_path",
             "music_default_source",
+            "music_cooldown",
+            "music_download_progress_mode",
         ],
     },
     {

@@ -39,23 +39,35 @@
     "type": "int",
     "default": 15
   },
-  "music_file_max_bytes": {
-    "description": "/音乐 文件 模式的单文件体积上限（字节）。原始音乐文件（如无损 flac）过大时，QQ/NapCat 端常以上传失败拒绝。超过此阈值会自动转码为 128kbps MP3 后再发送（需 ffmpeg）。QQ 下优先 OneBot 本地上传，绕过 Comp.File 的 HTTP 回调。默认 26214400（25MB）。设为 0 则不限制（不推荐，易发送失败）",
-    "type": "int",
-    "default": 26214400
+  "music_download_progress_mode": {
+    "description": "/音乐 文件 模式的下载进度播报档位。关闭：全程静默；简略（默认）：开始下载时提示一条「正在下载音频文件。受限于服务器带宽，高音质文件下载耗时可能较长，请耐心等待...」，完成后提示「音频文件下载完成！准备发送，请耐心等待...」（秒下的小文件不提示）；详细：每跨过 10% 播报一条「正在下载音频：10%」（未知大小时每 5MB 一条），完成后提示「音频下载完成！」",
+    "type": "string",
+    "default": "简略",
+    "options": ["关闭", "简略", "详细"]
   },
   "music_cooldown": {
     "description": "同一会话连续点歌的最小间隔秒数，防止用户连点导致大量并发下载/转码拖垮服务器。在处理中的请求会被直接提示「请稍候」。默认 3 秒；设为 0 则不限制（不推荐）",
     "type": "int",
     "default": 3
   },
-  "music_default_source": {
-    "description": "点歌默认音源：auto（网易云优先，失败自动转酷狗）/ netease（仅网易云）/ kugou（仅酷狗）。用户仍可用 /音源 命令按会话覆盖",
+  "ncm_api_base": {
+    "description": "自建网易云 SVIP API 地址（api-enhanced 服务，默认为本机反代域名）。该音源提供无损/Hi-Res/超清母带等最高音质，且不依赖 LeiZ API Key",
     "type": "string",
-    "default": "auto"
+    "default": "http://music.20110208.xyz"
+  },
+  "ncm_cookie_path": {
+    "description": "自建 SVIP 音源的登录 cookie 文件路径（由服务器上的 ncm-cookie-refresh.timer 每日自动刷新，插件按文件改动自动跟随）。留空则匿名访问（仅免费音质）",
+    "type": "string",
+    "default": "/opt/ncm-api/.ncm-cookie"
+  },
+  "music_default_source": {
+    "description": "点歌默认音源：auto（三音源并行探测，取音质最佳）/ ncm（自建网易云SVIP）/ netease（仅网易云）/ kugou（仅酷狗）。用户仍可用 /音源 命令按会话覆盖",
+    "type": "string",
+    "default": "auto",
+    "options": ["auto", "ncm", "netease", "kugou"]
   },
   "leiz_api_key": {
-    "description": "LeiZ API 统一密钥（请求头 x-api-key）。所有接口（含免费接口）均需携带。留空将禁用 Pixiv/一言/天气/男娘/点歌等全部 LeiZ 接口命令",
+    "description": "LeiZ API 统一密钥（请求头 x-api-key），非必填。未填写时：与 LeiZ 无关的功能（B站/抖音/小红书解析、DG-Lab、Wikidot 等）正常使用；点歌自动路由到自建网易云SVIP音源（不依赖本密钥）；Pixiv/一言/天气/男娘等基于 LeiZ 的命令会提示填写后再使用。已配置旧版 femboy_api_key 的会自动沿用",
     "type": "string",
     "default": ""
   },

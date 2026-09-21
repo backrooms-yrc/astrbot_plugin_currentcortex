@@ -48,6 +48,48 @@ NETEASE_API_URL = "https://api.bileizhen.top/api/netease"
 NETEASE_SEARCH_URL = "https://api.bileizhen.top/api/netease/search"
 KUGOU_API_URL = "https://api.bileizhen.top/api/kugou"
 KUGOU_SEARCH_URL = "https://api.bileizhen.top/api/kugou/search"
+# 自建网易云 SVIP API（api-enhanced，反向代理到本机 127.0.0.1:3001）
+NCM_SVIP_API_BASE = "http://music.20110208.xyz"
+NCM_SVIP_COOKIE_PATH = "/opt/ncm-api/.ncm-cookie"
+# 点歌音质档位（高→低）：超清母带 ≥ 臻音全景声 ≥ 沉浸环绕声 ＞ 高清臻音 ＞ 无损 ＞ 极高 ＞ 标准
+# 数字档位（/音乐 文件<1-7>）按此表顺序映射到 API level。
+# 排序依据（2026-09-21 重排）：下载存文件场景以保真度为准，立体声母带最接近
+# 录音室原样；空间音频两档（全景声/环绕声）是重新混音的体验取向，且效果依赖
+# App 内渲染引擎，裸文件在普通播放器会降混，故排在立体声高保真档之后。
+MUSIC_TIER_LEVELS = ("jymaster", "jyeffect", "sky", "hires", "lossless", "exhigh", "standard")
+MUSIC_TIER_LABELS = {
+    "jymaster": "超清母带",
+    "jyeffect": "臻音全景声",
+    "sky": "沉浸环绕声",
+    "hires": "高清臻音",
+    "lossless": "无损",
+    "exhigh": "极高",
+    "standard": "标准",
+}
+# 音源显示名（auto 模式回复中展示「音源：xxx」时使用）
+MUSIC_SOURCE_LABELS = {
+    "ncm": "网易云SVIP（自建）",
+    "netease": "网易云",
+    "kugou": "酷狗",
+}
+
+
+def _parse_music_progress_mode(config: Dict[str, Any]) -> str:
+    """解析下载进度播报档位，返回 off（关闭）/ brief（简略）/ detail（详细）。
+
+    配置值接受中文（关闭/简略/详细）或英文（off/brief/detail）；
+    未配置时回退旧版 bool 开关 music_download_progress_enable
+    （false → off，其余 → brief），再兜底为 brief。
+    """
+    raw = str(config.get("music_download_progress_mode", "")).strip().lower()
+    if not raw:
+        legacy = config.get("music_download_progress_enable")
+        raw = "off" if legacy is False else "brief"
+    return {
+        "关闭": "off", "off": "off",
+        "简略": "brief", "brief": "brief",
+        "详细": "detail", "detail": "detail",
+    }.get(raw, "brief")
 PIXIV_ARTWORK_URL = "https://www.pixiv.net/artworks/{}"
 
 # 插件校验码（自 2026-09-20 起强制）：因插件滥用行为导致的一系列问题，
@@ -91,7 +133,7 @@ COMMAND_CATEGORIES = [
         "commands": [
             {"cmd": "/music", "alias": "音乐", "desc": "搜索音乐并获取歌曲详情或音频"},
             {"cmd": "/点歌", "alias": "—", "desc": "快捷点歌，直接返回语音条"},
-            {"cmd": "/音源", "alias": "—", "desc": "查看或切换点歌音源（auto/网易云/酷狗）"},
+            {"cmd": "/音源", "alias": "—", "desc": "查看或切换点歌音源（auto/网易云SVIP/网易云/酷狗）"},
         ],
     },
     {
@@ -308,7 +350,7 @@ MUSIC_HELP_TEXT = """🎵 网易云音乐 使用说明
 📌 基本命令（别名：/音乐）
   /music <歌曲名>       搜索并获取歌曲信息（点歌）
   /music direct <歌曲名> 仅返回语音条（别名：直接）
-  /music file <歌曲名>  返回原始音乐文件（别名：文件）
+  /music file[1-7] <歌曲名> 返回原始音乐文件（别名：文件；数字指定音质档位）
   /music id:<歌曲ID>    通过歌曲ID获取详细信息（别名：编号:<ID>）
   /music search <关键词> 搜索歌曲列表（别名：搜索）
   /music help           显示此帮助信息
@@ -316,11 +358,20 @@ MUSIC_HELP_TEXT = """🎵 网易云音乐 使用说明
 📌 快捷命令
   /点歌 <歌曲名>         仅返回语音条（等效于 /音乐 直接）
 
+📌 音质档位（/音乐 文件<数字> 指定）
+  等级标准：1 超清母带 ≥ 2 臻音全景声 ≥ 3 沉浸环绕声 ＞ 4 高清臻音 ＞ 5 无损 ＞ 6 极高 ＞ 7 标准
+  · 数字可紧跟或空格分隔：/音乐 文件1 歌名、/音乐 文件 1 歌名均可
+  · 不指定数字时自动取当前可用的最高档位（等同按 1 处理）
+  · 档位指定仅「网易云SVIP（自建）」音源支持；请求档位不可用时自动降级并提示
+  · 原始文件默认不压缩、保留最高音质发送；仅当发送失败时自动降级压缩为 MP3 重发并提示
+
 📌 中文用法示例
   /音乐 孤勇者              点歌
   /音乐 直接 孤勇者         仅返回语音条
   /点歌 孤勇者              仅返回语音条
-  /音乐 文件 孤勇者         返回原始音乐文件
+  /音乐 文件 孤勇者         原始音乐文件（自动取最高档位）
+  /音乐 文件1 Reply         超清母带档位的原始文件
+  /音乐 文件5 孤勇者         无损档位的原始文件
   /音乐 搜索 陈奕迅         搜索歌曲列表
   /音乐 编号:1901371647     通过ID获取歌曲
 
@@ -333,7 +384,8 @@ MUSIC_HELP_TEXT = """🎵 网易云音乐 使用说明
     /music direct 孤勇者       只返回语音消息
 
   原始音乐文件（不转码）：
-    /music file 孤勇者         返回原始音频附件
+    /music file 孤勇者         返回原始音频附件（最高档位）
+    /music file1 Reply         返回超清母带档位的原始音频附件
 
   通过ID获取：
     /music id:1901371647       获取指定ID的歌曲信息
@@ -344,15 +396,21 @@ MUSIC_HELP_TEXT = """🎵 网易云音乐 使用说明
 📌 返回信息
   • 歌曲名称、艺术家、专辑
   • 专辑封面图片
-  • 音质信息（码率、格式）
+  • 音质信息（码率、格式、音质档位）
   • 播放链接
   • 语音条（自动转码为MP3格式）
-  • 原始音乐文件（文件模式，不转码）
+  • 原始音乐文件（文件模式，不压缩；发送失败自动降级压缩重发）
+
+📌 音源说明（/音源 查看/切换）
+  • auto（默认）：三音源并行探测，取音质最佳者，速度优先
+  • 网易云SVIP（自建）：无损/Hi-Res/超清母带等最高音质
+  • 网易云 / 酷狗：第三方接口，作为补充音源
 
 ⚠️ 注意事项
   • 部分VIP歌曲可能无法获取播放链接
+  • 部分曲库存在地区版权限制（如某些港台歌手）
   • 播放链接有时效性，请及时使用
-  • 原始文件受平台文件大小和格式限制
+  • 超大文件（如母带/环绕声 flac）受平台上传限制，发送失败会自动降级压缩
   • 数据来源于网易云音乐，仅供个人试听
   • 如遇问题可发送 /music help 查看帮助"""
 
@@ -1118,6 +1176,188 @@ class KugouAPIClient:
         return songs
 
 
+class NcmSvipClient:
+    """自建网易云音乐 SVIP API 客户端（api-enhanced，经反代域名访问本机服务）。
+
+    与 NeteaseAPIClient/KugouAPIClient 的返回字段对齐
+    （url/level/size/type/bitrate/name/artists/album/pic），便于统一处理。
+    SVIP cookie 从本地文件读取（由 ncm-cookie-refresh.timer 每日刷新，按 mtime 缓存），
+    独立于 LeiZ API Key；cookie 缺失时匿名降级（仅免费音质）。
+    """
+
+    def __init__(self, base_url: str, cookie_path: str):
+        self._base = (base_url or "").rstrip("/")
+        self._cookie_path = cookie_path or ""
+        self._cookie_cache: tuple = ()  # (mtime, cookie)
+
+    def _load_cookie(self) -> str:
+        if not self._cookie_path:
+            return ""
+        try:
+            mtime = os.path.getmtime(self._cookie_path)
+            if self._cookie_cache and self._cookie_cache[0] == mtime:
+                return self._cookie_cache[1]
+            with open(self._cookie_path, "r", encoding="utf-8") as f:
+                cookie = f.read().strip()
+            if cookie:
+                self._cookie_cache = (mtime, cookie)
+            return cookie
+        except OSError:
+            return ""
+
+    async def _get_json(
+        self, path: str, params: Dict[str, Any], tag: str
+    ) -> Dict[str, Any]:
+        """单次 GET（自建本机反代，正常 <100ms；6s 超时兜底，失败由调用方降级）。"""
+        if not self._base:
+            raise NeteaseAPIError("NCM SVIP 音源未配置地址")
+        cookie = self._load_cookie()
+        if cookie:
+            params = dict(params)
+            params["cookie"] = cookie  # aiohttp 负责查询参数的URL编码
+        timeout = aiohttp.ClientTimeout(total=6.0)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            try:
+                async with session.get(self._base + path, params=params) as resp:
+                    if resp.status != 200:
+                        raise NeteaseAPIError(
+                            f"NCM API HTTP {resp.status}", status_code=resp.status
+                        )
+                    return await resp.json(content_type=None)
+            except asyncio.TimeoutError:
+                raise NeteaseAPIError("NCM API 请求超时", status_code=0)
+            except aiohttp.ClientError as e:
+                raise NeteaseAPIError(f"NCM API 网络错误: {e}", status_code=0)
+
+    async def search_songs(self, query: str) -> List[Dict[str, Any]]:
+        """通过关键词搜索歌曲（cloudsearch，现代 ar/al/dt 字段结构）。"""
+        if not query or not query.strip():
+            raise NeteaseAPIError("搜索关键词不能为空")
+        data = await self._get_json(
+            "/cloudsearch",
+            {"keywords": query.strip(), "limit": 10, "type": 1},
+            "search_songs",
+        )
+        songs = (data or {}).get("result", {}).get("songs", [])
+        if not isinstance(songs, list):
+            raise NeteaseAPIError("NCM 返回搜索结果格式异常")
+        mapped = []
+        for s in songs:
+            if not isinstance(s, dict):
+                continue
+            mapped.append(
+                {
+                    "id": str(s.get("id", "")),
+                    "name": s.get("name", "未知歌曲"),
+                    "artists": "/".join(
+                        a.get("name", "")
+                        for a in (s.get("ar") or [])
+                        if isinstance(a, dict) and a.get("name")
+                    )
+                    or "未知艺术家",
+                    "album": (s.get("al") or {}).get("name", ""),
+                    "pic": (s.get("al") or {}).get("picUrl", ""),
+                    "duration": s.get("dt", 0),
+                    "fee": s.get("fee", 0),
+                }
+            )
+        return mapped
+
+    # 音质档位优先级（高→低），与命令层 /音乐 文件<1-7> 的数字档位共用同一顺序
+    LEVEL_PRIORITY = MUSIC_TIER_LEVELS
+    # 需逐一探测的特殊档（空间音频/母带资产）：它们不在网易的自动降级链里——
+    # 请求不存在的特殊档会直接降级到「最佳正常档」，且请求 lossless 也拿不到它们
+    # （实测：告白书 lossless→320k mp3，但 sky→独立的 1398k flac 空间音频资产）
+    LEVEL_PROBE_SET = ("sky", "jymaster", "jyeffect")
+
+    async def _fetch_url_level(self, song_id: str, level: str) -> Dict[str, Any]:
+        """请求单一档位的播放链接，返回 data[0] 原始 dict。"""
+        data = await self._get_json(
+            "/song/url/v1", {"id": song_id, "level": level}, "get_song"
+        )
+        items = (data or {}).get("data") or []
+        item = items[0] if isinstance(items, list) and items else {}
+        return item if isinstance(item, dict) else {}
+
+    async def get_song(
+        self, song_id: str, level: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """通过歌曲ID获取播放链接与元数据。
+
+        - level 显式指定：仅请求该档；
+        - level 为空：取「当前账号可用的最高音质」。并行探测 LEVEL_PROBE_SET 三个
+          特殊档（响应的 level 字段为实际返回档而非回显请求档，实测请求 jymaster
+          而歌曲无母带时返回 level=exhigh，可据此判断命中）；三个特殊档均未命中时，
+          降级响应里的实际档就是最佳正常档（高清臻音/无损/极高/标准），无需再探测。
+        """
+        song_id = str(song_id).strip()
+        if not song_id:
+            raise NeteaseAPIError("歌曲ID不能为空")
+        if level:
+            best_item = await self._fetch_url_level(song_id, level)
+        else:
+            results = await asyncio.gather(
+                *(self._fetch_url_level(song_id, lv) for lv in self.LEVEL_PROBE_SET),
+                return_exceptions=True,
+            )
+            by_level: Dict[str, Dict[str, Any]] = {}
+            fallback_item: Dict[str, Any] = {}
+            fallback_br = -1
+            for lv, r in zip(self.LEVEL_PROBE_SET, results):
+                if isinstance(r, BaseException) or not isinstance(r, dict):
+                    continue
+                if not r.get("url"):
+                    continue
+                actual = str(r.get("level") or "")
+                if actual:
+                    by_level.setdefault(actual, r)
+                if int(r.get("br") or 0) > fallback_br:
+                    fallback_item, fallback_br = r, int(r.get("br") or 0)
+            chosen = next(
+                (by_level[lv] for lv in self.LEVEL_PRIORITY if lv in by_level), None
+            )
+            best_item = chosen or fallback_item
+            if best_item:
+                logger.debug(
+                    f"[NcmSvip] 档位探测命中 {best_item.get('level')} "
+                    f"({int(best_item.get('br') or 0) // 1000}kbps {best_item.get('type', '')})"
+                )
+        song: Dict[str, Any] = {
+            "url": best_item.get("url") or "",
+            "level": best_item.get("level") or (level or ""),
+            "type": best_item.get("type") or "",
+            "bitrate": best_item.get("br") or 0,
+            "size": best_item.get("size") or 0,
+            "md5": best_item.get("md5") or "",
+        }
+        # 播放链接响应不含元数据，补一次 /song/detail（失败不影响播放）
+        try:
+            detail = await self._get_json(
+                "/song/detail", {"ids": song_id}, "song_detail"
+            )
+            detail_songs = (detail or {}).get("songs") or []
+            d = detail_songs[0] if detail_songs else {}
+            if isinstance(d, dict) and d:
+                song.update(
+                    {
+                        "name": d.get("name", "未知歌曲"),
+                        "artists": "/".join(
+                            a.get("name", "")
+                            for a in (d.get("ar") or [])
+                            if isinstance(a, dict) and a.get("name")
+                        )
+                        or "未知艺术家",
+                        "album": (d.get("al") or {}).get("name", ""),
+                        "pic": (d.get("al") or {}).get("picUrl", ""),
+                    }
+                )
+        except NeteaseAPIError as e:
+            logger.warning(f"[NcmSvip] 元数据获取失败（不影响播放）: {e}")
+        if not song.get("name"):
+            song["name"] = f"NCM歌曲 {song_id}"
+        return song
+
+
 
 
 class NeteaseAPIError(Exception):
@@ -1232,19 +1472,26 @@ class CurrentCortexPlugin(Star):
         if self._llm_tools_enable:
             logger.info("[LLMTools] 已启用 LLM 工具（图片/点歌/电击）")
 
-        # /音乐 文件 模式：原始文件（如 flac）过大时 QQ/NapCat 端常 retcode=1200 失败，
-        # 超过该阈值则转码为 128kbps MP3 再发送（需 ffmpeg）。0 = 不限制。
-        self._music_file_max_bytes = max(0, int(config.get("music_file_max_bytes", 25 * 1024 * 1024)))
         # 点歌并发防护：同一会话进行中去重 + 完成后冷却，防止用户连点触发大量并发
         # 下载/转码拖垮服务器。单线程 asyncio 下 dict/set 操作原子，无需加锁。
         self._music_in_progress: set[str] = set()
         self._music_last_done: dict[str, float] = {}
         self._music_cooldown = max(0, int(config.get("music_cooldown", 3)))
-        # 音源偏好：按会话(umo)记忆 auto/netease/kugou；纯内存，重启重置为默认
+        # /音乐 文件 下载进度播报档位：off 关闭 / brief 简略（默认）/ detail 详细
+        self._music_download_mode = _parse_music_progress_mode(config)
+        # 音源偏好：按会话(umo)记忆 auto/netease/kugou/ncm；纯内存，重启重置为默认
         self._music_default_source = str(config.get("music_default_source", "auto")).strip().lower()
-        if self._music_default_source not in ("auto", "netease", "kugou"):
+        if self._music_default_source not in ("auto", "netease", "kugou", "ncm"):
             self._music_default_source = "auto"
         self._music_source_pref: dict[str, str] = {}
+
+        # 自建网易云 SVIP 音源（独立于 LeiZ API Key；cookie 文件由本机
+        # ncm-cookie-refresh.timer 每日刷新，客户端按 mtime 缓存自动跟随）
+        self._ncm_client = NcmSvipClient(
+            base_url=str(config.get("ncm_api_base", NCM_SVIP_API_BASE)).strip()
+            or NCM_SVIP_API_BASE,
+            cookie_path=str(config.get("ncm_cookie_path", NCM_SVIP_COOKIE_PATH)).strip(),
+        )
 
         # LeiZ API 统一鉴权：所有接口（含免费接口）均需携带 API Key。
         # 经实测，LeiZ 服务端实际通过 x-api-key 请求头校验（而非公告中提及的
@@ -1302,15 +1549,13 @@ class CurrentCortexPlugin(Star):
         )
 
         if not leiz_api_key:
-            # 未配置统一 API Key：禁用所有依赖 LeiZ 接口的客户端，相关命令会在
-            # 调用时通过守卫提示用户配置。
+            # 未配置统一 API Key（非必填）：仅禁用依赖 LeiZ 接口的客户端，
+            # 相关命令调用时通过守卫提示用户配置；点歌自动路由到自建 ncm 源，
+            # 其余非 LeiZ 功能不受影响。
             logger.warning(
-                "⚠️ 未配置 LeiZ API 统一密钥 (leiz_api_key)，Pixiv/一言/天气/男娘/点歌 "
-                "等全部 LeiZ 接口命令将不可用"
-            )
-            logger.warning(
-                "根据 LeiZ API 公告，所有接口（含免费接口）均需携带 API Key。"
-                "请在插件配置面板中填写 leiz_api_key 字段后重启插件。"
+                "⚠️ 未配置 LeiZ API 统一密钥 (leiz_api_key)：Pixiv/一言/天气/男娘/"
+                "网易云/酷狗等 LeiZ 相关命令将提示填写后可用；"
+                "其余功能不受影响，点歌将自动路由到自建网易云SVIP源（不依赖该密钥）"
             )
             self._api_client = None
             self._hitokoto_client = None
@@ -2841,8 +3086,12 @@ class CurrentCortexPlugin(Star):
         hint = self._llm_tool_guard()
         if hint:
             return hint
-        if not self._netease_client and not self._kugou_client:
-            return "音乐功能未配置（缺少网易云或酷狗 API Key）"
+        if (
+            not self._netease_client
+            and not self._kugou_client
+            and not self._ncm_client
+        ):
+            return "音乐功能不可用（未配置任何音源）"
         query = (song_name or "").strip()
         if not query:
             return "请提供歌曲名"
@@ -3813,7 +4062,7 @@ class CurrentCortexPlugin(Star):
 
     @filter.command("music", alias={"音乐"})
     async def music_command(self, event: AstrMessageEvent):
-        """搜索音乐（网易云/酷狗，支持 auto 自动路由）并获取歌曲详情或音频。"""
+        """搜索音乐（网易云SVIP/网易云/酷狗，auto 并行择优）并获取歌曲详情或音频。"""
         user_name = event.get_sender_name()
         message_str = event.message_str.strip()
 
@@ -3824,7 +4073,11 @@ class CurrentCortexPlugin(Star):
             yield event.plain_result(self._with_promo(MUSIC_HELP_TEXT))
             return
 
-        if not self._netease_client and not self._kugou_client:
+        if (
+            not self._netease_client
+            and not self._kugou_client
+            and not self._ncm_client
+        ):
             logger.warning(f"[Music] API client not initialized for user {user_name}")
             yield event.plain_result(self._with_promo(_format_api_key_not_configured("音乐点歌")))
             return
@@ -3844,30 +4097,34 @@ class CurrentCortexPlugin(Star):
 
             music_source = self._get_music_source(event)
 
-            # 通过ID获取歌曲（ID 模式跨源不通用，固定走网易云）
+            # 通过ID获取歌曲（ID 为网易云体系；优先自建 SVIP 源，音质更好且不依赖 LeiZ Key）
             id_match = re.match(r"^(id|编号)\s*[:：]\s*(\d+)$", query, re.IGNORECASE)
             if id_match:
                 song_id = id_match.group(2)
                 logger.info(
                     f"[Music] Fetching song by ID {song_id} for user {user_name}"
                 )
-                if not self._netease_client:
-                    yield event.plain_result("❌ ID 模式需要网易云音源，但未配置 API Key")
+                id_client = self._ncm_client or self._netease_client
+                if not id_client:
+                    yield event.plain_result("❌ ID 模式需要网易云音源，但未配置任何可用音源")
                     return
-                song_data = await self._netease_client.get_song(song_id)
+                song_data = await id_client.get_song(song_id)
                 response_items = await self._format_song_response(song_data, event)
                 for item in response_items:
                     yield item
                 return
 
-            # 搜索模式：仅列出搜索结果（用当前音源；auto 走网易云）
+            # 搜索模式：仅列出搜索结果（用当前音源；auto 优先自建 SVIP 源）
             search_match = re.match(r"^(search|搜索)\s+(.+)$", query, re.IGNORECASE)
             if search_match:
                 search_query = search_match.group(2).strip()
                 logger.info(
                     f"[Music] Searching songs '{search_query}' for user {user_name} (source={music_source})"
                 )
-                list_source = "netease" if music_source == "auto" else music_source
+                if music_source == "auto":
+                    list_source = "ncm" if self._ncm_client else "netease"
+                else:
+                    list_source = music_source
                 list_client = self._resolve_single_source(list_source)
                 if list_client is None:
                     yield event.plain_result("❌ 当前音源不可用（未配置 API Key）")
@@ -3883,23 +4140,109 @@ class CurrentCortexPlugin(Star):
                 return
 
             # file模式：返回未经转码的原始音乐文件
-            file_match = re.match(r"^(file|文件)\s+(.+)$", query, re.IGNORECASE)
-            if file_match:
-                file_query = file_match.group(2).strip()
+            # 支持档位数字：/音乐 文件<1-7> 歌曲名（数字可紧跟或空格分隔），不指定则自动取最高可用档
+            tier_num, file_query = self._parse_file_mode_params(query)
+            if file_query is not None:
+                if file_query.lower() in ("help", "-h", "--help", "帮助", "?", "？"):
+                    yield event.plain_result(self._with_promo(MUSIC_HELP_TEXT))
+                    return
+                level = MUSIC_TIER_LEVELS[tier_num - 1] if tier_num else None
                 logger.info(
-                    f"[Music] Download original file '{file_query}' for user {user_name} (source={music_source})"
+                    f"[Music] Download original file '{file_query}' for user {user_name} "
+                    f"(source={music_source}, tier={tier_num or 'auto'})"
                 )
+                if level and not self._ncm_client:
+                    yield event.plain_result(
+                        "💡 音质档位仅「网易云SVIP（自建）」音源支持，已忽略档位设置"
+                    )
+                    level = None
                 try:
-                    song_data, used_source = await self._search_and_get(music_source, file_query)
+                    if level:
+                        # 用户钉死了档位：只对自建 ncm 源有意义，直接走它
+                        result = await self._try_source("ncm", file_query, level=level)
+                        if not result:
+                            raise NeteaseAPIError(
+                                f"网易云SVIP未找到可播放的歌曲（请求档位：{MUSIC_TIER_LABELS[level]}）"
+                            )
+                        song_data, used_source = result
+                    else:
+                        song_data, used_source = await self._search_and_get(music_source, file_query)
                 except NeteaseAPIError as e:
                     yield event.plain_result(f"😕 未找到与「{file_query}」相关的歌曲\n💡 {e}")
                     return
 
-                file_path = await self._download_source_audio_to_temp(
-                    song_data.get("url", ""),
-                    song_data.get("name", file_query),
-                    song_data.get("type", ""),
+                # 档位/规格提示：网易对不存在的高档位会静默降级，展示实际档位；
+                # auto 模式附音源信息（用户无从得知并行择优花落谁家）
+                yield event.plain_result(
+                    self._build_file_notice(song_data, file_query, level, used_source, music_source)
                 )
+
+                # 下载播报按 music_download_progress_mode 三档处理：
+                #   detail 详细：后台任务 + 每秒轮询 progress，每跨过 10% 播一条
+                #     （10/20/.../90，未知大小时每 5MB 一条），完成后「音频下载完成！」；
+                #   brief 简略：开始下载时一条「正在下载音频文件…请耐心等待」，完成后
+                #     一条「音频文件下载完成！准备发送」（秒下的小文件两条都不发）；
+                #   off 关闭：全程静默。
+                download_started = time.monotonic()
+                # 已知大小且 ≥10MB 视为大文件：简略模式下立即提示，不等轮询
+                brief_big_file = (int(song_data.get("size") or 0)) >= 10 * 1024 * 1024
+                progress: Dict[str, Any] = {}
+                download_task = asyncio.ensure_future(
+                    self._download_source_audio_to_temp(
+                        song_data.get("url", ""),
+                        song_data.get("name", file_query),
+                        song_data.get("type", ""),
+                        progress=progress if self._music_download_mode == "detail" else None,
+                    )
+                )
+                progress_sent = False
+                brief_notice_sent = False
+                if self._music_download_mode == "detail":
+                    next_pct_threshold = 10
+                    next_mb_threshold = 5.0
+                    while not download_task.done():
+                        await asyncio.sleep(1.0)
+                        if download_task.done():
+                            break
+                        if progress.get("total_known"):
+                            pct = min(int(progress.get("pct", 0) or 0), 100)
+                            while pct >= next_pct_threshold and next_pct_threshold <= 90:
+                                progress_sent = True
+                                yield event.plain_result(f"正在下载音频：{next_pct_threshold}%")
+                                next_pct_threshold += 10
+                        else:
+                            mb = float(progress.get("mb", 0.0) or 0.0)
+                            while mb >= next_mb_threshold:
+                                progress_sent = True
+                                yield event.plain_result(
+                                    f"正在下载音频：{next_mb_threshold:.0f}MB"
+                                )
+                                next_mb_threshold += 5.0
+                elif self._music_download_mode == "brief":
+                    if brief_big_file:
+                        brief_notice_sent = True
+                        yield event.plain_result(
+                            "正在下载音频文件。受限于服务器带宽，高音质文件下载耗时可能较长，请耐心等待..."
+                        )
+                    else:
+                        # 小文件先等 1.5s：秒下的保持静默，慢下来的再提示
+                        await asyncio.sleep(1.5)
+                        if not download_task.done():
+                            brief_notice_sent = True
+                            yield event.plain_result(
+                                "正在下载音频文件。受限于服务器带宽，高音质文件下载耗时可能较长，请耐心等待..."
+                            )
+                file_path = await download_task
+                took = time.monotonic() - download_started
+                if self._music_download_mode == "detail":
+                    if progress_sent or took >= 3.0:
+                        yield event.plain_result(
+                            "音频下载完成！\n准备发送，请耐心等待..."
+                        )
+                elif self._music_download_mode == "brief" and brief_notice_sent:
+                    yield event.plain_result(
+                        "音频文件下载完成！准备发送，请耐心等待..."
+                    )
                 if not file_path:
                     yield event.plain_result(
                         f"❌ 无法获取原始音乐文件：{song_data.get('name', file_query)}"
@@ -3909,46 +4252,38 @@ class CurrentCortexPlugin(Star):
                 file_name = self._build_audio_filename(
                     song_data.get("name", file_query), file_path
                 )
-                # 体积校验：原始文件（如 flac）过大时，QQ/NapCat 端常以
-                # retcode=1200（下载文件失败）拒绝。超过阈值则转码为 128kbps MP3 再发。
-                final_path = file_path
-                final_name = file_name
-                src_size = os.path.getsize(file_path)
-                if (
-                    self._music_file_max_bytes > 0
-                    and src_size > self._music_file_max_bytes
-                ):
-                    src_mb = src_size / (1024 * 1024)
-                    lim_mb = self._music_file_max_bytes / (1024 * 1024)
-                    logger.info(
-                        f"[Music] 原始文件 {src_mb:.1f}MB 超过阈值 {lim_mb:.1f}MB，"
-                        f"尝试转码为 MP3 后发送: {file_path}"
-                    )
-                    compressed = await self._compress_for_file(file_path)
-                    if compressed:
-                        final_path = compressed
-                        final_name = self._build_audio_filename(
-                            song_data.get("name", file_query), compressed
-                        )
-                        new_mb = os.path.getsize(compressed) / (1024 * 1024)
-                        yield event.plain_result(
-                            f"📦 原始文件过大（{src_mb:.1f}MB），已转码为 MP3（{new_mb:.1f}MB）后发送"
-                        )
-                    else:
-                        # 转码失败：仍尝试发原文件，但提示可能失败
-                        yield event.plain_result(
-                            f"⚠️ 原始文件 {src_mb:.1f}MB 较大，转码失败（未安装 ffmpeg？），"
-                            f"仍尝试发送原文件，可能因体积过大失败；建议改用 /音乐 直接 获取语音条"
-                        )
+                src_mb = os.path.getsize(file_path) / (1024 * 1024)
+                # 原始文件不做预压缩，直接发送（保留最高音质）；
+                # 仅当发送失败时才降级压缩为 128kbps MP3 重发并提示。
                 # 优先走 OneBot 本地上传，绕过 Comp.File → callback_api_base HTTP 回调。
                 # 实测 callback 配成 webhook 路径时，NapCat 会报「下载文件失败」，表现为
                 # /音乐 文件 偶发/常态失效（插件侧其实已下载成功）。
-                sent = await self._send_music_file(event, final_path, final_name)
+                sent = await self._send_music_file(event, file_path, file_name)
                 if not sent:
-                    yield event.plain_result(
-                        f"❌ 发送音乐文件失败：{final_name}\n"
-                        f"💡 可改用 /音乐 直接 获取语音条，或稍后重试"
+                    logger.info(
+                        f"[Music] 原始文件 {src_mb:.1f}MB 发送失败，尝试降级压缩为 MP3 重发: {file_path}"
                     )
+                    compressed = await self._compress_for_file(file_path)
+                    if compressed:
+                        new_mb = os.path.getsize(compressed) / (1024 * 1024)
+                        yield event.plain_result(
+                            f"⚠️ 原始文件（{src_mb:.1f}MB）发送失败，已降级压缩为 MP3（{new_mb:.1f}MB）重发"
+                        )
+                        compressed_name = self._build_audio_filename(
+                            song_data.get("name", file_query), compressed
+                        )
+                        resent = await self._send_music_file(event, compressed, compressed_name)
+                        if not resent:
+                            yield event.plain_result(
+                                f"❌ 压缩后的音乐文件仍发送失败：{compressed_name}\n"
+                                f"💡 可改用 /音乐 直接 获取语音条，或稍后重试"
+                            )
+                    else:
+                        yield event.plain_result(
+                            f"❌ 发送音乐文件失败：{file_name}（{src_mb:.1f}MB）\n"
+                            f"💡 降级压缩不可用（未安装 ffmpeg？）；"
+                            f"可改用 /音乐 直接 获取语音条，或稍后重试"
+                        )
                 return
 
             # direct模式：仅返回语音条，不附带额外信息
@@ -3965,7 +4300,7 @@ class CurrentCortexPlugin(Star):
                     return
 
                 response_items = await self._format_song_response(
-                    song_data, event, direct_mode=True
+                    song_data, event, direct_mode=True, used_source=used_source
                 )
                 for item in response_items:
                     yield item
@@ -3981,7 +4316,9 @@ class CurrentCortexPlugin(Star):
                 )
                 return
 
-            response_items = await self._format_song_response(song_data, event)
+            response_items = await self._format_song_response(
+                song_data, event, used_source=used_source
+            )
             for item in response_items:
                 yield item
 
@@ -4015,7 +4352,11 @@ class CurrentCortexPlugin(Star):
             yield event.plain_result(self._with_promo(MUSIC_HELP_TEXT))
             return
 
-        if not self._netease_client and not self._kugou_client:
+        if (
+            not self._netease_client
+            and not self._kugou_client
+            and not self._ncm_client
+        ):
             logger.warning(
                 f"[PlaySong] API client not initialized for user {user_name}"
             )
@@ -4101,24 +4442,34 @@ class CurrentCortexPlugin(Star):
         self._music_in_progress.discard(umo)
         self._music_last_done[umo] = time.time()
 
-    # --- 音源选择（auto / 网易云 / 酷狗）---
+    # --- 音源选择（auto / 网易云SVIP / 网易云 / 酷狗）---
     def _get_music_source(self, event: AstrMessageEvent) -> str:
-        """返回当前会话的音源偏好（auto/netease/kugou），未设置则返回默认。"""
+        """返回当前会话生效的音源偏好，未设置则返回默认。
+
+        LeiZ API Key 未配置（网易云/酷狗客户端为 None）时，auto/netease/kugou
+        一律路由到自建 ncm 源——点歌功能不依赖 LeiZ Key，无 Key 也应可用。
+        """
         umo = event.unified_msg_origin
-        return self._music_source_pref.get(umo, self._music_default_source)
+        source = self._music_source_pref.get(umo, self._music_default_source)
+        if source != "ncm" and self._netease_client is None:
+            return "ncm"
+        return source
 
     def _resolve_single_source(self, source: str):
-        """把具体音源名(netease/kugou)解析为对应客户端。auto 不应传到这里。"""
+        """把具体音源名解析为对应客户端。auto 不应传到这里。"""
         if source == "kugou":
             return self._kugou_client
+        if source == "ncm":
+            return self._ncm_client
         return self._netease_client  # 默认/兜底走网易云
 
     async def _try_source(
-        self, source: str, query: str
+        self, source: str, query: str, level: Optional[str] = None
     ) -> Optional[tuple]:
         """尝试单一音源：搜索→取首首歌详情。成功返回 (song_data, source)，失败返回 None。
 
-        失败包括：搜索为空、取详情异常、详情无播放链接（VIP/无版权）。
+        失败包括：搜索为空、取详情异常、详情无播放链接（VIP/无版权/地区封锁）。
+        level 仅对自建 ncm 源生效（其他源无网易档位体系，忽略之）。
         """
         client = self._resolve_single_source(source)
         if client is None:
@@ -4132,83 +4483,184 @@ class CurrentCortexPlugin(Star):
             hash_val = str(first.get("hash", "")) if source == "kugou" else ""
             if source == "kugou" and not hash_val and not song_id:
                 return None
-            if source == "netease" and not song_id:
+            if source in ("netease", "ncm") and not song_id:
                 return None
-            song_data = await client.get_song(song_id, hash_val) if source == "kugou" else await client.get_song(song_id)
+            if source == "kugou":
+                song_data = await client.get_song(song_id, hash_val)
+            elif source == "ncm":
+                song_data = await client.get_song(song_id, level)
+            else:
+                song_data = await client.get_song(song_id)
             # 必须有播放链接才算成功
             if not song_data.get("url"):
                 return None
             return (song_data, source)
         except Exception as e:
-            logger.info(f"[Music] 音源 {source} 取歌失败，将尝试下一个: {e}")
+            logger.info(f"[Music] 音源 {source} 取歌失败，auto 择优时跳过: {e}")
             return None
+
+    # auto 并行探测总时限：最迟在此时间内返回，超时的音源放弃（速度优先）
+    MUSIC_AUTO_PROBE_TIMEOUT = 8.0
+    # 达到该码率即视为无损档，立即采用、不再等其余音源（约等于 flac 起步位）
+    MUSIC_AUTO_EARLY_ACCEPT_BR = 900_000
+
+    @staticmethod
+    def _audio_quality_score(song_data: Dict[str, Any]) -> tuple:
+        """音质评分：码率优先，无损格式与文件体积作次级 tie-break。
+
+        不直接用文件体积衡量：体积与歌曲时长正相关，短歌的高码率会被
+        长歌的低码率压过；码率才是密度意义上的音质指标。
+        """
+        br = int(song_data.get("bitrate") or 0)
+        size = int(song_data.get("size") or 0)
+        lossless = 1 if str(song_data.get("type") or "").lower() in ("flac", "wav") else 0
+        return (br, lossless, size)
+
+    async def _auto_best_quality(self, query: str) -> Optional[tuple]:
+        """auto 模式：全部音源并行探测，取音质最佳的结果。
+
+        - 自建 ncm 源为「基准源」：其结果（完成或超时）出来之前，其他音源即使
+          已达无损档也不提前接收——否则快源的普通无损会抢跑截断慢一点的
+          超清母带（实测 Reply 一曲：酷狗无损 37.5MB 先到，抢走了 SVIP 源
+          180.8MB 的母带）。ncm 为本机反代，等它几乎不花时间。
+        - ncm 已决之后，任一音源先返回且已达无损档（>=900kbps）即立即采用；
+        - 否则等待全部完成（受 MUSIC_AUTO_PROBE_TIMEOUT 总时限约束）后取码率最高者。
+        """
+        sources = [s for s in ("ncm", "netease", "kugou") if self._resolve_single_source(s)]
+        if not sources:
+            return None
+        task_map = {asyncio.ensure_future(self._try_source(s, query)): s for s in sources}
+        ncm_task = next((t for t, s in task_map.items() if s == "ncm"), None)
+        pending = set(task_map)
+        best: Optional[tuple] = None
+        early_hit = False
+        try:
+            deadline = time.monotonic() + self.MUSIC_AUTO_PROBE_TIMEOUT
+            while pending:
+                remain = max(0.0, deadline - time.monotonic())
+                done, pending = await asyncio.wait(
+                    pending, timeout=remain, return_when=asyncio.FIRST_COMPLETED
+                )
+                for t in done:
+                    result = t.result()  # _try_source 内部已捕获异常，不抛出
+                    if result and (
+                        best is None
+                        or self._audio_quality_score(result[0])
+                        > self._audio_quality_score(best[0])
+                    ):
+                        best = result
+                ncm_decided = ncm_task is None or ncm_task.done()
+                if (
+                    ncm_decided
+                    and best
+                    and self._audio_quality_score(best[0])[0] >= self.MUSIC_AUTO_EARLY_ACCEPT_BR
+                ):
+                    early_hit = True
+                    logger.info(
+                        f"[Music] auto 并行择优提前命中无损档：{best[1]} "
+                        f"({int(best[0].get('bitrate') or 0) // 1000}kbps)"
+                    )
+                    break
+                if not done:
+                    break  # 总时限已到
+        finally:
+            for t in pending:
+                t.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+            skipped = [task_map[t] for t in pending]
+            reason = "已提前命中无损档" if early_hit else "探测超时"
+            logger.info(f"[Music] auto 并行择优未等待音源（{reason}）: {skipped}")
+        if best:
+            logger.info(
+                f"[Music] auto 并行择优：{best[1]} 胜出 "
+                f"({int(best[0].get('bitrate') or 0) // 1000}kbps {best[0].get('type', '')}) "
+                f"「{best[0].get('name', query)}」"
+            )
+        return best
 
     async def _search_and_get(
         self, source: str, query: str
     ) -> tuple:
-        """统一搜索+取详情入口，处理 auto 自动路由。
+        """统一搜索+取详情入口。
 
-        - source=auto：网易云优先，失败(VIP/无版权/空/异常)转酷狗
-        - source=netease/kugou：仅走指定源
+        - source=auto：全部音源并行探测，取音质最佳（速度优先，详见 _auto_best_quality）
+        - source=ncm/netease/kugou：仅走指定源
         返回 (song_data, used_source)；全部失败抛 NeteaseAPIError。
         """
         if source == "auto":
-            result = await self._try_source("netease", query)
+            result = await self._auto_best_quality(query)
             if result:
                 return result
-            logger.info(f"[Music] auto 模式：网易云未取到「{query}」，转酷狗")
-            result = await self._try_source("kugou", query)
-            if result:
-                return result
-            raise NeteaseAPIError("网易云与酷狗均未找到可播放的歌曲")
+            raise NeteaseAPIError("网易云SVIP/网易云/酷狗三个音源均未找到可播放的歌曲")
         # 指定单一源
         result = await self._try_source(source, query)
         if result:
             return result
-        src_name = {"netease": "网易云", "kugou": "酷狗"}.get(source, source)
+        src_name = {
+            "netease": "网易云",
+            "kugou": "酷狗",
+            "ncm": "网易云SVIP",
+        }.get(source, source)
         raise NeteaseAPIError(f"{src_name}未找到可播放的歌曲")
 
     @filter.command("音源")
     async def music_source_command(self, event: AstrMessageEvent):
-        """查看或切换当前会话的点歌音源（auto/网易云/酷狗）。"""
+        """查看或切换当前会话的点歌音源（auto/网易云SVIP/网易云/酷狗）。"""
         message_str = event.message_str.strip()
         # 解析参数：去掉命令前缀和「音源」
         cleaned = re.sub(r"^[/!！]\s*音源\s*", "", message_str, flags=re.IGNORECASE)
         cleaned = re.sub(r"^音源\s*", "", cleaned, flags=re.IGNORECASE).strip().lower()
 
-        source_names = {"auto": "auto（自动）", "netease": "网易云", "kugou": "酷狗"}
+        source_names = {"auto": "auto（自动）", **MUSIC_SOURCE_LABELS}
         alias_map = {
             "auto": "auto", "自动": "auto", "automatic": "auto",
+            "ncm": "ncm", "svip": "ncm", "自建": "ncm", "母带": "ncm",
+            "网易云svip": "ncm", "网易svip": "ncm", "wysvip": "ncm",
             "netease": "netease", "网易云": "netease", "网易": "netease", "wy": "netease",
             "kugou": "kugou", "酷狗": "kugou", "kg": "kugou",
         }
 
         if not cleaned or cleaned in ("help", "-h", "--help", "帮助", "?", "？"):
             cur = self._get_music_source(event)
+            keyless_note = ""
+            if self._netease_client is None:
+                keyless_note = (
+                    "\n\n⚠️ 未配置 LeiZ API Key（x-api-key），网易云/酷狗音源不可用，"
+                    "当前所有点歌请求将自动路由到网易云SVIP（自建）"
+                )
             yield event.plain_result(
                 f"🎵 当前音源：{source_names.get(cur, cur)}\n\n"
                 "💡 用法：\n"
-                "  /音源 auto（自动）  网易云优先，失败转酷狗\n"
+                "  /音源 auto（自动）  三音源并行探测，取音质最佳\n"
+                "  /音源 网易云SVIP    仅自建 SVIP 源（无损/Hi-Res/母带）\n"
                 "  /音源 网易云        仅网易云\n"
                 "  /音源 酷狗          仅酷狗\n\n"
                 "音源按会话(群/私聊)记忆，重启后重置为默认。"
+                f"{keyless_note}"
             )
             return
 
         target = alias_map.get(cleaned)
         if not target:
             yield event.plain_result(
-                f"❌ 未知音源「{cleaned}」\n💡 可选：auto / 网易云 / 酷狗\n💡 发送 /音源 查看当前状态"
+                "❌ 未知音源「{0}」\n💡 可选：auto / 网易云SVIP(svip) / 网易云 / 酷狗\n💡 发送 /音源 查看当前状态".format(cleaned)
             )
             return
 
         umo = event.unified_msg_origin
         if umo:
             self._music_source_pref[umo] = target
-        yield event.plain_result(
+        reply = (
             f"✅ 已切换音源为：{source_names[target]}\n"
-            + ("（网易云优先，失败自动转酷狗）" if target == "auto" else "")
+            + ("（三音源并行探测，取音质最佳）" if target == "auto" else "")
         )
+        if self._netease_client is None and target != "ncm":
+            reply += (
+                "\n⚠️ 未配置 LeiZ API Key（x-api-key），该音源暂不可用，"
+                "请求将自动路由到网易云SVIP（自建）"
+            )
+        yield event.plain_result(reply)
 
     def _parse_play_song_params(self, message: str) -> Optional[str]:
         """解析 /点歌 命令参数，剥离命令名后返回剩余的歌曲名。"""
@@ -4220,6 +4672,50 @@ class CurrentCortexPlugin(Star):
             return None
 
         return cleaned
+
+    # file 模式参数：文件/file + 可选档位数字(1-7，可紧跟或空格分隔) + 歌曲名
+    FILE_MODE_RE = re.compile(r"^(?:file|文件)\s*([1-7])?\s+(.+)$", re.IGNORECASE)
+
+    @staticmethod
+    def _build_file_notice(
+        song_data: Dict[str, Any],
+        file_query: str,
+        level: Optional[str],
+        used_source: str,
+        music_source: str,
+    ) -> str:
+        """构造 /音乐 文件 发送前的规格提示。auto 模式附「音源：」行。"""
+        actual_level = str(song_data.get("level") or "")
+        actual_label = MUSIC_TIER_LABELS.get(actual_level, actual_level or "未知")
+        degrade_note = ""
+        if level and actual_level and actual_level != level:
+            degrade_note = f"\n⚠️ 请求档位「{MUSIC_TIER_LABELS[level]}」不可用，已降级"
+        file_type = str(song_data.get("type") or "").upper()
+        bitrate = int(song_data.get("bitrate") or 0)
+        size_mb = (int(song_data.get("size") or 0)) / (1024 * 1024)
+        source_line = ""
+        if music_source == "auto":
+            source_line = f"音源：{MUSIC_SOURCE_LABELS.get(used_source, used_source)}\n"
+        return (
+            f"🎧 {song_data.get('name', file_query)}\n"
+            f"{source_line}"
+            f"档位：{actual_label} · {file_type} · {bitrate // 1000}kbps · {size_mb:.1f}MB"
+            f"{degrade_note}"
+        )
+
+    @classmethod
+    def _parse_file_mode_params(cls, query: str) -> tuple:
+        """解析 file 模式参数，返回 (档位数字或None, 歌曲名或None)。
+
+        不匹配时返回 (None, None)。示例：
+          文件 孤勇者 / 文件1 孤勇者 / 文件 2 孤勇者 / file3 song
+        注意：歌曲名恰好是「<单个1-7数字> + 空格 + 后文」时会被误判为档位，
+        属于该语法的固有歧义，换关键词即可规避。
+        """
+        m = cls.FILE_MODE_RE.match((query or "").strip())
+        if not m:
+            return (None, None)
+        return (int(m.group(1)) if m.group(1) else None, m.group(2).strip())
 
     def _parse_music_params(self, message: str) -> Optional[str]:
         cleaned = re.sub(
@@ -4238,6 +4734,7 @@ class CurrentCortexPlugin(Star):
         song_data: Dict[str, Any],
         event: AstrMessageEvent,
         direct_mode: bool = False,
+        used_source: Optional[str] = None,
     ) -> List[Any]:
         name = song_data.get("name", "未知歌曲")
         artists = song_data.get("artists", "未知艺术家")
@@ -4255,16 +4752,14 @@ class CurrentCortexPlugin(Star):
             parts = [f"🎵 {name}", f"👤 艺术家：{artists}"]
             if album:
                 parts.append(f"💿 专辑：{album}")
+            # auto 模式下音源由并行择优决定，回复中注明花落谁家
+            if used_source and self._get_music_source(event) == "auto":
+                parts.append(f"音源：{MUSIC_SOURCE_LABELS.get(used_source, used_source)}")
 
             quality_parts = []
             if level:
-                level_map = {
-                    "standard": "标准",
-                    "higher": "较高",
-                    "exhigh": "极高",
-                    "lossless": "无损",
-                    "hires": "Hi-Res",
-                }
+                level_map = dict(MUSIC_TIER_LABELS)
+                level_map["higher"] = "较高"
                 quality_parts.append(level_map.get(level, level))
             if file_type:
                 quality_parts.append(file_type.upper())
@@ -4429,11 +4924,14 @@ class CurrentCortexPlugin(Star):
             return False
 
     async def _download_source_audio_to_temp(
-        self, url: str, name: str, file_type: str = ""
+        self, url: str, name: str, file_type: str = "",
+        progress: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
         """原样下载音频文件，供文件模式作为附件发送。
 
         大体积 flac 下载可能超过 30s；对超时/网络错误做有限重试，并拒绝空文件。
+        progress（可选）：调用方传入的 dict，下载过程中按块更新
+        total_known/total/mb/pct，供命令层轮询播报进度。
         """
         if not url:
             logger.warning("[Music] 原始文件下载失败：没有播放链接")
@@ -4476,10 +4974,22 @@ class CurrentCortexPlugin(Star):
                             if resp.status < 500 and resp.status not in (408, 429):
                                 return None
                         else:
+                            if progress is not None:
+                                total = resp.content_length or 0
+                                progress["total"] = total
+                                progress["total_known"] = total > 0
+                            received = 0
                             with open(temp_path, "wb") as audio_file:
                                 async for chunk in resp.content.iter_chunked(64 * 1024):
                                     if chunk:
                                         audio_file.write(chunk)
+                                        if progress is not None:
+                                            received += len(chunk)
+                                            progress["mb"] = received / (1024 * 1024)
+                                            if progress.get("total_known"):
+                                                progress["pct"] = int(
+                                                    received * 100 / progress["total"]
+                                                )
                             downloaded = True
 
                 if downloaded:

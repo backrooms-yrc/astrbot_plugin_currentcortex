@@ -421,11 +421,13 @@ const SETTINGS_META = {
   exclude_ai: { name: "排除 AI 作品", hint: "开启后，AI 生成的图片不会出现在随机图里。" },
   request_timeout: { name: "请求超时（秒）", hint: "连不上图库时等多久算超时。网络差可以适当调大。" },
   // —— 音乐 ——
-  music_file_max_bytes: { name: "音乐文件体积上限", hint: "音乐文件超过这个体积会自动转成小体积 MP3 再发。默认 26214400（25MB）。" },
+  ncm_api_base: { name: "自建网易云SVIP音源地址", hint: "自建的 api-enhanced 服务地址，默认本机反代域名。这个音源能拿到无损/Hi-Res/超清母带等最高音质，不依赖 LeiZ 密钥。" },
+  ncm_cookie_path: { name: "SVIP Cookie 文件路径", hint: "自建音源的登录 cookie 文件路径，服务器每日自动刷新、插件自动跟随，不用重启。留空 = 匿名访问（只有免费音质）。" },
+  music_default_source: { name: "默认音源", hint: "auto = 三个音源同时探测、自动选音质最好的；ncm = 只用自建网易云SVIP；netease/kugou = 只用网易云/酷狗（需要 LeiZ 密钥，没填会自动改走自建源）。" },
   music_cooldown: { name: "点歌冷却（秒）", hint: "同一会话连续点歌要间隔的秒数，防止刷屏把服务器拖垮。" },
-  music_default_source: { name: "默认音源", hint: "auto = 网易云优先、失败自动换酷狗；netease = 只用网易云；kugou = 只用酷狗。" },
+  music_download_progress_mode: { name: "下载进度播报", hint: "简略（默认）= 下载前后各提示一条；详细 = 每完成 10% 播报一条；关闭 = 全程静默。秒下的小文件任何档位都不播报。" },
   // —— LeiZ ——
-  leiz_api_key: { name: "LeiZ API 密钥", hint: "图库、点歌、一言、天气等接口的密钥。留空 = 这些功能全部禁用。" },
+  leiz_api_key: { name: "LeiZ API 密钥", hint: "图库、一言、天气、网易云/酷狗等 LeiZ 接口的密钥，非必填。留空 = 这些功能触发时提示填写，点歌自动改走自建网易云SVIP音源，其他功能不受影响。" },
   // —— 媒体解析 ——
   media_auto_parse_enable: { name: "链接自动解析", hint: "群里有人发 小红书/B站/抖音/微博 的链接时，不用发命令、机器人自动解析并回复。" },
   media_auto_parse_dedup_min: { name: "自动解析去重（分钟）", hint: "同一条链接在同一个群里，多少分钟内只自动解析一次，防止反复转发刷屏。0 = 每次都解析。" },
