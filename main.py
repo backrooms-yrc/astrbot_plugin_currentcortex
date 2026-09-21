@@ -1348,37 +1348,21 @@ class NcmSvipClient:
           特殊档（响应的 level 字段为实际返回档而非回显请求档，实测请求 jymaster
           而歌曲无母带时返回 level=exhigh，可据此判断命中）；三个特殊档均未命中时，
           降级响应里的实际档就是最佳正常档（高清臻音/无损/极高/标准），无需再探测。
+        - 元数据策略：带 search_hint（搜索阶段的首选结果）时**直接复用、不再请求
+          /song/detail**——海外冷查询时每个上游请求 4~11s，少一个请求就少一份超时
+          风险；仅 id: 模式（无 hint）才补拉一次 detail。
         """
         song_id = str(song_id).strip()
         if not song_id:
             raise NeteaseAPIError("歌曲ID不能为空")
-
-        async def _fetch_detail() -> Dict[str, Any]:
-            """拉取歌曲元数据；失败返回 {}（不影响播放，由 search_hint 兜底）。"""
-            try:
-                detail = await self._get_json(
-                    "/song/detail", {"ids": song_id}, "song_detail"
-                )
-                detail_songs = (detail or {}).get("songs") or []
-                d = detail_songs[0] if detail_songs else {}
-                return d if isinstance(d, dict) else {}
-            except NeteaseAPIError as e:
-                logger.warning(f"[NcmSvip] 元数据获取失败（不影响播放）: {e}")
-                return {}
+        hint = search_hint if isinstance(search_hint, dict) else {}
 
         if level:
-            best_item, detail_d = await asyncio.gather(
-                self._fetch_url_level(song_id, level), _fetch_detail()
-            )
+            best_item = await self._fetch_url_level(song_id, level)
         else:
-            # 海外冷查询时上游单请求可达 4~11s：元数据与档位探测一并并发，
-            # 总耗时 ≈ 最慢一个请求，而非「探测+detail」串行累加。
-            results, detail_d = await asyncio.gather(
-                asyncio.gather(
-                    *(self._fetch_url_level(song_id, lv) for lv in self.LEVEL_PROBE_SET),
-                    return_exceptions=True,
-                ),
-                _fetch_detail(),
+            results = await asyncio.gather(
+                *(self._fetch_url_level(song_id, lv) for lv in self.LEVEL_PROBE_SET),
+                return_exceptions=True,
             )
             by_level: Dict[str, Dict[str, Any]] = {}
             fallback_item: Dict[str, Any] = {}
@@ -1410,32 +1394,41 @@ class NcmSvipClient:
             "size": best_item.get("size") or 0,
             "md5": best_item.get("md5") or "",
         }
-        # 元数据回填：detail 已与探测并发完成；仍失败时用搜索阶段的
-        # 「首选结果」兜底，避免回复里出现「NCM歌曲 <id>」这类占位名。
-        if isinstance(detail_d, dict) and detail_d:
+        # 元数据：优先复用搜索阶段结果（零额外请求）；无 hint（id: 模式）才拉 detail
+        if hint.get("name"):
             song.update(
                 {
-                    "name": detail_d.get("name", "未知歌曲"),
-                    "artists": "/".join(
-                        a.get("name", "")
-                        for a in (detail_d.get("ar") or [])
-                        if isinstance(a, dict) and a.get("name")
-                    )
-                    or "未知艺术家",
-                    "album": (detail_d.get("al") or {}).get("name", ""),
-                    "pic": (detail_d.get("al") or {}).get("picUrl", ""),
+                    "name": hint["name"],
+                    "artists": hint.get("artists") or "未知艺术家",
+                    "album": hint.get("album") or "",
+                    "pic": hint.get("pic") or "",
                 }
             )
+        else:
+            try:
+                detail = await self._get_json(
+                    "/song/detail", {"ids": song_id}, "song_detail"
+                )
+                detail_songs = (detail or {}).get("songs") or []
+                d = detail_songs[0] if detail_songs else {}
+                if isinstance(d, dict) and d:
+                    song.update(
+                        {
+                            "name": d.get("name", "未知歌曲"),
+                            "artists": "/".join(
+                                a.get("name", "")
+                                for a in (d.get("ar") or [])
+                                if isinstance(a, dict) and a.get("name")
+                            )
+                            or "未知艺术家",
+                            "album": (d.get("al") or {}).get("name", ""),
+                            "pic": (d.get("al") or {}).get("picUrl", ""),
+                        }
+                    )
+            except NeteaseAPIError as e:
+                logger.warning(f"[NcmSvip] 元数据获取失败（不影响播放）: {e}")
         if not song.get("name"):
-            # /song/detail 失败时用搜索阶段的首选结果回填，保住标题/歌手展示
-            hint = search_hint or {}
-            song["name"] = hint.get("name") or f"NCM歌曲 {song_id}"
-            if hint.get("artists"):
-                song.setdefault("artists", hint["artists"])
-            if hint.get("album"):
-                song.setdefault("album", hint["album"])
-            if hint.get("pic"):
-                song.setdefault("pic", hint["pic"])
+            song["name"] = f"NCM歌曲 {song_id}"
         return song
 
 
@@ -4585,9 +4578,11 @@ class CurrentCortexPlugin(Star):
             return None
 
     # auto 并行探测总时限：最迟在此时间内返回，超时的音源放弃（速度优先）
-    MUSIC_AUTO_PROBE_TIMEOUT = 12.0
-    # ncm 源在海外服务器上冷查询（未命中上游缓存）实测 4~9s/请求，热缓存毫秒级；
-    # 12s 总时限在「给 ncm 源足够机会」与「不让用户干等」之间取平衡。
+    MUSIC_AUTO_PROBE_TIMEOUT = 20.0
+    # 海外服务器冷查询预算：ncm 链 = cloudsearch 搜索（冷 4~9s）+ 档位探测
+    # （冷 4~11s），合计典型 10~13s、尾部 ~17s。20s 覆盖尾部并留余量；
+    # 热缓存下毫秒级照旧秒回（early-accept 不受影响）。质量优先：宁可多等
+    # 几秒冷查询，也不让 ncm 源超时被取消而降级到其他音源的无损。
     # 达到该码率即视为无损档，立即采用、不再等其余音源（约等于 flac 起步位）
     MUSIC_AUTO_EARLY_ACCEPT_BR = 900_000
 
