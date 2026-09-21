@@ -1263,14 +1263,15 @@ class NcmSvipClient:
     async def _get_json(
         self, path: str, params: Dict[str, Any], tag: str
     ) -> Dict[str, Any]:
-        """单次 GET（自建本机反代，正常 <100ms；6s 超时兜底，失败由调用方降级）。"""
+        """单次 GET（热缓存 <100ms；海外服务器冷查询直连网易上游实测 4~9s，
+        故超时给足 15s，失败由调用方降级）。"""
         if not self._base:
             raise NeteaseAPIError("NCM SVIP 音源未配置地址")
         cookie = self._load_cookie()
         if cookie:
             params = dict(params)
             params["cookie"] = cookie  # aiohttp 负责查询参数的URL编码
-        timeout = aiohttp.ClientTimeout(total=6.0)
+        timeout = aiohttp.ClientTimeout(total=15.0)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             try:
                 async with session.get(self._base + path, params=params) as resp:
@@ -1335,7 +1336,10 @@ class NcmSvipClient:
         return item if isinstance(item, dict) else {}
 
     async def get_song(
-        self, song_id: str, level: Optional[str] = None
+        self,
+        song_id: str,
+        level: Optional[str] = None,
+        search_hint: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """通过歌曲ID获取播放链接与元数据。
 
@@ -1348,12 +1352,33 @@ class NcmSvipClient:
         song_id = str(song_id).strip()
         if not song_id:
             raise NeteaseAPIError("歌曲ID不能为空")
+
+        async def _fetch_detail() -> Dict[str, Any]:
+            """拉取歌曲元数据；失败返回 {}（不影响播放，由 search_hint 兜底）。"""
+            try:
+                detail = await self._get_json(
+                    "/song/detail", {"ids": song_id}, "song_detail"
+                )
+                detail_songs = (detail or {}).get("songs") or []
+                d = detail_songs[0] if detail_songs else {}
+                return d if isinstance(d, dict) else {}
+            except NeteaseAPIError as e:
+                logger.warning(f"[NcmSvip] 元数据获取失败（不影响播放）: {e}")
+                return {}
+
         if level:
-            best_item = await self._fetch_url_level(song_id, level)
+            best_item, detail_d = await asyncio.gather(
+                self._fetch_url_level(song_id, level), _fetch_detail()
+            )
         else:
-            results = await asyncio.gather(
-                *(self._fetch_url_level(song_id, lv) for lv in self.LEVEL_PROBE_SET),
-                return_exceptions=True,
+            # 海外冷查询时上游单请求可达 4~11s：元数据与档位探测一并并发，
+            # 总耗时 ≈ 最慢一个请求，而非「探测+detail」串行累加。
+            results, detail_d = await asyncio.gather(
+                asyncio.gather(
+                    *(self._fetch_url_level(song_id, lv) for lv in self.LEVEL_PROBE_SET),
+                    return_exceptions=True,
+                ),
+                _fetch_detail(),
             )
             by_level: Dict[str, Dict[str, Any]] = {}
             fallback_item: Dict[str, Any] = {}
@@ -1385,31 +1410,32 @@ class NcmSvipClient:
             "size": best_item.get("size") or 0,
             "md5": best_item.get("md5") or "",
         }
-        # 播放链接响应不含元数据，补一次 /song/detail（失败不影响播放）
-        try:
-            detail = await self._get_json(
-                "/song/detail", {"ids": song_id}, "song_detail"
+        # 元数据回填：detail 已与探测并发完成；仍失败时用搜索阶段的
+        # 「首选结果」兜底，避免回复里出现「NCM歌曲 <id>」这类占位名。
+        if isinstance(detail_d, dict) and detail_d:
+            song.update(
+                {
+                    "name": detail_d.get("name", "未知歌曲"),
+                    "artists": "/".join(
+                        a.get("name", "")
+                        for a in (detail_d.get("ar") or [])
+                        if isinstance(a, dict) and a.get("name")
+                    )
+                    or "未知艺术家",
+                    "album": (detail_d.get("al") or {}).get("name", ""),
+                    "pic": (detail_d.get("al") or {}).get("picUrl", ""),
+                }
             )
-            detail_songs = (detail or {}).get("songs") or []
-            d = detail_songs[0] if detail_songs else {}
-            if isinstance(d, dict) and d:
-                song.update(
-                    {
-                        "name": d.get("name", "未知歌曲"),
-                        "artists": "/".join(
-                            a.get("name", "")
-                            for a in (d.get("ar") or [])
-                            if isinstance(a, dict) and a.get("name")
-                        )
-                        or "未知艺术家",
-                        "album": (d.get("al") or {}).get("name", ""),
-                        "pic": (d.get("al") or {}).get("picUrl", ""),
-                    }
-                )
-        except NeteaseAPIError as e:
-            logger.warning(f"[NcmSvip] 元数据获取失败（不影响播放）: {e}")
         if not song.get("name"):
-            song["name"] = f"NCM歌曲 {song_id}"
+            # /song/detail 失败时用搜索阶段的首选结果回填，保住标题/歌手展示
+            hint = search_hint or {}
+            song["name"] = hint.get("name") or f"NCM歌曲 {song_id}"
+            if hint.get("artists"):
+                song.setdefault("artists", hint["artists"])
+            if hint.get("album"):
+                song.setdefault("album", hint["album"])
+            if hint.get("pic"):
+                song.setdefault("pic", hint["pic"])
         return song
 
 
@@ -4545,7 +4571,9 @@ class CurrentCortexPlugin(Star):
             if source == "kugou":
                 song_data = await client.get_song(song_id, hash_val)
             elif source == "ncm":
-                song_data = await client.get_song(song_id, level)
+                # 搜索阶段的结果作为元数据兜底：海外冷查询时 /song/detail
+                # 可能超时，用首首歌名/歌手回填，避免「NCM歌曲 <id>」占位名
+                song_data = await client.get_song(song_id, level, search_hint=first)
             else:
                 song_data = await client.get_song(song_id)
             # 必须有播放链接才算成功
@@ -4557,7 +4585,9 @@ class CurrentCortexPlugin(Star):
             return None
 
     # auto 并行探测总时限：最迟在此时间内返回，超时的音源放弃（速度优先）
-    MUSIC_AUTO_PROBE_TIMEOUT = 8.0
+    MUSIC_AUTO_PROBE_TIMEOUT = 12.0
+    # ncm 源在海外服务器上冷查询（未命中上游缓存）实测 4~9s/请求，热缓存毫秒级；
+    # 12s 总时限在「给 ncm 源足够机会」与「不让用户干等」之间取平衡。
     # 达到该码率即视为无损档，立即采用、不再等其余音源（约等于 flac 起步位）
     MUSIC_AUTO_EARLY_ACCEPT_BR = 900_000
 
