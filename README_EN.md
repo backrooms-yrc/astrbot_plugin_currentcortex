@@ -5,7 +5,7 @@
 ![Visitors](https://count.getloli.com/get/@backrooms-yrc-currentcortex?theme=moebooru)
 
 > [!IMPORTANT]
-> **🔒 Since 2026-09-20, using this plugin requires a verification code** — get one **free of charge** by joining the official QQ group **1106353813** and fill it into the `verify_code` config option to unlock all features. See [Quick Start · Step 2](#2-fill-in-the-verification-code-required).
+> **🔒 Since 2026-09-20, using this plugin requires a verification code** — get one **free of charge** by joining the official QQ group **1106353813** ([join now](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)) and fill it into the `verify_code` config option to unlock all features. See [Quick Start · Step 2](#2-fill-in-the-verification-code-required).
 
 <details>
 <summary><b>📜 Pinned announcements archive</b> (click to expand)</summary>
@@ -137,13 +137,13 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 
 > 🔒 Since **2026-09-20**, due to a series of problems caused by plugin abuse, this plugin uses a verification-code gate.
 
-1. Join the official plugin QQ group **1106353813** (join links at the top of this README) and get the verification code from the group announcement;
+1. Join the official plugin QQ group **1106353813** ([join now](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)) and get the verification code from the group announcement;
 2. Open the AstrBot admin panel → Plugin Management → this plugin → Config, fill the code into the first option, **`verify_code` (verification code)**, and save — it takes effect immediately.
 
 **If the code is missing or wrong, every plugin command (commands / AI tools / link auto-parsing) is locked** — any command only returns a notice pointing you to the group for the code:
 
 > Dear user: due to a series of problems caused by plugin abuse, since September 20, 2026, you must join the CurrentCortex plugin's official QQ group (1106353813) to obtain a verification code, then fill it into the plugin config's `verify_code` (verification code) option.
-> 💡 Obtaining the code is completely free and donations are strictly voluntary — donors and regular users enjoy exactly the same privileges.
+> 💡 [👉 Click to join the group directly](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info). Obtaining the code is completely free and donations are strictly voluntary — donors and regular users enjoy exactly the same privileges.
 
 ### 3. Configure Your API Key (Optional)
 
@@ -883,7 +883,7 @@ See the [🤖 LLM Tools](#-llm-tools) section. The switch is `llm_tools_enable` 
 
 ### Plugin Promotion (QQ Group)
 
-The plugin ships with the official group number **1106353813** built in — active right after installation, zero configuration. The number surfaces in two places:
+The plugin ships with the official group number **1106353813** ([join now](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)) built in — active right after installation, zero configuration. The number surfaces in two places:
 
 - **The `/交流群` command** (aliases `/群号` `/加群`): returns the group number on request
 - **Command help / error messages**: help texts like `/pixiv help`, `/点歌 help` and "API key not configured" errors end with a one-line group number
@@ -1060,7 +1060,7 @@ Issues and PRs are welcome! Bug reports and feature suggestions have Issue templ
 
 For dev environment setup, project structure, running tests, commit conventions, and the PR workflow, see **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
-> 💬 You can also drop by QQ group **1106353813** to discuss ideas first — for big changes, aligning early is recommended before writing code.
+> 💬 You can also drop by QQ group **1106353813** ([join now](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)) to discuss ideas first — for big changes, aligning early is recommended before writing code.
 
 ---
 

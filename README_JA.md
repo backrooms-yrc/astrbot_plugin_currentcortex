@@ -5,7 +5,7 @@
 ![アクセス数](https://count.getloli.com/get/@backrooms-yrc-currentcortex?theme=moebooru)
 
 > [!IMPORTANT]
-> **🔒 2026-09-20 以降、本プラグインの使用には検証コードの記入が必須です**——公式 QQ グループ **1106353813** にご参加のうえ**無料**で取得し、設定の `verify_code` に記入すると全機能のロックが解除されます。詳しくは [はじめに · 第 2 ステップ](#2-検証コードの記入-必須) を参照してください。
+> **🔒 2026-09-20 以降、本プラグインの使用には検証コードの記入が必須です**——公式 QQ グループ **1106353813**（[クリックして参加](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)）にご参加のうえ**無料**で取得し、設定の `verify_code` に記入すると全機能のロックが解除されます。詳しくは [はじめに · 第 2 ステップ](#2-検証コードの記入-必須) を参照してください。
 
 <details>
 <summary><b>📜 固定告知アーカイブ</b>（クリックで展開）</summary>
@@ -137,13 +137,13 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 
 > 🔒 **2026-09-20** 以降、プラグイン濫用に伴う一連の問題により、本プラグインは検証コード機構を有効化しています。
 
-1. プラグイン公式 QQ グループ **1106353813** にご参加のうえ（README 冒頭に参加リンクがあります）、検証コードの発表場所で検証コードを取得します；
+1. プラグイン公式 QQ グループ **1106353813**（[クリックして参加](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)）にご参加のうえ、検証コードの発表場所で検証コードを取得します；
 2. AstrBot 管理パネル → プラグイン管理 → 本プラグイン → 設定 を開き、検証コードを最初の項目 **`verify_code`（検証コード）** に記入して保存すれば、自動で有効になります。
 
 **未記入または誤ったコードの場合、プラグインの全指令（コマンド / AI ツール / リンク自動解析）がロックされ**、どのコマンドでも「入群して検証コードを取得してください」という案内のみが返ります：
 
 > ユーザーの皆様へ：プラグイン濫用に伴う一連の問題により、2026 年 9 月 20 日より、CurrentCortex プラグイン公式 QQ グループ（1106353813）にご参加のうえ検証コードを取得し、プラグイン設定の「検証コード」（verify_code）項目にご記入いただく必要があります。
-> 💡 検証コードの取得は完全に無料です。寄付は全くの任意で、寄付ユーザーと一般ユーザーの権益に一切違いはありません。
+> 💡 [👉 ここをクリックしてグループに参加](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)。検証コードの取得は完全に無料です。寄付は全くの任意で、寄付ユーザーと一般ユーザーの権益に一切違いはありません。
 
 ### 3. API キー設定 (任意)
 
@@ -883,7 +883,7 @@ v1.2.0 以前は JSON 文字列の設定を使っていました（非推奨）�
 
 ### プラグインの宣伝（QQ グループ）
 
-プラグインには公式グループ番号 **1106353813** が組み込まれており、インストール後に追加設定なしで有効になります。グループ番号は2つの経路で表示されます：
+プラグインには公式グループ番号 **1106353813**（[クリックして参加](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)）が組み込まれており、インストール後に追加設定なしで有効になります。グループ番号は2つの経路で表示されます：
 
 - **`/交流群` コマンド**（エイリアス `/群号` `/加群`）：ユーザーからの照会に応じてグループ番号を返します
 - **コマンドヘルプ／エラーメッセージ**：`/pixiv help`、`/点歌 help` などのヘルプテキストや「API キー未設定」エラーの末尾に1行でグループ番号が付きます
@@ -1060,7 +1060,7 @@ Issue と PR を歓迎します！バグ報告・機能提案には Issue テン
 
 開発環境のセットアップ、プロジェクト構成、テストの実行方法、コミット規約、PR の流れについては **[CONTRIBUTING.md](CONTRIBUTING.md)** を参照してください。
 
-> 💬 まず QQ グループ **1106353813** でアイデアを相談するのもおすすめです。大きな変更は、着手前に方向性を揃えておくとスムーズです。
+> 💬 まず QQ グループ **1106353813**（[クリックして参加](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)）でアイデアを相談するのもおすすめです。大きな変更は、着手前に方向性を揃えておくとスムーズです。
 
 ---
 

@@ -5,7 +5,7 @@
 ![訪問量](https://count.getloli.com/get/@backrooms-yrc-currentcortex?theme=moebooru)
 
 > [!IMPORTANT]
-> **🔒 自 2026-09-20 起使用本插件必須填寫檢驗碼**——加入官方 QQ 群 **1106353813** **免費**獲取，填入設定 `verify_code` 即解鎖全部功能。詳見 [快速開始 · 第 2 步](#2-填寫檢驗碼必填)。
+> **🔒 自 2026-09-20 起使用本插件必須填寫檢驗碼**——加入官方 QQ 群 **1106353813**（[點擊加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)）**免費**獲取，填入設定 `verify_code` 即解鎖全部功能。詳見 [快速開始 · 第 2 步](#2-填寫檢驗碼必填)。
 
 <details>
 <summary><b>📜 置頂公告歸檔</b>（點擊展開）</summary>
@@ -137,13 +137,13 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 
 > 🔒 自 **2026-09-20** 起，因插件濫用行為導致的一系列問題，本插件啟用檢驗碼機制。
 
-1. 加入插件官方 QQ 群 **1106353813**（README 頂部有加群連結），在檢驗碼發布處獲取檢驗碼；
+1. 加入插件官方 QQ 群 **1106353813**（[點擊加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)），在檢驗碼發布處獲取檢驗碼；
 2. 開啟 AstrBot 管理後台 → 插件管理 → 本插件 → 設定，把檢驗碼填入第一項 **`verify_code`（檢驗碼）**，儲存即自動生效。
 
 **未填寫或填寫錯誤時，插件全部指令（指令 / AI 工具 / 連結自動解析）均被鎖定**，任何指令只會回傳入群獲取檢驗碼的提示：
 
 > 尊敬的使用者，您好！由於插件濫用行為導致的一系列問題，自 2026 年 9 月 20 日起，您必須加入 CurrentCortex 插件官方 QQ 群（1106353813）獲取檢驗碼，然後將其填寫在插件設定的「檢驗碼」（verify_code）一項中。
-> 💡 獲取檢驗碼完全免費，捐贈全憑自願，捐贈使用者與普通使用者的權益沒有任何區別。
+> 💡 [👉 點此直接加群](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)。獲取檢驗碼完全免費，捐贈全憑自願，捐贈使用者與普通使用者的權益沒有任何區別。
 
 ### 3. 設定 API Key (可選)
 
@@ -813,7 +813,7 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 
 | 設定項 | 類型 | 預設值 | 說明 |
 | --- | --- | --- | --- |
-| `verify_code` | string | （空） | **檢驗碼，必填**。自 2026-09-20 起須加入官方 QQ 群 [1106353813](#-自-2026-年-9-月-20-日起使用本插件必須填寫檢驗碼) 獲取（**完全免費**，捐贈自願、權益無差別）並填寫在此。留空或填寫錯誤時插件全部指令鎖定，只會回傳入群提示 |
+| `verify_code` | string | （空） | **檢驗碼，必填**。自 2026-09-20 起須加入官方 QQ 群 [1106353813](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info) 獲取（**完全免費**，捐贈自願、權益無差別）並填寫在此。留空或填寫錯誤時插件全部指令鎖定，只會回傳入群提示 |
 
 ### 音樂點歌
 
@@ -889,7 +889,7 @@ v1.2.0 及更早版本使用 JSON 字串設定（已棄用）：
 
 ### 插件宣傳（QQ 群）
 
-插件內建官方交流群號 **1106353813**，安裝後自動生效，無需任何設定。群號透過兩個管道展示：
+插件內建官方交流群號 **1106353813**（[點擊加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)），安裝後自動生效，無需任何設定。群號透過兩個管道展示：
 
 - **`/交流群` 指令**（別名 `/群号` `/加群`）：使用者主動查詢時回傳群號
 - **指令說明／錯誤提示**：`/pixiv help`、`/点歌 help` 等說明文字和「API Key 未設定」錯誤提示末尾附上一行群號
@@ -1066,7 +1066,7 @@ astrbot_plugin_currentcortex/
 
 開發環境搭建、專案結構、測試執行方式、提交規範與 PR 流程見 **[CONTRIBUTING.md](CONTRIBUTING.md)**。
 
-> 💬 也可以先到 QQ 交流群 **1106353813** 討論想法，大改動建議先對齊再動手。
+> 💬 也可以先到 QQ 交流群 **1106353813**（[點擊加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)）討論想法，大改動建議先對齊再動手。
 
 ---
 

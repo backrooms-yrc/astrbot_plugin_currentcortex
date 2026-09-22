@@ -29,7 +29,7 @@ Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云�
 ---
 
 > [!IMPORTANT]
-> **🔒 自 2026-09-20 起使用本插件必须填写校验码**——加入官方 QQ 群 **1106353813** **免费**获取，填入配置 `verify_code` 即解锁全部功能。详见 [快速开始 · 第 2 步](#2-填写校验码必填)。
+> **🔒 自 2026-09-20 起使用本插件必须填写校验码**——加入官方 QQ 群 **1106353813**（[点击加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)）**免费**获取，填入配置 `verify_code` 即解锁全部功能。详见 [快速开始 · 第 2 步](#2-填写校验码必填)。
 
 <details>
 <summary><b>📜 置顶公告归档</b>（点击展开）</summary>
@@ -154,13 +154,13 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 
 > 🔒 自 **2026-09-20** 起，因插件滥用行为导致的一系列问题，本插件启用校验码机制。
 
-1. 加入插件官方 QQ 群 **1106353813**（README 顶部有加群链接），在校验码发布处获取校验码；
+1. 加入插件官方 QQ 群 **1106353813**（[点击加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)），在校验码发布处获取校验码；
 2. 打开 AstrBot 管理面板 → 插件管理 → 本插件 → 配置，把校验码填入第一项 **`verify_code`（校验码）**，保存即自动生效。
 
 **未填写或填写错误时，插件全部指令（命令 / AI 工具 / 链接自动解析）均被锁定**，任何指令只会返回入群获取校验码的提示：
 
 > 尊敬的用户，您好！由于插件滥用行为导致的一系列问题，自 2026 年 9 月 20 日起，您必须加入 CurrentCortex 插件官方 QQ 群（1106353813）获取校验码，然后将其填写在插件配置的「校验码」（verify_code）一项中。
-> 💡 获取校验码完全免费，捐赠全凭自愿，捐赠用户与普通用户的权益没有任何区别。
+> 💡 [👉 点此直接加群](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)。获取校验码完全免费，捐赠全凭自愿，捐赠用户与普通用户的权益没有任何区别。
 
 ### 3. 配置 API Key（可选）
 
@@ -875,7 +875,7 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 
 | 配置项 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `verify_code` | string | （空） | **校验码，必填**。自 2026-09-20 起须加入官方 QQ 群 [1106353813](#-自-2026-年-9-月-20-日起使用本插件必须填写校验码) 获取（**完全免费**，捐赠自愿、权益无差别）并填写在此。留空或填写错误时插件全部指令锁定，只会返回入群提示 |
+| `verify_code` | string | （空） | **校验码，必填**。自 2026-09-20 起须加入官方 QQ 群 [1106353813](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info) 获取（**完全免费**，捐赠自愿、权益无差别）并填写在此。留空或填写错误时插件全部指令锁定，只会返回入群提示 |
 
 ### Pixiv 相关
 
@@ -981,7 +981,7 @@ v1.2.0 及更早版本使用 JSON 字符串配置（已弃用）：
 
 ### 插件宣传（QQ 群）
 
-插件内置官方交流群号 **1106353813**，安装后自动生效，无需任何配置。群号通过两个渠道展示：
+插件内置官方交流群号 **1106353813**（[点击加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)），安装后自动生效，无需任何配置。群号通过两个渠道展示：
 
 - **`/交流群` 命令**（别名 `/群号` `/加群`）：用户主动查询时返回群号
 - **命令帮助 / 错误提示**：`/pixiv help`、`/点歌 help` 等帮助文本和「API Key 未配置」错误提示末尾带上一行群号
@@ -1158,7 +1158,7 @@ astrbot_plugin_currentcortex/
 
 开发环境搭建、项目结构、测试运行方式、提交规范与 PR 流程见 **[CONTRIBUTING.md](CONTRIBUTING.md)**。
 
-> 💬 也可以先到 QQ 交流群 **1106353813** 讨论想法，大改动建议先对齐再动手。
+> 💬 也可以先到 QQ 交流群 **1106353813**（[点击加入](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)）讨论想法，大改动建议先对齐再动手。
 
 ---
 
