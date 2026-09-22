@@ -404,14 +404,14 @@ MUSIC_HELP_TEXT = """🎵 网易云音乐 使用说明
 
 📌 基本命令（别名：/音乐）
   /music <歌曲名>       搜索并获取歌曲信息（点歌）
-  /music direct <歌曲名> 仅返回语音条（别名：直接）
+  /music direct <歌曲名> 仅返回语音条（别名：直接）——语音条固定标准音质，速度优先
   /music file[1-7] <歌曲名> 返回原始音乐文件（别名：文件；数字指定音质档位）
   /music id:<歌曲ID>    通过歌曲ID获取详细信息（别名：编号:<ID>）
   /music search <关键词> 搜索歌曲列表（别名：搜索）
   /music help           显示此帮助信息
 
 📌 快捷命令
-  /点歌 <歌曲名>         仅返回语音条（等效于 /音乐 直接）
+  /点歌 <歌曲名>         仅返回语音条（等效于 /音乐 直接；语音条固定标准音质，速度优先）
 
 📌 音质档位（/音乐 文件<数字> 指定）
   等级标准：1 超清母带 ≥ 2 臻音全景声 ≥ 3 沉浸环绕声 ＞ 4 高清臻音 ＞ 5 无损 ＞ 6 极高 ＞ 7 标准
@@ -1548,7 +1548,7 @@ class CurrentCortexPlugin(Star):
 
         # 点歌并发防护：同一会话进行中去重 + 完成后冷却，防止用户连点触发大量并发
         # 下载/转码拖垮服务器。单线程 asyncio 下 dict/set 操作原子，无需加锁。
-        self._music_in_progress: set[str] = set()
+        self._music_in_progress: dict[str, float] = {}  # umo -> 占用时间戳
         self._music_last_done: dict[str, float] = {}
         self._music_cooldown = max(0, int(config.get("music_cooldown", 3)))
         # /音乐 文件 下载进度播报档位：off 关闭 / brief 简略（默认）/ detail 详细
@@ -3175,7 +3175,10 @@ class CurrentCortexPlugin(Star):
         if slot_hint:
             return slot_hint
         try:
-            song_data, used_source = await self._search_and_get("auto", query)
+            # 语音条速度优先：与 /点歌 命令同策略，自建源可用时固定标准档
+            song_data, used_source = await self._search_and_get(
+                "auto", query, level="standard" if self._ncm_client else None
+            )
             items = await self._format_song_response(
                 song_data, event, direct_mode=True
             )
@@ -4370,7 +4373,13 @@ class CurrentCortexPlugin(Star):
                     f"[Music] Direct play '{direct_query}' for user {user_name} (source={music_source})"
                 )
                 try:
-                    song_data, used_source = await self._search_and_get(music_source, direct_query)
+                    # 语音条速度优先：自建源可用时固定标准档（128k mp3，约 4MB），
+                    # 跳过 auto 探测与后续转码，最快出语音
+                    song_data, used_source = await self._search_and_get(
+                        music_source,
+                        direct_query,
+                        level="standard" if self._ncm_client else None,
+                    )
                 except NeteaseAPIError as e:
                     yield event.plain_result(f"😕 未找到与「{direct_query}」相关的歌曲\n💡 {e}")
                     return
@@ -4455,7 +4464,13 @@ class CurrentCortexPlugin(Star):
             music_source = self._get_music_source(event)
             logger.info(f"[PlaySong] Direct play '{query}' for user {user_name} (source={music_source})")
             try:
-                song_data, used_source = await self._search_and_get(music_source, query)
+                # 语音条速度优先：自建源可用时固定标准档（128k mp3，约 4MB），
+                # 跳过 auto 探测与后续转码，最快出语音
+                song_data, used_source = await self._search_and_get(
+                    music_source,
+                    query,
+                    level="standard" if self._ncm_client else None,
+                )
             except NeteaseAPIError as e:
                 yield event.plain_result(
                     f"😕 未找到与「{query}」相关的歌曲\n💡 请尝试其他关键词或切换音源（/音源）"
@@ -4485,6 +4500,12 @@ class CurrentCortexPlugin(Star):
         finally:
             self._release_music_slot(event)
 
+    # 处理槽硬超时：async generator 在管道异常（如 NapCat 断连 ApiNotAvailable）
+    # 后可能不被关闭，finally 释放不会执行；超时强清防止会话被永久卡死在
+    # 「上一首歌还在处理中」。语音条快车道全程 <10s，文件模式含下载上限 20s+
+    # 下载时长，180s 足够覆盖最慢的母带场景。
+    MUSIC_SLOT_STALE_SEC = 180.0
+
     def _acquire_music_slot(self, event: AstrMessageEvent) -> Optional[str]:
         """点歌并发防护：尝试为当前会话占用一个处理槽。
 
@@ -4495,19 +4516,28 @@ class CurrentCortexPlugin(Star):
         umo = event.unified_msg_origin
         if not umo:
             return None  # 无法识别会话，不拦截
+        now = time.time()
         # 1) 进行中去重：同一会话已有音乐命令在处理
-        if umo in self._music_in_progress:
-            return "⏳ 上一首歌还在处理中，请稍候再试～"
+        #    （带硬超时：槽位异常泄漏时到期自动作废，见 MUSIC_SLOT_STALE_SEC）
+        acquired_at = self._music_in_progress.get(umo)
+        if acquired_at is not None:
+            if now - acquired_at > self.MUSIC_SLOT_STALE_SEC:
+                logger.warning(
+                    f"[Music] 会话 {umo} 的处理槽已占用 {now - acquired_at:.0f}s "
+                    f"(> {self.MUSIC_SLOT_STALE_SEC:.0f}s)，判定为泄漏，强制释放"
+                )
+            else:
+                return "⏳ 上一首歌还在处理中，请稍候再试～"
         # 2) 冷却：上一次完成后短时间内禁止再点
         if self._music_cooldown > 0:
             last = self._music_last_done.get(umo)
             if last is not None:
-                elapsed = time.time() - last
+                elapsed = now - last
                 if elapsed < self._music_cooldown:
                     wait = self._music_cooldown - elapsed
                     return f"⏳ 点得太快啦，请等待约 {wait:.0f} 秒后再试～"
-        # 放行：占用槽位
-        self._music_in_progress.add(umo)
+        # 放行：占用槽位（记录占用时间戳）
+        self._music_in_progress[umo] = now
         return None
 
     def _release_music_slot(self, event: AstrMessageEvent) -> None:
@@ -4515,7 +4545,7 @@ class CurrentCortexPlugin(Star):
         umo = event.unified_msg_origin
         if not umo:
             return
-        self._music_in_progress.discard(umo)
+        self._music_in_progress.pop(umo, None)
         self._music_last_done[umo] = time.time()
 
     # --- 音源选择（auto / 网易云SVIP / 网易云 / 酷狗）---
@@ -4662,21 +4692,31 @@ class CurrentCortexPlugin(Star):
         return best
 
     async def _search_and_get(
-        self, source: str, query: str
+        self, source: str, query: str, level: Optional[str] = None
     ) -> tuple:
         """统一搜索+取详情入口。
 
         - source=auto：全部音源并行探测，取音质最佳（速度优先，详见 _auto_best_quality）
-        - source=ncm/netease/kugou：仅走指定源
+        - source=auto 且指定 level（语音条等「速度优先」场景）：跳过并行探测，
+          直接走自建 ncm 单源取指定档位（一次搜索 + 一次取链，链路最短）；
+          ncm 不可用时回落常规 auto 探测
+        - source=ncm/netease/kugou：仅走指定源（level 仅对 ncm 生效）
         返回 (song_data, used_source)；全部失败抛 NeteaseAPIError。
         """
         if source == "auto":
+            if level and self._ncm_client:
+                result = await self._try_source("ncm", query, level=level)
+                if result:
+                    return result
+                raise NeteaseAPIError(
+                    f"网易云SVIP未找到可播放的歌曲（档位：{MUSIC_TIER_LABELS.get(level, level)}）"
+                )
             result = await self._auto_best_quality(query)
             if result:
                 return result
             raise NeteaseAPIError("网易云SVIP/网易云/酷狗三个音源均未找到可播放的歌曲")
         # 指定单一源
-        result = await self._try_source(source, query)
+        result = await self._try_source(source, query, level=level)
         if result:
             return result
         src_name = {
@@ -4868,7 +4908,9 @@ class CurrentCortexPlugin(Star):
         # 如果有播放链接，尝试下载音频并通过 Comp.Record 发送语音条
         if url:
             try:
-                local_path = await self._download_audio_to_temp(url, name)
+                local_path = await self._download_audio_to_temp(
+                    url, name, file_type=str(file_type or "")
+                )
                 if local_path:
                     record_comp = Comp.Record.fromFileSystem(local_path)
                     results.append(event.chain_result([record_comp]))
@@ -5117,16 +5159,23 @@ class CurrentCortexPlugin(Star):
         )
         return None
 
-    async def _download_audio_to_temp(self, url: str, name: str) -> Optional[str]:
+    async def _download_audio_to_temp(
+        self, url: str, name: str, file_type: str = ""
+    ) -> Optional[str]:
         """下载音频文件到临时目录，并压缩为语音条专用低码率 MP3。
 
-        无论上游返回何种格式（mp3/flac/wav/m4a），下载后一律经 ffmpeg
-        压缩为 64kbps 单声道 MP3，确保语音条不超平台大小限制。
+        ⚠️ 必须压缩，不能直发原始文件（哪怕已是 mp3）：AstrBot 经反向 WS 发送
+        Record 时把音频 base64 内嵌进 WS 消息，NapCat 的 ws 客户端有 payload
+        上限（实测 3.66MB mp3 → base64 ≈4.9MB 直接触发
+        `RangeError: Max payload size exceeded` 炸掉整条连接，语音丢失且连带
+        掐断当时其他消息）。压缩到 64kbps 单声道（约 0.9~1.8MB）是长期验证过
+        的安全大小。速度优化应做在「下载标准档小文件」上（见 _search_and_get
+        的 level=standard 快车道），而不是跳过压缩。
+
         下载复用文件模式的 _download_source_audio_to_temp（单次 90s、
-        超时/网络错误重试 3 次）：旧实现 total=30 且无重试，慢 CDN 或
-        大文件（无损常见 15~40MB）时偶发「下载音频超时」导致语音条失败。
+        超时/网络错误重试 3 次）。
         """
-        source_path = await self._download_source_audio_to_temp(url, name)
+        source_path = await self._download_source_audio_to_temp(url, name, file_type)
         if not source_path:
             return None
 
