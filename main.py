@@ -1494,7 +1494,7 @@ def _remove_file_safe(file_path: str) -> None:
     "astrbot_plugin_currentcortex",
     "Rcst20",
     "多功能 AstrBot 插件（CurrentCortex）—— Pixiv 随机图片 ·网易云点歌 ·小红书/B站/抖音媒体解析 ·每日一言 ·天气 ·男娘 ·DG-LAB（郊狼） 设备管理 ·Wikidot 站点管理 ·跨群聊记忆 ·按群聊开关。基于 LeiZ API。",
-    "2.7.0",
+    "2.8.5",
 )
 class CurrentCortexPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
