@@ -6,6 +6,24 @@
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-10-25
+
+- 浅浅更新一下，塞点新功能进去~🧊🧊🧊
+- 以及，我感觉我再这么熬下去就要似了（）🆘🆘🆘
+- 还有就是高中数学能不能别再肘击我了👎🏻👎🏻👎🏻
+
+### 新增
+
+- **地震预警（群聊白名单制，`/地震`，别名 `earthquake`/`eq`/`预警`）**：聚合 CENC 预警、四川/云南预警、福建预警、日本气象厅紧急地震速报（Wolfx 公开镜像）、CENC 地震速报与 USGS 全球源，六个源并行请求；同一地震按「发震时间 ±3 分钟、震中 200 km 内、震级差 ≤1.0」跨源聚类只播报一次，后续震级/烈度显著增强补发「预警更新」且不重开倒计时
+  - **白名单**：默认不推送；群主/群管理员（或 AstrBot 全局管理员）发送 `/地震 开启 北京`（城市名）或 `/地震 开启 <纬度> <经度> [地点]` 后该群才加入白名单。**一个群可添加多个接收城市**：`/地震 添加城市 上海`、`/地震 移除城市 上海`、`/地震 城市列表`（最多 20 个）；`/地震 位置 <城市>` 将列表替换为唯一城市；`/地震 关闭` 停用、`/地震 状态` 查看状态。城市名优先查内置全国地级市坐标表（约 300 个，含港澳台与常用境外城市，离线秒回），区县/街道/未收录地名自动走 OpenStreetMap Nominatim（免 Key、缓存、1 次/秒限流）；白名单存于 `earthquake_group_whitelist`，可在插件配置页查看/删除，Pages 提供表格化管理
+  - **逐条倒计时开关**：群主/群管理员可用 `/地震 倒计时 开|关` 控制是否发送倒计时数字，默认开启；关闭后只发基本信息和到达指引，避免刷屏。该设置按群保存，模拟预警同样遵守
+  - **播报流程**：先发基本信息（震中/震级/深度/发震时间/最大烈度/各接收城市震中距与预计到达/来源），随后按每个群**最近的接收城市**与 S 波速度（默认 3.5 km/s）逐条发送倒计时；倒计时消息保持极简，仅发送 `12s`、`11s`…`0s`，`0s` 后**再单独发送一条「地震波已到达」+ 分震级规避指引**（关闭逐条倒计时时也保留这条到达提示）。不 @全体，多群发送有间隔
+  - **分震级引导**：按震级自动切换指引——M<3 微震无需行动；3~4 有感地震保持冷静；4~5 明显震感做好避险准备；5~6 伏地遮挡手抓牢；6~7 保护头颈远离外墙玻璃；≥7 大地震立即避险并听从官方指引（模拟演练会加「演练提示」前缀）
+  - **Pages**：总面板新增「地震预警」页——白名单群聊（多城市/倒计时状态）、预警源健康度、最近预警、立即检查，以及**模拟预警**（可设震级/震中/震中城市/深度/经纬度/倒计时，先向白名单群发送「仅为模拟、不是真实地震」提醒，再发模拟基本信息和倒计时；默认 30 秒冷却）
+  - **极限演练模式（Pages）**：模拟预警卡片内新增开关，输入确认词「极限演练」后**不发送任何「模拟/演练」提示**，标题、来源（中国地震台网·预警）、倒计时、到达指引均与真实预警完全一致；按真实 S 波距离估算倒计时（忽略表单秒数），独立冷却 `earthquake_extreme_cooldown`（默认 300 秒），仅 WebUI 管理员可触发并写后台审计日志
+  - **配置**：新增 `earthquake_enable`、`earthquake_poll_interval`、`earthquake_min_magnitude`、`earthquake_max_age_sec`、`earthquake_max_distance_km`、`earthquake_default_lat/lon/place`、`earthquake_countdown_max_ticks`、`earthquake_countdown_max_wait_sec`、`earthquake_countdown_interval`、`earthquake_s_wave_km_s`、`earthquake_broadcast_interval`、`earthquake_http_timeout`、`earthquake_sim_cooldown`、`earthquake_extreme_cooldown`、`earthquake_group_whitelist`
+  - **其它**：`/开关 off earthquake` 可让本群临时静音后台预警；已播报事件/源状态/模拟冷却持久化到 `data/plugin_data/astrbot_plugin_currentcortex/currentcortex_earthquake.json`，重启不重复预警；新增 `earthquake.py`、`earthquake_locations.py` 与 `test_earthquake.py`（20 项离线测试），`test_memory_and_switch.py` 增加 5 项命令/权限用例（共 54 项）
+
 ## [2.8.5] - 2026-10-24
 
 - 🎉周末愉快~

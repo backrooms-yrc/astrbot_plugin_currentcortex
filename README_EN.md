@@ -80,6 +80,7 @@ Pixiv random images · Hitokoto quotes · Weather · Femboy images · NetEase Cl
   - [5. Weather](#5-weather-weather)
   - [6. Femboy Images](#6-femboy-images-femboy)
   - [7. DG-LAB Device Management](#7-dg-lab-device-management-dglab)
+  - [8. Earthquake Early Warning](#8-earthquake-early-warning-地震-alias-earthquake-eq-预警)
 - [🖥️ Master Pages](#️-master-pages)
 - [🧩 Per-Group Toggle](#-per-group-toggle)
 - [✂️ Segmented Replies](#️-segmented-replies)
@@ -107,6 +108,7 @@ Pixiv random images · Hitokoto quotes · Weather · Femboy images · NetEase Cl
 | 👗 **Femboy Images** | Random femboy-themed images (WebP) |
 | 🔌 **DG-LAB** | Full device lifecycle management over Socket V3/V4 (legacy V2 compatible), protocol auto-detection, multi-user/multi-device isolation, CCDG WebUI control panel |
 | 📖 **Wikidot Site Management** | NEW in v2.3.0: edit pages (source / write / append / tags / rename / delete) and manage the site (members / settings / forum / invitations) via Wikidot's front-end JS interface (`/wikidot`). Disabled by default |
+| 🌏 **Earthquake Early Warning** | Aggregates CENC / Sichuan-Yunnan / Fujian / JMA EEW plus CENC reports and USGS; per-group whitelist; sends basic info first, then a per-group S-wave arrival countdown; simulated drills from Pages |
 | 🖥️ **Master Pages** | All-in-one panel integrated into the AstrBot WebUI: dashboard · help center · visual settings (hot-reload on save) · DG-LAB control (one-click relay server deployment · public-exposure toggle) · contact us |
 | 🧩 **Per-Group Toggle** | Turn plugin commands on/off per group with `/toggle` (timed auto-recovery and per-category scope control supported), without affecting other groups |
 | 🧠 **Cross-Group Memory** | All groups on a platform share one persistent context, automatically injected into LLM requests (with optional age filtering, LLM summarization, and keyword-based cleanup) |
@@ -207,6 +209,7 @@ Every command accepts both Chinese and English aliases:
 | `/weather` | `/天气` | Weather lookup |
 | `/femboy` | `/男娘` | Femboy image |
 | `/dglab` | `/电击` | DG-LAB device management |
+| `/地震` | `/earthquake` `/eq` `/预警` | Group-whitelisted earthquake early warning (owner/admin enables; basic info then countdown) |
 | `/开关` | `/toggle` `/switch` | Turn this plugin's commands on/off for a group (timed and per-category scope supported) |
 | `/开关列表` | `/switch_list` `/开关状态列表` | List disabled groups and scopes on this platform (admin) |
 | `/忘记` | `/forget_memory` `/忘记记忆` | Remove cross-group memory records by keyword (admin) |
@@ -566,16 +569,49 @@ With `dglab_webui_enabled` turned on, the plugin serves a CCDG WebUI remote-cont
 
 ---
 
+### 8. Earthquake Early Warning (`/地震`, aliases `/earthquake` `/eq` `/预警`)
+
+**Opt-in per group (whitelist).** Nothing is pushed by default; a group owner or administrator must enable it in that group.
+
+| Command | Description |
+| --- | --- |
+| `/地震 开启 <city>` | **Owner/admin only.** Enable this group and add a receiving city, e.g. `/地震 开启 北京`. Running it again adds another city |
+| `/地震 添加城市 <city \| lat lon [place]>` | Add another receiving city (up to 20 per group) |
+| `/地震 移除城市 <city>` | Remove a receiving city; removing the last one disables the group |
+| `/地震 城市列表` | List all receiving cities and the countdown toggle state |
+| `/地震 倒计时 开\|关` | Enable/disable per-group countdown numbers (default on; off = basic info + arrival guidance, no ticks) |
+| `/地震 位置 <city \| lat lon [place]>` | Replace all receiving cities with a single one |
+| `/地震 关闭` | Disable this group (the whitelist entry is kept and can be re-enabled) |
+| `/地震 状态` | Show group status, cities, countdown state, whitelist count, last event and source health |
+| `/地震 帮助` | Show command help |
+
+> Permission: group owner / group administrator, or an AstrBot global admin. Other members can only view status and the city list.
+>
+> **No coordinates needed:** just send a city name. About 300 prefecture-level cities/municipalities are built in (including Hong Kong, Macau, Taiwan and common international cities), looked up offline; districts, streets and unknown places fall back to OpenStreetMap Nominatim (no key, cached, 1 request/sec). Examples: `/地震 开启 北京`, `/地震 添加城市 上海`, `/地震 添加城市 乌鲁木齐`, `/地震 添加城市 台北`.
+
+**Sources:** CENC EEW, Sichuan/Yunnan EEW, Fujian EEW, JMA EEW (via the public Wolfx mirrors), CENC earthquake reports, and the USGS global feed. All sources are fetched in parallel; one failing source does not block the others. The same earthquake is clustered across sources (origin time ±3 min, epicenter within 200 km, magnitude difference ≤1.0) and reported once; significant later revisions send an update without restarting the countdown.
+
+**Broadcast flow:** basic information first (epicenter, magnitude, depth, origin time, intensity, distance/arrival for each receiving city, magnitude-based guidance), then a countdown for the group's **nearest** receiving city based on an S-wave speed of 3.5 km/s (last 30 ticks by default, one per second). Countdown messages are minimal: only `12s`, `11s` … `0s`. After `0s`, a separate arrival message is sent with “seismic wave has arrived” and the magnitude-based avoidance guidance; turning countdown off with `/地震 倒计时 关` still keeps that arrival message. No `@all`; multi-group sends are spaced to reduce platform rate-limit risk. Estimates are approximate — always follow official information.
+
+**Pages → Earthquake Warning → Simulated Warning** broadcasts a drill to every enabled whitelist group, **first sending “this is only a simulation, not a real earthquake”**, then the simulated basic info and countdown (groups that disabled countdown receive basic info and the arrival drill guidance only). The form accepts magnitude, epicenter name, an optional epicenter city (replaces coordinates), depth, coordinates and countdown; it has a cooldown and a “Check sources now” button.
+
+**Extreme drill mode:** a switch inside the simulation card. After entering the confirmation word **“极限演练”**, it sends messages with **no simulation/notice wording at all** — title, source, countdown and arrival guidance are identical to a real warning, using the real S-wave estimate rather than the manual countdown seconds. It has a separate cooldown (`earthquake_extreme_cooldown`, default 300 s), is only reachable from the AstrBot WebUI (admin), and is recorded in the audit log. ⚠️ It can cause panic; use only for drills already announced to the whitelist groups.
+
+Key options: `earthquake_enable`, `earthquake_poll_interval` (30 s), `earthquake_min_magnitude` (4.0), `earthquake_max_age_sec` (300), `earthquake_default_lat` / `earthquake_default_lon`, `earthquake_countdown_max_ticks`, `earthquake_countdown_interval`, `earthquake_s_wave_km_s`, and `earthquake_group_whitelist` (view/remove in the plugin config). `/开关 off earthquake` mutes background alerts for a group.
+
+---
+
 ## 🖥️ Master Pages
 
 > Since **v1.9.0**, the plugin ships an all-in-one AstrBot Pages panel (mdui 2 Material Design 3 style, sky-blue + snow-white theme). Open it from the AstrBot WebUI under **Plugin Details → Pages** (or the "Plugin Pages" group in the sidebar).
 
-The panel has 5 pages:
+The panel has 6 pages:
 
 | Page | Description |
 | --- | --- |
 | 📊 **Dashboard** | Plugin overview: uptime, bound devices, active connections, registered users, plugin version / author / start time, feature-toggle states |
-| 📖 **Help Center** | Built-in docs and FAQs (quick start / DG-LAB / segmented replies / cross-group memory / troubleshooting) |
+| 🌏 **Earthquake Warning** | Whitelist groups / multiple cities / source health / last event / check now / **simulated warning** and **extreme drill** (real-like messages; typed confirmation) |
+| 📖 **Help Center** | Built-in docs and FAQs (quick start / earthquake warning / DG-LAB / segmented replies / cross-group memory / troubleshooting) |
 | ⚙️ **Settings** | Edit every plugin option visually: each has a friendly name and plain-language explanation; saving **hot-reloads** the config — no restart needed |
 | ⚡ **DG-LAB Control** | One-click relay server deployment (v3/v4 · public-exposure toggle) + master switch for the CCDG WebUI + **public-exposure toggle** (see below) |
 | 💬 **Contact Us** | Developer info, GitHub repository, QQ group (one-click join) |
@@ -620,7 +656,7 @@ Each group can independently turn this plugin on or off without affecting others
 
 > Aliases: `/toggle`, `/switch` (e.g. `/toggle off 2h`). The Chinese command `/开关` also accepts `关` (off) / `开` (on) / `状态` (status) as arguments. Duration units: `s`/`秒`, `m`/`分`/`分钟`, `h`/`时`/`小时`, `d`/`天` — combinable.
 >
-> **Scopes** (optional; omit = global, all commands): `media` media parsing · `image` image fetching · `music` song requests · `utility` utilities · `dglab` DG-LAB devices · `memory` cross-group memory. Chinese names also work (e.g. `/开关 off 图片`).
+> **Scopes** (optional; omit = global, all commands): `media` media parsing · `image` image fetching · `music` song requests · `utility` utilities · `dglab` DG-LAB devices · `earthquake` earthquake warning · `memory` cross-group memory. Chinese names also work (e.g. `/开关 off 图片`). `/开关 off earthquake` also mutes background alerts for the group.
 
 #### Example
 
@@ -869,6 +905,10 @@ The new format uses three standalone options: `dglab_server_url`, `dglab_heartbe
 
 </details>
 
+### Earthquake Early Warning
+
+See [8. Earthquake Early Warning](#8-earthquake-early-warning-地震-alias-earthquake-eq-预警). Main options: `earthquake_enable` (true), `earthquake_poll_interval` (30 s), `earthquake_min_magnitude` (4.0), `earthquake_max_age_sec` (300), `earthquake_default_lat` / `lon` (0 = unset), `earthquake_countdown_max_ticks` (30), `earthquake_countdown_max_wait_sec` (300), `earthquake_countdown_interval` (1.0), `earthquake_s_wave_km_s` (3.5), `earthquake_broadcast_interval` (0.6), `earthquake_http_timeout` (10), `earthquake_sim_cooldown` (30), `earthquake_extreme_cooldown` (300), and `earthquake_group_whitelist` (managed by `/地震 开启`, viewable/removable in the config page).
+
 ### Cross-Group Memory
 
 See the [🧠 Cross-Group Memory](#-cross-group-memory) section.
@@ -991,7 +1031,7 @@ astrbot_plugin_currentcortex/
 ├── pages/                       # Master Pages frontend (mdui 2 component library, fully local)
 │   └── cc-dashboard/
 │       ├── index.html           # Pages entry
-│       ├── app.js               # Vue 3 single-page app (5 pages)
+│       ├── app.js               # Vue 3 single-page app (6 pages)
 │       ├── app.css              # Sky-blue + snow-white theme
 │       └── vendor/              # Local dependencies: Vue 3 / mdui 2 / Material Icons fonts
 ├── cross_group_memory.py        # Cross-group memory persistence
@@ -1076,7 +1116,7 @@ Acknowledgements:
 
 ---
 
-**Version**: v2.0.11 (per-version changes in [CHANGELOG.md](CHANGELOG.md))  
+**Version**: v2.9.0 (per-version changes in [CHANGELOG.md](CHANGELOG.md))
 **Repository**: [GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
 
 

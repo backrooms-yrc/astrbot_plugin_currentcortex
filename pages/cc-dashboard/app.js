@@ -1,8 +1,8 @@
 // CurrentCortex 总Pages —— Vue 3 + mdui 2（Web Components）
 // 通过 window.AstrBotPluginPage (bridge) 与后端通信。
-// 5 个 tab 用 hash 路由：dashboard / help / settings / coyote / contact
+// 6 个 tab 用 hash 路由：dashboard / quake / help / settings / coyote / contact
 
-const { createApp, ref } = Vue;
+const { createApp, ref, reactive } = Vue;
 
 // ---------------------------------------------------------------- bridge
 const bridge = window.AstrBotPluginPage;
@@ -56,6 +56,21 @@ const relayPublic = ref({ v3: "", v4: "" });
 // 两步部署确认:第一步披露将执行的系统级操作,第二步键入版本号防误触
 const relayConfirmOpen = ref({ v3: false, v4: false });
 const relayConfirmText = ref({ v3: "", v4: "" });
+// 地震预警：状态 / 立即检查 / 模拟表单
+const quake = ref(null);
+const quakeBusy = ref(false);
+const quakePolling = ref(false);
+const quakeForm = reactive({
+  magnitude: 5.0,
+  place: "",
+  city: "",
+  depth: 10,
+  latitude: "",
+  longitude: "",
+  countdown: 15,
+  extreme: false,
+  extremeConfirm: "",
+});
 const relayMeta = {
   v3: {
     title: "V3 中转服务器",
@@ -70,7 +85,7 @@ let toastTimer = null;
 
 function parseHash() {
   const h = location.hash.replace(/^#\/?/, "");
-  current.value = ["dashboard", "help", "settings", "coyote", "contact"].includes(h)
+  current.value = ["dashboard", "quake", "help", "settings", "coyote", "contact"].includes(h)
     ? h
     : "dashboard";
 }
@@ -83,6 +98,153 @@ async function loadStatus() {
     status.value = await apiGet("cc/status");
   } catch (e) {
     toast("加载仪表板失败: " + (e && e.message ? e.message : e));
+  }
+}
+
+async function loadQuake() {
+  try {
+    quake.value = await apiGet("cc/quake/status");
+    // 首次打开时用最近事件预填震中，方便快速演练；用户改过的值不覆盖
+    const last = quake.value && quake.value.last_event;
+    if (!quakeForm.place) {
+      quakeForm.place = (last && last.place) || "模拟市模拟区";
+    }
+    if (quakeForm.latitude === "" && last && last.latitude !== undefined && last.latitude !== null) {
+      quakeForm.latitude = last.latitude;
+      quakeForm.longitude = last.longitude;
+    }
+  } catch (e) {
+    toast("加载地震预警状态失败: " + (e && e.message ? e.message : e));
+  }
+}
+
+function quakeSources() {
+  const obj = quake.value && quake.value.sources;
+  return obj ? Object.entries(obj).map(([key, val]) => ({ key, ...val })) : [];
+}
+
+async function pollQuake() {
+  quakePolling.value = true;
+  try {
+    const res = await apiPost("cc/quake/poll", {});
+    if (res && res.ok) {
+      toast(`检查完成：上游 ${res.candidates || 0} 条，时效内 ${res.fresh || 0} 条，播报 ${res.alerts || 0} 条`);
+    } else {
+      toast((res && res.reason) || "检查完成，但没有可播报事件");
+    }
+    await loadQuake();
+  } catch (e) {
+    toast("立即检查失败: " + (e && e.message ? e.message : e));
+  } finally {
+    quakePolling.value = false;
+  }
+}
+
+function setExtreme(checked) {
+  quakeForm.extreme = !!checked;
+  quakeForm.extremeConfirm = "";
+}
+
+async function simulateQuake() {
+  const magnitude = Number(quakeForm.magnitude);
+  const depth = Number(quakeForm.depth);
+  const countdown = Number(quakeForm.countdown || 0);
+  const place = String(quakeForm.place || "").trim();
+  const city = String(quakeForm.city || "").trim();
+  const hasLat = String(quakeForm.latitude).trim() !== "";
+  const hasLon = String(quakeForm.longitude).trim() !== "";
+  const extreme = !!quakeForm.extreme;
+  if (!place && !city) {
+    toast("请填写模拟震中名称或震中城市");
+    return;
+  }
+  if (extreme && String(quakeForm.extremeConfirm || "").trim() !== "极限演练") {
+    toast("极限演练需输入确认词「极限演练」");
+    return;
+  }
+  if (extreme && !city && !(hasLat && hasLon)) {
+    toast("极限演练需填写震中城市或经纬度");
+    return;
+  }
+  if (!(magnitude >= 0 && magnitude <= 10)) {
+    toast("震级必须在 0~10 之间");
+    return;
+  }
+  if (!(depth >= 0 && depth <= 700)) {
+    toast("震源深度必须在 0~700 km 之间");
+    return;
+  }
+  if (hasLat !== hasLon) {
+    toast("纬度和经度必须同时填写或同时留空");
+    return;
+  }
+  if (countdown < 0 || countdown > 60) {
+    toast("倒计时必须在 0~60 秒之间（0 = 按距离自动计算）");
+    return;
+  }
+  if (window.mdui && mdui.confirm) {
+    try {
+      await mdui.confirm({
+        headline: extreme ? "发起极限演练？" : "发起模拟地震预警？",
+        description: extreme
+          ? "极限演练不会发送「仅为模拟」的提示，所有群消息与真实地震预警完全一致。\n" +
+            "可能引起群成员恐慌；请确认已明确告知白名单群成员这是演练。"
+          : "将向全部白名单群聊发送地震预警演练消息，并先提醒「仅为模拟」。\n" +
+            "请勿在真实地震发生时使用，避免与真实预警混淆。",
+        confirmText: extreme ? "发起极限演练" : "发起模拟",
+        cancelText: "取消",
+      });
+    } catch (e2) {
+      return;
+    }
+  }
+  quakeBusy.value = true;
+  try {
+    const res = await apiPost("cc/quake/simulate", {
+      magnitude,
+      place,
+      city,
+      depth,
+      latitude: hasLat ? Number(quakeForm.latitude) : null,
+      longitude: hasLon ? Number(quakeForm.longitude) : null,
+      countdown,
+      extreme,
+      extreme_confirm: extreme ? "极限演练" : "",
+    });
+    toast(res.message || (extreme ? "极限演练已发起" : "模拟预警已发起"));
+    if (extreme) {
+      quakeForm.extreme = false;
+      quakeForm.extremeConfirm = "";
+    }
+    setTimeout(loadQuake, 1200);
+  } catch (e) {
+    toast("发送失败: " + (e && e.message ? e.message : e));
+  } finally {
+    quakeBusy.value = false;
+  }
+}
+
+async function removeQuakeGroup(group) {
+  if (!group || !group.umo) return;
+  const label = group.group_id || group.umo;
+  if (window.mdui && mdui.confirm) {
+    try {
+      await mdui.confirm({
+        headline: "移除白名单群聊？",
+        description: `群 ${label} 将不再接收地震预警，直到群主/管理员重新发送 /地震 开启。`,
+        confirmText: "移除",
+        cancelText: "取消",
+      });
+    } catch (e) {
+      return;
+    }
+  }
+  try {
+    const res = await apiPost("cc/quake/whitelist/remove", { umo: group.umo });
+    toast(res.message || "已移除");
+    await loadQuake();
+  } catch (e) {
+    toast("移除失败: " + (e && e.message ? e.message : e));
   }
 }
 
@@ -450,6 +612,23 @@ const SETTINGS_META = {
   // —— 按群开关 ——
   group_switch_enable: { name: "按群开关功能", hint: "开启后可用 /开关 命令在单个群里单独关闭/开启本插件。" },
   group_switch_admin_only: { name: "仅管理员可操作", hint: "只有群管理员能用 /开关 命令，防止群友乱关插件。" },
+  // —— 地震预警 ——
+  earthquake_enable: { name: "地震预警总开关", hint: "开启且至少一个群在白名单中时才会轮询预警源。关闭后不请求任何上游；白名单由群主/管理员用 /地震 开启 添加。" },
+  earthquake_poll_interval: { name: "轮询间隔（秒）", hint: "多久检查一次预警源。越短越及时，但请求越频繁；默认 30，追求及时性可调 10~15 秒。" },
+  earthquake_min_magnitude: { name: "最低播报震级", hint: "低于此震级不播报。默认 4.0；调低会收到更多小震。" },
+  earthquake_max_age_sec: { name: "事件最大时效（秒）", hint: "只播报在此时间窗口内发震/发布的事件，避免启动时补发旧闻。默认 300 秒。" },
+  earthquake_max_distance_km: { name: "最大震中距（km）", hint: "白名单群接收位置超过此距离不播报；0 = 不过滤。" },
+  earthquake_default_lat: { name: "默认接收纬度", hint: "群未单独设置位置时使用；需和默认经度同时填写，(0,0) 视为未设置。" },
+  earthquake_default_lon: { name: "默认接收经度", hint: "与默认接收纬度配合使用。" },
+  earthquake_default_place: { name: "默认接收地点名", hint: "仅用于播报展示，如「北京」；群内可用 /地震 位置 覆盖。" },
+  earthquake_countdown_max_ticks: { name: "倒计时条数上限", hint: "最多逐条发送多少条倒计时。剩余时间更长时先只发基本信息，抵达前最后 N 秒开始倒计时。" },
+  earthquake_countdown_max_wait_sec: { name: "倒计时最长等待（秒）", hint: "估算到达时间超过此值时只发基本信息，不启动长倒计时任务，避免远距离事件的任务长时间挂起。" },
+  earthquake_countdown_interval: { name: "倒计时发送间隔（秒）", hint: "默认 1.0（每秒一条），最小 1 秒；设为 2 时数字按 2 秒步长递减（如 10s、8s、6s…），降低刷屏频率。" },
+  earthquake_s_wave_km_s: { name: "S 波速度（km/s）", hint: "用于按接收位置估算到达时间，默认 3.5；不同地质区域有差异，仅供参考。" },
+  earthquake_broadcast_interval: { name: "多群发送间隔（秒）", hint: "向多个白名单群逐条发送时的间隔，降低平台频控风险。默认 0.6。" },
+  earthquake_http_timeout: { name: "预警源超时（秒）", hint: "单个上游请求超时；源之间并行，单源失败不影响其他源。" },
+  earthquake_sim_cooldown: { name: "模拟预警冷却（秒）", hint: "Pages 模拟预警的冷却时间，防止连续点击向白名单群刷屏。默认 30。" },
+  earthquake_extreme_cooldown: { name: "极限演练冷却（秒）", hint: "极限演练不显示模拟提示、消息与真实预警一致，误触风险更高；默认 300 秒，建议不要调低。" },
   // —— 分段回复 ——
   reply_seg_enable: { name: "分段回复总开关", hint: "开启后，机器人的回复会拆成多条消息分次发送，更像真人逐句说话。注意别和框架自带的分段同时开。" },
   reply_seg_only_llm: { name: "只分段 AI 回复", hint: "只拆 AI 说的话；关闭的话，/pixiv 这类命令的回复也会被拆。" },
@@ -476,6 +655,7 @@ function metaOf(key) {
 // ---------------------------------------------------------------- 导航
 const NAV = [
   { key: "dashboard", label: "仪表板", icon: "dashboard--outlined" },
+  { key: "quake", label: "地震预警", icon: "warning--outlined" },
   { key: "help", label: "帮助中心", icon: "help--outlined" },
   { key: "settings", label: "设置", icon: "settings--outlined" },
   { key: "coyote", label: "郊狼控制", icon: "bolt--outlined" },
@@ -566,8 +746,204 @@ const TEMPLATE = /* html */ `
               <mdui-chip :selected="!!status.feature_flags.dglab_webui_enabled">郊狼 WebUI</mdui-chip>
               <mdui-chip :selected="!!status.feature_flags.cross_group_enable">跨群记忆</mdui-chip>
               <mdui-chip :selected="!!status.feature_flags.group_switch_enable">按群开关</mdui-chip>
+              <mdui-chip :selected="!!status.feature_flags.earthquake_enable">地震预警</mdui-chip>
               <mdui-chip :selected="!!status.feature_flags.reply_seg_enable">分段回复</mdui-chip>
             </div>
+          </mdui-card>
+        </template>
+        <div v-else class="cc-loading">
+          <mdui-circular-progress></mdui-circular-progress>
+        </div>
+      </section>
+
+      <!-- ===== 地震预警 ===== -->
+      <section v-if="current === 'quake'" class="cc-section">
+        <div class="cc-head">
+          <h1>地震预警</h1>
+          <p>多预警源聚合 · 群聊白名单 · 到达倒计时 · 模拟演练</p>
+        </div>
+
+        <template v-if="quake">
+          <div class="cc-cards">
+            <mdui-card class="cc-card">
+              <mdui-icon slot="icon" name="groups" class="cc-card-icon"></mdui-icon>
+              <div class="cc-card-value">{{ quake.active_groups || 0 }}</div>
+              <div class="cc-card-label">白名单群聊</div>
+            </mdui-card>
+            <mdui-card class="cc-card">
+              <mdui-icon slot="icon" name="sensors" class="cc-card-icon"></mdui-icon>
+              <div class="cc-card-value">{{ quake.running ? "运行中" : (quake.enabled ? "待机" : "已关闭") }}</div>
+              <div class="cc-card-label">轮询状态</div>
+            </mdui-card>
+            <mdui-card class="cc-card">
+              <mdui-icon slot="icon" name="cloud_sync" class="cc-card-icon"></mdui-icon>
+              <div class="cc-card-value">{{ quakeSources().filter(s => s.ok).length }}/{{ quakeSources().length }}</div>
+              <div class="cc-card-label">预警源正常</div>
+            </mdui-card>
+            <mdui-card class="cc-card">
+              <mdui-icon slot="icon" name="campaign" class="cc-card-icon"></mdui-icon>
+              <div class="cc-card-value">{{ (quake.stats && quake.stats.alerts) || 0 }}</div>
+              <div class="cc-card-label">累计预警</div>
+            </mdui-card>
+          </div>
+
+          <mdui-card class="cc-panel">
+            <h2 class="cc-panel-title">
+              <mdui-icon name="warning" class="cc-panel-icon"></mdui-icon>
+              运行状态
+            </h2>
+            <div class="cc-quake-meta">
+              <span>轮询间隔：{{ quake.poll_interval }} 秒</span>
+              <span>最低震级：M{{ quake.min_magnitude }}</span>
+              <span>倒计时上限：最后 {{ quake.countdown_max_ticks }} 条</span>
+              <span>白名单：{{ quake.groups.length }} 个（启用 {{ quake.active_groups }}）</span>
+            </div>
+            <div class="cc-quake-actions">
+              <mdui-button variant="outlined" icon="refresh" :disabled="quakePolling" @click="pollQuake">
+                {{ quakePolling ? "检查中…" : "立即检查预警源" }}
+              </mdui-button>
+              <span v-if="quake.last_skip" class="cc-coyote-busy">{{ quake.last_skip }}</span>
+              <span v-else-if="quake.last_poll_error" class="cc-coyote-busy">{{ quake.last_poll_error }}</span>
+            </div>
+            <div v-if="quake.last_event" class="cc-quake-last">
+              最近预警：M{{ quake.last_event.magnitude }} {{ quake.last_event.place }}
+              （{{ quake.last_event.origin_time }}，{{ quake.last_event.source_label }}）
+            </div>
+            <div v-if="quake.last_simulation" class="cc-quake-last">
+              最近{{ quake.last_simulation.extreme ? "极限演练" : "模拟" }}：M{{ quake.last_simulation.magnitude }} {{ quake.last_simulation.place }}
+              （{{ quake.last_simulation.origin_time }}，{{ quake.last_simulation.groups }} 群）
+            </div>
+          </mdui-card>
+
+          <mdui-card class="cc-panel">
+            <h2 class="cc-panel-title">
+              <mdui-icon name="campaign" class="cc-panel-icon"></mdui-icon>
+              模拟预警
+            </h2>
+            <div class="cc-quake-warn">
+              ⚠️ 模拟预警会向全部白名单群聊发送消息，并先提醒「仅为模拟，不是真实地震」。
+              请勿在真实地震发生时使用，避免混淆。
+            </div>
+            <div class="cc-quake-mode">
+              <mdui-switch
+                :checked="!!quakeForm.extreme"
+                @change="setExtreme($event.target.checked)"
+              ></mdui-switch>
+              <div>
+                <div class="cc-quake-mode-title">极限演练模式</div>
+                <div class="cc-quake-mode-hint">
+                  开启后不发送「仅为模拟」提示，所有广播（含来源、倒计时、到达指引）与真实地震预警完全相同。
+                  极限演练按真实 S 波距离估算倒计时，不使用上方秒数；可能引起群成员恐慌，仅限已明确告知群成员的演练。
+                </div>
+              </div>
+            </div>
+            <div v-if="quakeForm.extreme" class="cc-quake-warn cc-quake-extreme-warn">
+              ⚠️ 极限演练消息无法与真实预警区分。请输入确认词「极限演练」后才能发送。
+              <mdui-text-field
+                label="输入「极限演练」确认"
+                :value="quakeForm.extremeConfirm"
+                @input="quakeForm.extremeConfirm = $event.target.value"
+              ></mdui-text-field>
+            </div>
+            <div class="cc-quake-form">
+              <mdui-text-field label="震级" type="number" step="0.1" min="0" max="10"
+                :value="quakeForm.magnitude"
+                @input="quakeForm.magnitude = $event.target.value"></mdui-text-field>
+              <mdui-text-field label="震中名称" :value="quakeForm.place"
+                @input="quakeForm.place = $event.target.value"></mdui-text-field>
+              <mdui-text-field label="震中城市（可选，填了可代替经纬度）" :value="quakeForm.city"
+                @input="quakeForm.city = $event.target.value"></mdui-text-field>
+              <mdui-text-field label="震源深度（km）" type="number" step="1" min="0" max="700"
+                :value="quakeForm.depth"
+                @input="quakeForm.depth = $event.target.value"></mdui-text-field>
+              <mdui-text-field label="倒计时秒数（0=按距离）" type="number" step="1" min="0" max="60"
+                :disabled="quakeForm.extreme"
+                :value="quakeForm.countdown"
+                @input="quakeForm.countdown = $event.target.value"></mdui-text-field>
+              <mdui-text-field label="震中纬度（可留空）" type="number" step="0.0001"
+                :value="quakeForm.latitude"
+                @input="quakeForm.latitude = $event.target.value"></mdui-text-field>
+              <mdui-text-field label="震中经度（可留空）" type="number" step="0.0001"
+                :value="quakeForm.longitude"
+                @input="quakeForm.longitude = $event.target.value"></mdui-text-field>
+            </div>
+            <div class="cc-quake-actions">
+              <mdui-button variant="filled" icon="campaign"
+                :disabled="quakeBusy || !quake.active_groups || !quake.enabled || (quakeForm.extreme && quakeForm.extremeConfirm !== '极限演练')"
+                @click="simulateQuake">{{ quakeBusy ? "发送中…" : (quakeForm.extreme ? "发起极限演练" : "发起模拟预警") }}</mdui-button>
+              <span v-if="!quake.enabled" class="cc-coyote-busy">
+                地震预警总开关已关闭，请先在「设置」中开启 earthquake_enable。
+              </span>
+              <span v-else-if="!quake.active_groups" class="cc-coyote-busy">
+                暂无启用的白名单群聊。请群主/管理员在目标群发送 /地震 开启 &lt;纬度&gt; &lt;经度&gt; [地点]
+              </span>
+              <span v-else class="cc-coyote-busy">
+                将向 {{ quake.active_groups }} 个群发送；{{ quakeForm.extreme ? "极限演练与真实预警完全一致" : "倒计时按各群最近接收城市估算（填 0 时），群内关闭倒计时则只发基本信息与到达指引" }}。
+              </span>
+            </div>
+          </mdui-card>
+
+          <mdui-card class="cc-panel">
+            <h2 class="cc-panel-title">
+              <mdui-icon name="group" class="cc-panel-icon"></mdui-icon>
+              群聊白名单
+            </h2>
+            <div v-if="quake.groups.length" class="mdui-table cc-quake-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>群号</th><th>平台</th><th>接收城市</th><th>倒计时</th><th>状态</th><th>启用人 / 时间</th><th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="g in quake.groups" :key="g.umo">
+                    <td>{{ g.group_id || "-" }}</td>
+                    <td>{{ g.platform_id || "-" }}</td>
+                    <td>
+                      <template v-if="g.locations && g.locations.length">
+                        <div v-for="(loc, li) in g.locations" :key="li">
+                          {{ loc.place || "未命名" }}
+                          <small>（{{ Number(loc.latitude).toFixed(4) }}, {{ Number(loc.longitude).toFixed(4) }}）</small>
+                        </div>
+                      </template>
+                      <span v-else>{{ g.place || "未设置" }}</span>
+                    </td>
+                    <td>{{ g.countdown_enabled === false ? "⛔ 关" : "✅ 开" }}</td>
+                    <td>{{ g.enabled ? "✅ 启用" : "⛔ 停用" }}</td>
+                    <td>{{ g.enabled_by || "-" }}<br><small>{{ g.enabled_at || "-" }}</small></td>
+                    <td>
+                      <mdui-button variant="text" icon="delete" @click="removeQuakeGroup(g)">移除</mdui-button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else class="cc-quake-empty">
+              尚无群聊启用。请让群主/管理员在目标群发送：<br>
+              <code>/地震 开启 北京</code><br>
+              一个群可用 <code>/地震 添加城市 上海</code> 添加多个接收城市。
+            </div>
+          </mdui-card>
+
+          <mdui-card class="cc-panel">
+            <h2 class="cc-panel-title">
+              <mdui-icon name="dns" class="cc-panel-icon"></mdui-icon>
+              预警源状态
+            </h2>
+            <div v-if="quakeSources().length" class="mdui-table cc-quake-table">
+              <table>
+                <thead><tr><th>预警源</th><th>状态</th><th>返回条数</th><th>最近错误</th></tr></thead>
+                <tbody>
+                  <tr v-for="s in quakeSources()" :key="s.key">
+                    <td>{{ s.label }}</td>
+                    <td>{{ s.last_ts ? (s.ok ? "✅ 正常" : "⚠️ 异常") : "⏳ 尚未检查" }}</td>
+                    <td>{{ s.count || 0 }}</td>
+                    <td class="cc-quake-error">{{ s.error || "-" }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else class="cc-quake-empty">预警服务未启动（全局开关关闭或服务未初始化）。</div>
           </mdui-card>
         </template>
         <div v-else class="cc-loading">
@@ -970,6 +1346,7 @@ function groupIcon(icon) {
     share: "share",
     switch: "toggle_on",
     scissors: "format_align_left",
+    warning: "warning",
   };
   return map[icon] || "tune";
 }
@@ -995,6 +1372,16 @@ createApp({
       relayConfirmOpen,
       relayConfirmText,
       relayConfirmReady,
+      quake,
+      quakeForm,
+      quakeBusy,
+      quakePolling,
+      quakeSources,
+      loadQuake,
+      pollQuake,
+      simulateQuake,
+      removeQuakeGroup,
+      setExtreme,
       openRelayConfirm,
       cancelRelayConfirm,
       relayUrl,
@@ -1043,6 +1430,7 @@ createApp({
   watch: {
     current(tab) {
       if (tab === "dashboard") this.loadStatus();
+      if (tab === "quake") this.loadQuake();
       if (tab === "help") this.loadHelp();
       if (tab === "settings") this.loadConfig();
       if (tab === "coyote") {
@@ -1053,5 +1441,6 @@ createApp({
   },
   created() {
     this.loadStatus();
+    if (current.value === "quake") this.loadQuake();
   },
 }).mount("#app");

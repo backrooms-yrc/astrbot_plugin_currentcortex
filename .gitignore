@@ -133,6 +133,7 @@ test_*.py
 !test_relay_pages.py
 !test_memory_and_switch.py
 !test_wikidot.py
+!test_earthquake.py
 
 # ============================================
 # 工具目录（本地 IDE / CLI 配置）

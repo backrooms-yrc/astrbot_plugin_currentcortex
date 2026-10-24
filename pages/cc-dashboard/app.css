@@ -437,6 +437,134 @@ body {
   margin-top: 2px;
 }
 
+/* ---------------- 地震预警 ---------------- */
+.cc-quake-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  font-size: 13.5px;
+  color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.cc-quake-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.cc-quake-warn {
+  margin-top: 4px;
+  padding: 12px 16px;
+  border-radius: var(--mdui-shape-corner-medium);
+  background: rgb(var(--mdui-color-error-container));
+  color: rgb(var(--mdui-color-on-error-container));
+  font-size: 13.5px;
+  line-height: 1.8;
+}
+
+.cc-quake-mode {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: var(--mdui-shape-corner-medium);
+  background: rgb(var(--mdui-color-surface-container-low));
+}
+
+.cc-quake-mode-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgb(var(--mdui-color-on-surface));
+}
+
+.cc-quake-mode-hint {
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.cc-quake-extreme-warn {
+  margin-top: 14px;
+}
+
+.cc-quake-extreme-warn mdui-text-field {
+  display: block;
+  margin-top: 10px;
+  max-width: 360px;
+  --mdui-text-field-container-color: rgb(var(--mdui-color-surface-container-lowest));
+}
+
+.cc-quake-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px 16px;
+  margin-top: 16px;
+}
+
+.cc-quake-form mdui-text-field {
+  width: 100%;
+  --mdui-text-field-container-color: rgb(var(--mdui-color-surface-container-low));
+}
+
+.cc-quake-last {
+  margin-top: 12px;
+  font-size: 13.5px;
+  color: rgb(var(--mdui-color-on-surface));
+}
+
+.cc-quake-table {
+  margin-top: 8px;
+  overflow-x: auto;
+}
+
+.cc-quake-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cc-quake-table th,
+.cc-quake-table td {
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid rgb(var(--mdui-color-outline-variant));
+  font-size: 13.5px;
+}
+
+.cc-quake-table th {
+  color: rgb(var(--mdui-color-on-surface-variant));
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.cc-quake-table small {
+  color: rgb(var(--mdui-color-on-surface-variant));
+  font-size: 11.5px;
+}
+
+.cc-quake-error {
+  max-width: 320px;
+  word-break: break-all;
+  color: rgb(var(--mdui-color-error));
+}
+
+.cc-quake-empty {
+  padding: 18px 0;
+  font-size: 13.5px;
+  line-height: 1.9;
+  color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.cc-quake-empty code {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgb(var(--mdui-color-surface-container-high));
+}
+
 .cc-coyote-link-row {
   margin-top: 14px;
   display: flex;

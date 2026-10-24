@@ -34,6 +34,19 @@ from .group_switch_store import GroupSwitchStore
 from .wikidot_client import WikidotClient, WikidotError
 from .wikidot_session_store import WikidotSessionStore
 from .wikidot_commands import WikidotCommandHandler
+from .earthquake import (
+    EarthquakeService,
+    add_group_location,
+    find_group,
+    format_time,
+    group_locations,
+    normalize_groups,
+    remove_group_location,
+    resolve_city_location,
+    set_group_countdown,
+    set_group_enabled,
+    upsert_group,
+)
 from astrbot.api.provider import ProviderRequest, LLMResponse
 from astrbot.core.agent.message import TextPart
 from astrbot.api.platform import MessageType
@@ -221,6 +234,13 @@ COMMAND_CATEGORIES = [
         "title": "Wikidot 站点",
         "commands": [
             {"cmd": "/wikidot", "alias": "wd/维基", "desc": "编辑 Wikidot 页面与管理站点（成员/设置/论坛/邀请）"},
+        ],
+    },
+    {
+        "icon": "warning",
+        "title": "地震预警",
+        "commands": [
+            {"cmd": "/地震", "alias": "earthquake/eq/预警", "desc": "群聊白名单预警：多源聚合，先发基本信息再逐条倒计时"},
         ],
     },
     {
@@ -1493,8 +1513,8 @@ def _remove_file_safe(file_path: str) -> None:
 @register(
     "astrbot_plugin_currentcortex",
     "Rcst20",
-    "多功能 AstrBot 插件（CurrentCortex）—— Pixiv 随机图片 ·网易云点歌 ·小红书/B站/抖音媒体解析 ·每日一言 ·天气 ·男娘 ·DG-LAB（郊狼） 设备管理 ·Wikidot 站点管理 ·跨群聊记忆 ·按群聊开关。基于 LeiZ API。",
-    "2.8.5",
+    "多功能 AstrBot 插件（CurrentCortex）—— Pixiv 随机图片 ·网易云点歌 ·小红书/B站/抖音媒体解析 ·每日一言 ·天气 ·男娘 ·地震预警 ·DG-LAB（郊狼） 设备管理 ·Wikidot 站点管理 ·跨群聊记忆 ·按群聊开关。基于 LeiZ API。",
+    "2.9.0",
 )
 class CurrentCortexPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -1933,6 +1953,20 @@ class CurrentCortexPlugin(Star):
 
         # 持有 config 引用：Page API（设置页）需要运行时写回并触发热重载。
         self.config = config
+        # 地震预警：多源聚合 + 群聊白名单 + 倒计时播报。
+        # 服务对象始终创建（Pages 需要读取白名单/状态与发起模拟），但只有全局
+        # 开关开启时才启动轮询任务；白名单为空时轮询会自动跳过请求。
+        self._earthquake_enable = bool(config.get("earthquake_enable", True))
+        self._earthquake_service: Optional[EarthquakeService] = None
+        try:
+            self._earthquake_service = EarthquakeService(self, data_dir=PLUGIN_DATA_DIR)
+            if self._earthquake_enable:
+                self._earthquake_service.start()
+            else:
+                logger.info("[Earthquake] 全局开关关闭，未启动轮询")
+        except Exception as e:
+            logger.warning(f"[Earthquake] 初始化失败，地震预警不可用: {e}")
+            self._earthquake_service = None
         # 记录启动时间（用于仪表板「运行时长」）
         self._started_at = time.time()
         # 注册 Page 后端 API（仪表板 / 设置 / 郊狼 / 帮助 / 联系）
@@ -1995,6 +2029,11 @@ class CurrentCortexPlugin(Star):
             "commands": ("wikidot", "wd", "维基"),
             "aliases": ("wikidot", "wd", "维基"),
         },
+        "earthquake": {
+            "label": "地震预警",
+            "commands": ("地震", "earthquake", "eq", "预警", "地震预警"),
+            "aliases": ("earthquake", "地震", "预警", "eq"),
+        },
         "memory": {
             "label": "跨群聊记忆",
             "commands": (),
@@ -2010,6 +2049,9 @@ class CurrentCortexPlugin(Star):
         "忘记", "forget_memory", "忘记记忆",
         "开关列表", "switch_list", "开关状态列表",
     )
+
+    # 地震预警命令名与别名（用于从 event.message_str 剥离命令前缀）
+    _EQ_COMMAND_ALIASES = ("地震", "earthquake", "eq", "预警", "地震预警")
 
     # 关闭期间「仅提醒一次」的节流间隔（同一群同一域）
     _SWITCH_HINT_INTERVAL_SECONDS = 3600.0
@@ -2232,7 +2274,8 @@ class CurrentCortexPlugin(Star):
                 "💡 用法：\n"
                 "  /开关 off [功能域] [时长]  关闭（功能域可选："
                 "media 媒体解析 / image 图片 / music 点歌 / utility 工具 / "
-                "dglab 电击 / memory 跨群记忆；不填则为全局全部命令；"
+                "dglab 电击 / memory 跨群记忆 / earthquake 地震预警；"
+                "不填则为全局全部命令；"
                 "时长如 2h/30m/1d，不填则永久）\n"
                 "  /开关 on [功能域]    重新启用\n"
                 "  /开关 status [功能域]  查看状态"
@@ -2329,7 +2372,8 @@ class CurrentCortexPlugin(Star):
             f"🔌 本群{target_desc}状态：{state}\n\n"
             "💡 用法：\n"
             "  /开关 off（或 关）[功能域] [时长]  关闭，功能域可选"
-            "（media/image/music/utility/dglab/memory），不填则为全局全部命令；"
+            "（media/image/music/utility/dglab/earthquake/memory），"
+            "不填则为全局全部命令；"
             "时长如 2h/30m/1d\n"
             "  /开关 on（或 开）[功能域]   重新启用\n"
             "  /开关 status（或 状态）[功能域]  查看当前状态"
@@ -2387,6 +2431,651 @@ class CurrentCortexPlugin(Star):
                     f"  ⛔ {name}｜{self._format_switch_until(item['until'])}"
                 )
         yield event.plain_result("\n".join(lines))
+
+    # =================================================================== #
+    # 地震预警：群聊白名单制（群主/群管理员用 /地震 开启）
+    # =================================================================== #
+    def get_earthquake_groups(self, active_only: bool = False) -> List[Dict[str, Any]]:
+        """读取配置中的地震预警群聊白名单（规范化后的 dict 列表）。"""
+        try:
+            groups = normalize_groups(
+                self.config.get("earthquake_group_whitelist", [])
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[Earthquake] 读取白名单失败: {e}")
+            groups = []
+        if active_only:
+            return [g for g in groups if g.get("enabled", True)]
+        return groups
+
+    async def _save_earthquake_groups(self, groups: List[Dict[str, Any]]) -> None:
+        """写回白名单配置并落盘；不触发热重载，轮询任务下一轮即可读到。"""
+        clean: List[Dict[str, Any]] = []
+        for group in groups:
+            clean.append(
+                {
+                    "umo": group.get("umo", ""),
+                    "platform_id": group.get("platform_id", ""),
+                    "group_id": group.get("group_id", ""),
+                    "place": group.get("place", ""),
+                    "latitude": group.get("latitude"),
+                    "longitude": group.get("longitude"),
+                    "locations": [
+                        {
+                            "place": loc.get("place", ""),
+                            "latitude": loc.get("latitude"),
+                            "longitude": loc.get("longitude"),
+                        }
+                        for loc in (group.get("locations") or [])
+                    ],
+                    "countdown_enabled": bool(
+                        group.get("countdown_enabled", True)
+                    ),
+                    "enabled": bool(group.get("enabled", True)),
+                    "enabled_by": group.get("enabled_by", ""),
+                    "enabled_at": group.get("enabled_at", ""),
+                }
+            )
+        self.config["earthquake_group_whitelist"] = clean
+        try:
+            save = getattr(self.config, "save_config_async", None)
+            if callable(save):
+                await save()
+            else:
+                await asyncio.to_thread(self.config.save_config)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[Earthquake] 保存白名单失败: {e}")
+
+    def is_earthquake_muted(self, umo: str) -> bool:
+        """群级 /开关 off earthquake 时，后台播报同样静音。"""
+        store = getattr(self, "_group_switch_store", None)
+        if store is None:
+            return False
+        try:
+            return not store.is_enabled(umo, "earthquake")
+        except Exception:
+            return False
+
+    async def remove_earthquake_group(self, umo: str) -> bool:
+        """Pages 管理：从白名单中彻底移除一个群。"""
+        groups = self.get_earthquake_groups()
+        kept = [g for g in groups if g.get("umo") != umo]
+        if len(kept) == len(groups):
+            return False
+        await self._save_earthquake_groups(kept)
+        return True
+
+    async def simulate_earthquake(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Pages 模拟预警入口（由 EarthquakeService 校验并广播）。"""
+        service = getattr(self, "_earthquake_service", None)
+        if service is None:
+            raise RuntimeError("地震预警服务未初始化")
+        return await service.simulate(payload)
+
+    @classmethod
+    def _eq_strip_command(cls, message: str) -> str:
+        text = re.sub(r"^[/!！]\s*", "", (message or "").strip()).strip()
+        if not text:
+            return ""
+        parts = text.split(maxsplit=1)
+        if parts[0].lower() in cls._EQ_COMMAND_ALIASES:
+            return parts[1].strip() if len(parts) > 1 else ""
+        return text
+
+    @staticmethod
+    def _eq_parse_location(
+        tokens: List[str],
+    ) -> tuple[Optional[float], Optional[float], str, str]:
+        if not tokens:
+            return None, None, "", ""
+        if len(tokens) < 2:
+            return (
+                None,
+                None,
+                "",
+                "❌ 请同时提供纬度和经度，如：/地震 开启 39.9042 116.4074 北京",
+            )
+        try:
+            latitude = float(tokens[0])
+            longitude = float(tokens[1])
+        except (TypeError, ValueError):
+            return (
+                None,
+                None,
+                "",
+                "❌ 纬度/经度必须是数字，如：/地震 开启 39.9042 116.4074 北京",
+            )
+        if not (-90.0 <= latitude <= 90.0):
+            return None, None, "", "❌ 纬度必须在 -90~90 之间"
+        if not (-180.0 <= longitude <= 180.0):
+            return None, None, "", "❌ 经度必须在 -180~180 之间"
+        if latitude == 0.0 and longitude == 0.0:
+            return None, None, "", "❌ (0, 0) 不是有效的接收位置，请填写真实经纬度"
+        place = " ".join(tokens[2:]).strip()
+        return latitude, longitude, place, ""
+
+    async def _eq_parse_location_or_city(
+        self, tokens: List[str]
+    ) -> tuple[Optional[float], Optional[float], str, str]:
+        """解析接收位置：优先经纬度，其次城市名（离线地级市表 + 在线兜底）。"""
+        if not tokens:
+            return None, None, "", ""
+        numeric_first = False
+        try:
+            float(tokens[0])
+            numeric_first = True
+        except (TypeError, ValueError):
+            numeric_first = False
+        if numeric_first:
+            return self._eq_parse_location(tokens)
+        query = " ".join(tokens).strip()
+        resolved = await resolve_city_location(query)
+        if resolved is None:
+            return (
+                None,
+                None,
+                "",
+                f"❌ 未找到城市「{query}」\n"
+                "💡 可直接使用常见城市名（北京/唐山/乌鲁木齐/台北/东京等），"
+                "区县或境外地名会联网解析；也可以直接填经纬度：\n"
+                "  /地震 开启 39.9042 116.4074 北京",
+            )
+        latitude, longitude, display = resolved
+        return latitude, longitude, display, ""
+
+    def _eq_default_place(self) -> str:
+        return str(self.config.get("earthquake_default_place", "") or "").strip()
+
+    def _eq_default_location(self) -> Optional[tuple[float, float, str]]:
+        try:
+            latitude = float(self.config.get("earthquake_default_lat", 0) or 0)
+            longitude = float(self.config.get("earthquake_default_lon", 0) or 0)
+        except (TypeError, ValueError):
+            return None
+        if latitude == 0.0 and longitude == 0.0:
+            return None
+        if not (-90.0 <= latitude <= 90.0 and -180.0 <= longitude <= 180.0):
+            return None
+        return latitude, longitude, self._eq_default_place()
+
+    async def _eq_can_manage(self, event: AstrMessageEvent) -> tuple[bool, str]:
+        """群主 / 群管理员 / AstrBot 全局管理员才可修改本群预警设置。"""
+        if event.is_admin():
+            return True, ""
+        if event.get_message_type() != MessageType.GROUP_MESSAGE:
+            return False, "💡 地震预警按群启用，请在群聊中由群主/管理员操作"
+        sender_id = str(event.get_sender_id() or "")
+        group = None
+        getter = getattr(event, "get_group", None)
+        if callable(getter):
+            try:
+                group = await getter()
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"[Earthquake] 获取群管理员信息失败: {e}")
+        if group is not None:
+            owner = str(getattr(group, "group_owner", "") or "")
+            admins = {
+                str(item) for item in (getattr(group, "group_admins", None) or [])
+            }
+            if sender_id and (sender_id == owner or sender_id in admins):
+                return True, ""
+            return False, (
+                "❌ 仅群主/群管理员可操作地震预警\n"
+                "💡 请让群主或管理员发送该命令；AstrBot 全局管理员同样可以操作。"
+            )
+        return False, (
+            "❌ 无法获取本群管理员信息（协议端未提供成员角色）\n"
+            "💡 请由 AstrBot 全局管理员操作，或换用支持群成员角色的协议端。"
+        )
+
+    @staticmethod
+    def _eq_help_text() -> str:
+        return (
+            "🌏 地震预警（群聊白名单制）\n\n"
+            "  /地震 开启 <城市名>\n"
+            "      启用本群并添加接收城市，如 /地震 开启 北京\n"
+            "  /地震 添加城市 <城市名 | 纬度 经度 [地点]>\n"
+            "      一个群可添加多个城市（最多 20 个）\n"
+            "  /地震 移除城市 <城市名>\n"
+            "      移除一个接收城市\n"
+            "  /地震 城市列表\n"
+            "      查看本群全部接收城市\n"
+            "  /地震 倒计时 开 / 关\n"
+            "      控制预警时是否逐条发送倒计时数字（防刷屏；关闭后仍会发送到达指引）\n"
+            "  /地震 位置 <城市名>\n"
+            "      将接收城市替换为唯一城市\n"
+            "  /地震 关闭\n"
+            "      停用本群预警（保留城市列表）\n"
+            "  /地震 状态\n"
+            "      查看本群与全局运行状态、最近预警\n"
+            "  /地震 帮助\n"
+            "      显示本帮助\n\n"
+            "💡 仅群主/群管理员可修改；预警时先发基本信息，再按最近接收点逐条倒计时。\n"
+            "💡 城市名优先查内置全国地级市表（秒回、离线）；区县或境外城市会联网解析"
+            "（© OpenStreetMap contributors）。区县请带「区/县」后缀，如 朝阳区。\n"
+            "💡 示例：/地震 开启 唐山、/地震 添加城市 上海、/地震 倒计时 关\n"
+            "💡 数据源：中国地震台网/川滇/福建/日本气象厅预警 + CENC 速报 + USGS；"
+            "仅供参考，请以官方发布为准。"
+        )
+
+    def _eq_status_text(
+        self,
+        group: Optional[Dict[str, Any]],
+        service_status: Optional[Dict[str, Any]],
+    ) -> str:
+        lines = ["🌏 地震预警状态"]
+        if group is None:
+            lines.append("本群：尚未启用（群主/管理员发送 /地震 开启 ...）")
+        else:
+            state = "✅ 已启用" if group.get("enabled", True) else "⛔ 已关闭"
+            lines.append(f"本群：{state}")
+            locations = group_locations(group)
+            if locations:
+                lines.append("接收城市：")
+                for location in locations[:10]:
+                    lines.append(
+                        f"  · {location.get('place') or '未命名'}"
+                        f"（{float(location['latitude']):.4f}, "
+                        f"{float(location['longitude']):.4f}）"
+                    )
+                if len(locations) > 10:
+                    lines.append(f"  · 等共 {len(locations)} 个城市")
+            else:
+                lines.append("接收城市：未设置（将使用插件默认坐标；也可 /地震 开启 北京）")
+            countdown_state = (
+                "✅ 开启" if group.get("countdown_enabled", True) else "⛔ 关闭"
+            )
+            lines.append(f"逐条倒计时：{countdown_state}")
+        if service_status:
+            running = "✅ 运行中" if service_status.get("running") else "⛔ 未运行"
+            lines.append(
+                f"全局：{running}｜白名单 {service_status.get('active_groups', 0)} 群"
+                f"｜轮询 {service_status.get('poll_interval', '-')}s"
+                f"｜震级阈值 M{service_status.get('min_magnitude', '-')}"
+            )
+            last = service_status.get("last_event")
+            if last:
+                try:
+                    magnitude = f"M{float(last.get('magnitude')):g}"
+                except (TypeError, ValueError):
+                    magnitude = "-"
+                lines.append(
+                    f"最近预警：{magnitude} {last.get('place', '-')}"
+                    f"（{last.get('origin_time', '-')}，{last.get('source_label', '-')}）"
+                )
+            sources = service_status.get("sources") or {}
+            if sources:
+                ok_count = sum(1 for item in sources.values() if item.get("ok"))
+                lines.append(f"预警源：{ok_count}/{len(sources)} 正常")
+            if service_status.get("last_skip"):
+                lines.append(f"提示：{service_status['last_skip']}")
+        else:
+            lines.append("⚠️ 预警服务未初始化，请检查插件日志或重新加载插件")
+        lines.append(
+            "用法：/地震 开启 <城市名> · /地震 添加城市 <城市名> · "
+            "/地震 移除城市 <城市名> · /地震 倒计时 开/关 · /地震 帮助"
+        )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _eq_locations_lines(group: Optional[Dict[str, Any]]) -> List[str]:
+        """白名单城市的简要列表（供列表/添加/移除/开启回复复用）。"""
+        if group is None:
+            return ["接收城市：未设置"]
+        locations = group_locations(group)
+        if not locations:
+            return ["接收城市：未设置"]
+        lines = ["接收城市："]
+        for location in locations[:10]:
+            lines.append(
+                f"  · {location.get('place') or '未命名'}"
+                f"（{float(location['latitude']):.4f}, "
+                f"{float(location['longitude']):.4f}）"
+            )
+        if len(locations) > 10:
+            lines.append(f"  · 等共 {len(locations)} 个城市")
+        countdown_state = (
+            "✅ 开启" if group.get("countdown_enabled", True) else "⛔ 关闭"
+        )
+        lines.append(f"逐条倒计时：{countdown_state}")
+        return lines
+
+    @filter.command("地震", alias={"earthquake", "eq", "预警", "地震预警"})
+    async def earthquake_command(self, event: AstrMessageEvent):
+        """地震预警：群聊白名单制，群主/群管理员可启用、关闭、添加多个城市。"""
+        service = getattr(self, "_earthquake_service", None)
+        service_status = None
+        if service is not None:
+            try:
+                service_status = service.status()
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"[Earthquake] 读取状态失败: {e}")
+
+        umo = event.unified_msg_origin or ""
+        group = find_group(self.get_earthquake_groups(), umo) if umo else None
+        rest = self._eq_strip_command(event.message_str)
+        tokens = rest.split()
+        action = tokens[0].lower() if tokens else ""
+
+        status_actions = ("", "状态", "status", "info")
+        help_actions = ("帮助", "help", "?", "？")
+        list_actions = ("列表", "城市列表", "接收点", "list", "城市")
+        add_actions = ("添加", "添加城市", "add", "添加接收点", "添加地点")
+        remove_actions = ("移除", "移除城市", "删除", "remove", "del", "删除城市")
+        countdown_actions = ("倒计时", "countdown", "cd")
+        close_actions = ("关闭", "off", "disable", "关")
+        position_actions = ("位置", "location", "loc", "设置位置")
+        enable_actions = ("开启", "on", "enable", "打开")
+
+        if action in status_actions:
+            yield event.plain_result(self._eq_status_text(group, service_status))
+            return
+        if action in help_actions:
+            yield event.plain_result(self._eq_help_text())
+            return
+        if action in list_actions:
+            if group is None:
+                yield event.plain_result(
+                    "ℹ️ 本群尚未启用地震预警\n"
+                    "💡 发送 /地震 开启 北京 即可启用并添加接收城市"
+                )
+                return
+            yield event.plain_result(
+                "📍 本群地震预警接收城市\n"
+                + "\n".join(self._eq_locations_lines(group))
+                + "\n\n💡 添加：/地震 添加城市 上海；移除：/地震 移除城市 上海"
+            )
+            return
+
+        if action in countdown_actions:
+            if group is None:
+                yield event.plain_result(
+                    "❌ 本群尚未启用地震预警\n"
+                    "💡 请先发送 /地震 开启 北京"
+                )
+                return
+            args = tokens[1:]
+            if not args or args[0].lower() in ("状态", "status", "info"):
+                state = (
+                    "✅ 已开启" if group.get("countdown_enabled", True) else "⛔ 已关闭"
+                )
+                yield event.plain_result(
+                    f"⏳ 本群逐条倒计时：{state}\n"
+                    "💡 设置：/地震 倒计时 开 / /地震 倒计时 关"
+                )
+                return
+            ok, reason = await self._eq_can_manage(event)
+            if not ok:
+                yield event.plain_result(reason)
+                return
+            if event.get_message_type() != MessageType.GROUP_MESSAGE:
+                yield event.plain_result("💡 地震预警按群设置，请在群聊中操作")
+                return
+            operator = str(event.get_sender_name() or event.get_sender_id() or "")
+            stamp = format_time(time.time())
+            value = args[0].lower()
+            if value in ("开", "on", "开启", "启用", "open"):
+                enabled = True
+            elif value in ("关", "off", "关闭", "禁用", "close"):
+                enabled = False
+            else:
+                yield event.plain_result(
+                    "❌ 无法识别的倒计时设置\n"
+                    "💡 用法：/地震 倒计时 开 或 /地震 倒计时 关"
+                )
+                return
+            updated = set_group_countdown(group, enabled)
+            updated["enabled_by"] = operator
+            updated["enabled_at"] = stamp
+            groups = upsert_group(self.get_earthquake_groups(), updated)
+            await self._save_earthquake_groups(groups)
+            yield event.plain_result(
+                f"✅ 本群逐条倒计时已{'开启' if enabled else '关闭'}\n"
+                + (
+                    "预警时发送基本信息、倒计时数字，以及到达后的规避指引。"
+                    if enabled
+                    else "预警时发送基本信息和到达后的规避指引，不再逐条发送倒计时数字。"
+                )
+            )
+            return
+
+        if action not in (
+            *close_actions,
+            *position_actions,
+            *add_actions,
+            *remove_actions,
+            *enable_actions,
+        ):
+            yield event.plain_result("❌ 未知操作\n\n" + self._eq_help_text())
+            return
+
+        ok, reason = await self._eq_can_manage(event)
+        if not ok:
+            yield event.plain_result(reason)
+            return
+        if event.get_message_type() != MessageType.GROUP_MESSAGE:
+            yield event.plain_result("💡 地震预警按群启用，请在群聊中操作")
+            return
+        if not umo:
+            yield event.plain_result("❌ 无法获取当前会话标识，操作失败")
+            return
+
+        operator = str(event.get_sender_name() or event.get_sender_id() or "")
+        stamp = format_time(time.time())
+        groups = self.get_earthquake_groups()
+
+        if action in close_actions:
+            if group is None or not group.get("enabled", True):
+                yield event.plain_result("ℹ️ 本群尚未启用地震预警")
+                return
+            groups = set_group_enabled(
+                groups, umo, False, operator=operator, timestamp=stamp
+            )
+            await self._save_earthquake_groups(groups)
+            yield event.plain_result(
+                "⛔ 已关闭本群地震预警\n"
+                "💡 重新启用：/地震 开启 <城市名>（如 /地震 开启 北京）"
+            )
+            return
+
+        if action in position_actions:
+            if group is None:
+                yield event.plain_result(
+                    "❌ 本群尚未启用地震预警\n"
+                    "💡 请先发送 /地震 开启 北京"
+                )
+                return
+            if not tokens[1:]:
+                yield event.plain_result(
+                    "❌ 请提供接收城市：/地震 位置 上海\n"
+                    "💡 这会替换本群原有的全部接收城市；只想追加请用 /地震 添加城市"
+                )
+                return
+            latitude, longitude, place, error = await self._eq_parse_location_or_city(
+                tokens[1:]
+            )
+            if error:
+                yield event.plain_result(error)
+                return
+            place = place or self._eq_default_place() or "本群"
+            updated = dict(group)
+            updated["locations"] = [
+                {
+                    "place": place,
+                    "latitude": latitude,
+                    "longitude": longitude,
+                }
+            ]
+            updated["place"] = place
+            updated["latitude"] = latitude
+            updated["longitude"] = longitude
+            updated["enabled_by"] = operator
+            updated["enabled_at"] = stamp
+            groups = upsert_group(groups, updated)
+            await self._save_earthquake_groups(groups)
+            yield event.plain_result(
+                f"✅ 本群接收城市已设为唯一城市：{place}"
+                f"（{latitude:.4f}, {longitude:.4f}）"
+                + (
+                    ""
+                    if group.get("enabled", True)
+                    else "\n⚠️ 本群当前为关闭状态，发送 /地震 开启 后才会接收预警"
+                )
+            )
+            return
+
+        if action in add_actions:
+            if group is None:
+                yield event.plain_result(
+                    "❌ 本群尚未启用地震预警\n"
+                    "💡 先发送 /地震 开启 北京，再用 /地震 添加城市 上海"
+                )
+                return
+            if not tokens[1:]:
+                yield event.plain_result(
+                    "❌ 请提供要添加的城市：/地震 添加城市 上海\n"
+                    "💡 也可以填经纬度：/地震 添加城市 31.23 121.47 上海"
+                )
+                return
+            latitude, longitude, place, error = await self._eq_parse_location_or_city(
+                tokens[1:]
+            )
+            if error:
+                yield event.plain_result(error)
+                return
+            existing = group_locations(group)
+            if len(existing) >= 20 and not any(
+                abs(float(loc["latitude"]) - latitude) < 0.001
+                and abs(float(loc["longitude"]) - longitude) < 0.001
+                for loc in existing
+            ):
+                yield event.plain_result("❌ 每个群最多添加 20 个接收城市")
+                return
+            updated, added = add_group_location(
+                group,
+                {"place": place, "latitude": latitude, "longitude": longitude},
+            )
+            if added is None:
+                yield event.plain_result("❌ 无法解析该城市，请换一个城市名或填写经纬度")
+                return
+            updated["enabled_by"] = operator
+            updated["enabled_at"] = stamp
+            groups = upsert_group(groups, updated)
+            await self._save_earthquake_groups(groups)
+            state_note = (
+                ""
+                if group.get("enabled", True)
+                else "\n⚠️ 本群当前为关闭状态，发送 /地震 开启 后才会接收预警"
+            )
+            yield event.plain_result(
+                "✅ 已添加接收城市\n"
+                + "\n".join(self._eq_locations_lines(updated))
+                + state_note
+            )
+            return
+
+        if action in remove_actions:
+            if group is None:
+                yield event.plain_result("ℹ️ 本群尚未启用地震预警")
+                return
+            query = " ".join(tokens[1:]).strip()
+            if not query:
+                yield event.plain_result(
+                    "❌ 请提供要移除的城市：/地震 移除城市 上海\n"
+                    + "\n".join(self._eq_locations_lines(group))
+                )
+                return
+            updated, removed, removed_loc = remove_group_location(group, query)
+            if not removed:
+                yield event.plain_result(
+                    f"❌ 没有找到接收城市「{query}」\n"
+                    + "\n".join(self._eq_locations_lines(group))
+                )
+                return
+            if not group_locations(updated):
+                updated["enabled"] = False
+            updated["enabled_by"] = operator
+            updated["enabled_at"] = stamp
+            groups = upsert_group(groups, updated)
+            await self._save_earthquake_groups(groups)
+            removed_name = (removed_loc or {}).get("place") or query
+            if not group_locations(updated):
+                yield event.plain_result(
+                    f"✅ 已移除接收城市：{removed_name}\n"
+                    "⚠️ 已没有接收城市，本群预警已自动关闭。"
+                )
+            else:
+                yield event.plain_result(
+                    f"✅ 已移除接收城市：{removed_name}\n"
+                    + "\n".join(self._eq_locations_lines(updated))
+                )
+            return
+
+        # 开启（可带城市名；重复执行会追加城市）
+        if not tokens[1:]:
+            existing = group_locations(group) if group is not None else []
+            if existing:
+                updated = dict(group or {})
+                updated["enabled"] = True
+                updated["enabled_by"] = operator
+                updated["enabled_at"] = stamp
+                groups = upsert_group(groups, updated)
+                await self._save_earthquake_groups(groups)
+                yield event.plain_result(
+                    "✅ 已在本群启用地震预警\n"
+                    + "\n".join(self._eq_locations_lines(updated))
+                )
+                return
+            default = self._eq_default_location()
+            if default is None:
+                yield event.plain_result(
+                    "❌ 请告诉我在哪个城市接收预警：\n"
+                    "  /地震 开启 北京\n"
+                    "  /地震 开启 唐山\n"
+                    "💡 也可以填经纬度：/地震 开启 39.9042 116.4074 北京\n"
+                    "💡 或先在插件配置中填写 earthquake_default_lat / "
+                    "earthquake_default_lon，之后直接 /地震 开启"
+                )
+                return
+            latitude, longitude, place = default
+        else:
+            latitude, longitude, place, error = await self._eq_parse_location_or_city(
+                tokens[1:]
+            )
+            if error:
+                yield event.plain_result(error)
+                return
+        place = place or self._eq_default_place() or "本群"
+        existing_locations = group_locations(group) if group is not None else []
+        if len(existing_locations) >= 20 and not any(
+            abs(float(loc["latitude"]) - latitude) < 0.001
+            and abs(float(loc["longitude"]) - longitude) < 0.001
+            for loc in existing_locations
+        ):
+            yield event.plain_result("❌ 每个群最多添加 20 个接收城市")
+            return
+        base = dict(group) if group is not None else {
+            "umo": umo,
+            "platform_id": event.get_platform_id(),
+            "group_id": event.get_group_id(),
+            "locations": [],
+            "countdown_enabled": True,
+        }
+        base["enabled"] = True
+        base["enabled_by"] = operator
+        base["enabled_at"] = stamp
+        updated, _ = add_group_location(
+            base, {"place": place, "latitude": latitude, "longitude": longitude}
+        )
+        groups = upsert_group(groups, updated)
+        await self._save_earthquake_groups(groups)
+        yield event.plain_result(
+            "✅ 已在本群启用地震预警\n"
+            + "\n".join(self._eq_locations_lines(updated))
+            + "\n🌐 预警源：CENC/川滇/福建/日本气象厅 + CENC速报 + USGS\n"
+            "⏳ 预警时先发基本信息，再按最近接收点逐条倒计时。\n"
+            "💡 添加更多城市：/地震 添加城市 上海；关倒计时：/地震 倒计时 关"
+        )
 
     def _parse_switch_action(self, message: str) -> str:
         """从开关命令消息中解析动作：on / off / status / （空）。"""
@@ -6530,6 +7219,16 @@ class CurrentCortexPlugin(Star):
         except Exception:
             return "127.0.0.1"
 
+    async def initialize(self):
+        # 兜底：若插件实例化时没有可用事件循环，这里再尝试启动地震预警轮询。
+        # start() 幂等，已启动时不会重复创建任务。
+        service = getattr(self, "_earthquake_service", None)
+        if service is not None and getattr(self, "_earthquake_enable", False):
+            try:
+                service.start()
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"[Earthquake] 启动轮询失败: {e}")
+
     async def terminate(self):
         logger.info("CurrentCortexPlugin is being terminated")
         # 跨群记忆为后台线程异步刷盘，停用前必须同步做最终落盘
@@ -6551,6 +7250,12 @@ class CurrentCortexPlugin(Star):
                 logger.info("✅ Wikidot 会话已注销")
             except Exception as e:
                 logger.debug(f"[Wikidot] 注销会话失败（忽略）: {e}")
+        if getattr(self, "_earthquake_service", None) is not None:
+            try:
+                await self._earthquake_service.stop()
+                logger.info("✅ 地震预警轮询已停止")
+            except Exception as e:
+                logger.warning(f"[Earthquake] 停止轮询失败: {e}")
 
     @filter.command("dglab", alias={"电击"})
     async def dglab_command(self, event: AstrMessageEvent):

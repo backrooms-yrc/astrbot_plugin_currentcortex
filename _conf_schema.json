@@ -228,6 +228,122 @@
     "type": "bool",
     "default": true
   },
+  "earthquake_enable": {
+    "description": "【地震预警】总开关。开启且至少一个群聊在白名单中时，插件才会轮询公开预警源并向白名单群广播；关闭后不请求任何上游。群聊需由群主/群管理员发送 /地震 开启 加入白名单",
+    "type": "bool",
+    "default": true
+  },
+  "earthquake_poll_interval": {
+    "description": "【地震预警】轮询间隔（秒）。越短越及时，但对上游请求越频繁；默认 30，追求及时性可调 10~15 秒，注意上游频率。仅在存在启用中的白名单群时生效",
+    "type": "int",
+    "default": 30,
+    "slider": {"min": 10, "max": 300, "step": 5}
+  },
+  "earthquake_min_magnitude": {
+    "description": "【地震预警】最低播报震级。低于该震级的事件不播报；默认 4.0。设为 0 可接收全部（小震可能较多）",
+    "type": "float",
+    "default": 4.0,
+    "hint": "建议 3.5~4.5；预警源对近场小震也可能有价值，可按群需求调整"
+  },
+  "earthquake_max_age_sec": {
+    "description": "【地震预警】事件最大时效（秒）。只播报发震/发布在此时间窗口内的事件，避免插件启动或上游延迟时补发旧闻；默认 300 秒",
+    "type": "int",
+    "default": 300,
+    "slider": {"min": 60, "max": 1800, "step": 30}
+  },
+  "earthquake_max_distance_km": {
+    "description": "【地震预警】最大震中距过滤（km）。白名单群接收位置超过该距离则不播报；默认 1000，0 = 不过滤（会收到全球源较远处的小震）",
+    "type": "int",
+    "default": 1000,
+    "slider": {"min": 0, "max": 3000, "step": 50}
+  },
+  "earthquake_default_lat": {
+    "description": "【地震预警】默认接收位置纬度。某个群未单独设置位置时使用；与 earthquake_default_lon 同时填写才生效（0,0 视为未设置）",
+    "type": "float",
+    "default": 0.0
+  },
+  "earthquake_default_lon": {
+    "description": "【地震预警】默认接收位置经度（与 earthquake_default_lat 配合使用）",
+    "type": "float",
+    "default": 0.0
+  },
+  "earthquake_default_place": {
+    "description": "【地震预警】默认接收位置名称（如「北京」），仅用于播报展示；可在群内用 /地震 位置 单独覆盖",
+    "type": "string",
+    "default": ""
+  },
+  "earthquake_countdown_max_ticks": {
+    "description": "【地震预警】倒计时最多发送多少条。剩余时间超过该值时只播报基本信息，抵达前最后 N 秒开始逐条倒计时；默认 30 条",
+    "type": "int",
+    "default": 30,
+    "slider": {"min": 1, "max": 60, "step": 1}
+  },
+  "earthquake_countdown_max_wait_sec": {
+    "description": "【地震预警】倒计时最长等待（秒）。估算到达时间超过该值时只发基本信息、不启动长倒计时任务（避免远距离事件的任务长时间挂起）；默认 300 秒",
+    "type": "int",
+    "default": 300,
+    "slider": {"min": 30, "max": 1800, "step": 30}
+  },
+  "earthquake_countdown_interval": {
+    "description": "【地震预警】倒计时发送间隔（秒），最小 1.0（默认每秒一条）。设为 2 时数字按 2 秒步长递减（如 10s、8s、6s…），降低刷屏频率",
+    "type": "float",
+    "default": 1.0
+  },
+  "earthquake_s_wave_km_s": {
+    "description": "【地震预警】S 波传播速度（km/s），用于按接收位置估算到达时间；默认 3.5。不同地质区域有差异，仅供参考",
+    "type": "float",
+    "default": 3.5
+  },
+  "earthquake_broadcast_interval": {
+    "description": "【地震预警】向多个白名单群逐条发送时的间隔（秒），用于降低平台频控风险；默认 0.6",
+    "type": "float",
+    "default": 0.6
+  },
+  "earthquake_http_timeout": {
+    "description": "【地震预警】单个预警源请求超时（秒）；源之间并行请求，单源超时不影响其他源",
+    "type": "int",
+    "default": 10,
+    "slider": {"min": 3, "max": 30, "step": 1}
+  },
+  "earthquake_sim_cooldown": {
+    "description": "【地震预警】Pages「模拟预警」冷却时间（秒），防止误触/连续点击向白名单群刷屏；默认 30",
+    "type": "int",
+    "default": 30,
+    "slider": {"min": 0, "max": 600, "step": 10}
+  },
+  "earthquake_extreme_cooldown": {
+    "description": "【地震预警·极限演练】冷却时间（秒）。极限演练不发「模拟」提示、消息与真实预警一致，误触风险更高；默认 300 秒，建议不要调低",
+    "type": "int",
+    "default": 300,
+    "slider": {"min": 30, "max": 3600, "step": 30}
+  },
+  "earthquake_group_whitelist": {
+    "description": "【地震预警】群聊白名单。每项包含会话标识、群号、接收城市列表、倒计时开关与启用状态；一般由群主/群管理员在群内发送 /地震 开启 自动写入（推荐，会自动补全城市坐标），也可在此查看或删除。一个群可添加多个接收城市（最多 20 个）",
+    "type": "list",
+    "default": [],
+    "items": {
+      "umo": {"type": "string", "description": "会话标识（平台:GroupMessage:群号）", "default": ""},
+      "platform_id": {"type": "string", "description": "平台实例 ID", "default": ""},
+      "group_id": {"type": "string", "description": "群号", "default": ""},
+      "place": {"type": "string", "description": "主接收城市名称（兼容字段）", "default": ""},
+      "latitude": {"type": "float", "description": "主接收城市纬度（兼容字段）", "default": 0.0},
+      "longitude": {"type": "float", "description": "主接收城市经度（兼容字段）", "default": 0.0},
+      "locations": {
+        "type": "list",
+        "description": "接收城市列表（place/latitude/longitude）",
+        "default": [],
+        "items": {
+          "place": {"type": "string", "description": "城市名称", "default": ""},
+          "latitude": {"type": "float", "description": "纬度", "default": 0.0},
+          "longitude": {"type": "float", "description": "经度", "default": 0.0}
+        }
+      },
+      "countdown_enabled": {"type": "bool", "description": "是否逐条发送倒计时数字", "default": true},
+      "enabled": {"type": "bool", "description": "是否启用", "default": true},
+      "enabled_by": {"type": "string", "description": "启用/修改人", "default": ""},
+      "enabled_at": {"type": "string", "description": "启用/修改时间", "default": ""}
+    }
+  },
   "reply_seg_enable": {
     "description": "【分段回复总开关】开启后，机器人回复会按规则拆成多条消息分次发送（模拟逐条回复）。注意：AstrBot 框架自带全局分段回复(platform_settings.segmented_reply)，本功能与之独立，二者请勿同时开启以免重复分段",
     "type": "bool",

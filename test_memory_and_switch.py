@@ -221,25 +221,54 @@ def _read_json(path):
         return json.load(f)
 
 
+class _FakeGroup:
+    def __init__(self, owner=None, admins=None):
+        self.group_owner = owner
+        self.group_admins = admins
+
+
 class FakeEvent:
     """命令处理器所需的最小事件桩。"""
 
-    def __init__(self, message_str, umo="aiocqhttp:GroupMessage:10000", admin=True):
+    def __init__(
+        self,
+        message_str,
+        umo="aiocqhttp:GroupMessage:10000",
+        admin=True,
+        sender_id="10000",
+        group_owner=None,
+        group_admins=None,
+    ):
         self.message_str = message_str
         self.unified_msg_origin = umo
         self.stopped = False
+        self.admin = admin
+        self.sender_id = sender_id
+        self.group_owner = group_owner
+        self.group_admins = group_admins
 
     def get_message_type(self):
         return _FakeMessageType.GROUP_MESSAGE
 
     def is_admin(self):
-        return True
+        return self.admin
 
     def get_platform_id(self):
         return self.unified_msg_origin.split(":", 1)[0] or "aiocqhttp"
 
     def get_sender_name(self):
         return "tester"
+
+    def get_sender_id(self):
+        return self.sender_id
+
+    def get_group_id(self):
+        return self.unified_msg_origin.rsplit(":", 1)[-1]
+
+    async def get_group(self):
+        if self.group_owner is None and self.group_admins is None:
+            return None
+        return _FakeGroup(self.group_owner, self.group_admins)
 
     def get_extra(self, key, default=None):
         return default
@@ -1198,6 +1227,135 @@ def test_auto_parse_silent_when_unverified():
     assert not getattr(ev, "sent", [])
 
 
+class _QuakeConfig(dict):
+    """地震预警命令测试用的最小配置对象（保存计数便于断言落盘）。"""
+
+    def __init__(self):
+        super().__init__(
+            {
+                "earthquake_enable": True,
+                "earthquake_group_whitelist": [],
+                "earthquake_default_lat": 0.0,
+                "earthquake_default_lon": 0.0,
+                "earthquake_default_place": "",
+            }
+        )
+        self.saved = 0
+
+    async def save_config_async(self):
+        self.saved += 1
+
+
+def _make_quake_inst():
+    inst = PluginCls.__new__(PluginCls)
+    inst.config = _QuakeConfig()
+    inst._earthquake_service = None
+    inst._group_switch_store = None
+    return inst
+
+
+def test_earthquake_command_enable_and_disable_as_admin():
+    """全局管理员可用 /地震 开启/关闭，并写入白名单配置。"""
+    inst = _make_quake_inst()
+    out = _texts(
+        _run_command(inst.earthquake_command(FakeEvent("/地震 开启 39.9042 116.4074 北京")))
+    )
+    assert "已在本群启用" in out
+    groups = inst.get_earthquake_groups()
+    assert len(groups) == 1
+    assert groups[0]["group_id"] == "10000"
+    assert groups[0]["place"] == "北京"
+    assert abs(groups[0]["latitude"] - 39.9042) < 1e-6
+    assert inst.config.saved >= 1
+
+    out = _texts(_run_command(inst.earthquake_command(FakeEvent("/地震 关闭"))))
+    assert "已关闭" in out
+    groups = inst.get_earthquake_groups()
+    assert groups[0]["enabled"] is False
+    assert inst.config.saved >= 2
+
+
+def test_earthquake_command_requires_owner_or_group_admin():
+    """/地震 开启 仅群主、群管理员或 AstrBot 全局管理员可用。"""
+    inst = _make_quake_inst()
+    ev = FakeEvent(
+        "/地震 开启 39.9042 116.4074 北京",
+        admin=False,
+        sender_id="10000",
+        group_owner="20000",
+        group_admins=["20001"],
+    )
+    out = _texts(_run_command(inst.earthquake_command(ev)))
+    assert "仅群主/群管理员" in out
+    assert inst.get_earthquake_groups() == []
+
+    ev = FakeEvent(
+        "/地震 开启 39.9042 116.4074 北京",
+        admin=False,
+        sender_id="20001",
+        group_owner="20000",
+        group_admins=["20001"],
+    )
+    out = _texts(_run_command(inst.earthquake_command(ev)))
+    assert "已在本群启用" in out
+    assert len(inst.get_earthquake_groups()) == 1
+
+
+def test_earthquake_command_enable_by_city():
+    """群主/管理员可直接用城市名启用，无需知道经纬度。"""
+    inst = _make_quake_inst()
+    out = _texts(_run_command(inst.earthquake_command(FakeEvent("/地震 开启 唐山"))))
+    assert "已在本群启用" in out
+    groups = inst.get_earthquake_groups()
+    assert len(groups) == 1
+    assert "唐山" in groups[0]["place"]
+    assert 39.4 < groups[0]["latitude"] < 39.9
+    assert 117.9 < groups[0]["longitude"] < 118.5
+
+
+def test_earthquake_command_multi_city_and_countdown():
+    """一个群可添加多个城市，并可开关逐条倒计时。"""
+    inst = _make_quake_inst()
+    _texts(_run_command(inst.earthquake_command(FakeEvent("/地震 开启 北京"))))
+    out = _texts(
+        _run_command(inst.earthquake_command(FakeEvent("/地震 添加城市 上海")))
+    )
+    assert "已添加接收城市" in out
+    groups = inst.get_earthquake_groups()
+    assert len(groups[0]["locations"]) == 2
+    assert any("上海" in loc["place"] for loc in groups[0]["locations"])
+
+    out = _texts(
+        _run_command(inst.earthquake_command(FakeEvent("/地震 倒计时 关")))
+    )
+    assert "已关闭" in out
+    assert inst.get_earthquake_groups()[0]["countdown_enabled"] is False
+
+    out = _texts(
+        _run_command(inst.earthquake_command(FakeEvent("/地震 城市列表")))
+    )
+    assert "北京" in out and "上海" in out and "⛔ 关闭" in out
+
+    out = _texts(
+        _run_command(inst.earthquake_command(FakeEvent("/地震 移除城市 上海")))
+    )
+    assert "已移除接收城市" in out
+    groups = inst.get_earthquake_groups()
+    assert len(groups[0]["locations"]) == 1
+    assert "北京" in groups[0]["locations"][0]["place"]
+
+    _run_command(inst.earthquake_command(FakeEvent("/地震 倒计时 开")))
+    assert inst.get_earthquake_groups()[0]["countdown_enabled"] is True
+
+
+def test_earthquake_command_enable_requires_location():
+    """没有群位置也没有默认坐标时，/地震 开启 应提示先提供经纬度。"""
+    inst = _make_quake_inst()
+    out = _texts(_run_command(inst.earthquake_command(FakeEvent("/地震 开启"))))
+    assert "哪个城市" in out
+    assert inst.get_earthquake_groups() == []
+
+
 TESTS = [
     # cross_group_memory
     test_legacy_string_records_migrate_on_load,
@@ -1257,6 +1415,12 @@ TESTS = [
     test_verify_guard_allows_when_verified,
     test_llm_tool_guard_requires_verify,
     test_auto_parse_silent_when_unverified,
+    # 地震预警命令（v2.9.0）
+    test_earthquake_command_enable_and_disable_as_admin,
+    test_earthquake_command_requires_owner_or_group_admin,
+    test_earthquake_command_enable_by_city,
+    test_earthquake_command_multi_city_and_countdown,
+    test_earthquake_command_enable_requires_location,
 ]
 
 

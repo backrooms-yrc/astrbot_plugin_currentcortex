@@ -97,6 +97,7 @@ Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云�
   - [6. 男娘图片](#6-男娘图片-femboy别名-男娘)
   - [7. DG-LAB 设备管理](#7-dg-lab-设备管理-dglab别名-电击)
   - [8. Wikidot 站点管理](#8-wikidot-站点管理-wikidot别名-wd-维基)
+  - [9. 地震预警](#9-地震预警-地震别名-earthquake-eq-预警)
 - [🖥️ 总 Pages](#️-总-pages)
 - [🧩 按群聊开关](#-按群聊独立开关)
 - [✂️ 分段回复](#️-分段回复)
@@ -124,7 +125,8 @@ Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云�
 | 👗 **男娘图片** | 随机男娘主题图片（WebP） |
 | 🔌 **DG-LAB** | Socket V3/V4（兼容旧 V2）设备全生命周期管理、协议自动识别、多用户/多设备隔离、CCDG WebUI 控制面板 |
 | 📖 **Wikidot 站点管理** | 调用 Wikidot 前端 JS 接口（ajax-module-connector.php）：页面编辑（源码/写入/追加/标签/重命名/删除）、成员管理、站点设置、论坛版块、邀请与加入申请 |
-| 🖥️ **总 Pages** | AstrBot WebUI 集成总面板：仪表板 · 帮助中心 · 可视化设置（保存即热重载）· 郊狼控制（中转服务器一键部署 · 公网暴露开关）· 联系我们 |
+| 🌏 **地震预警** | 聚合 CENC/川滇/福建/日本气象厅预警 + CENC 速报 + USGS；群聊白名单制，支持城市名解析、单群多城市、倒计时开关；先发基本信息，再按最近城市发送纯数字 S 波倒计时与到达规避指引；Pages 可发起模拟演练与极限演练 |
+| 🖥️ **总 Pages** | AstrBot WebUI 集成总面板：仪表板 · 地震预警（白名单/多城市/模拟/极限演练）· 帮助中心 · 可视化设置（保存即热重载）· 郊狼控制（中转服务器一键部署 · 公网暴露开关）· 联系我们 |
 | 🧩 **按群聊开关** | 在单个群用 `/开关` 命令关闭/开启本插件全部命令（支持限时关闭自动恢复、按功能域分级），互不影响 |
 | 🧠 **跨群聊记忆** | 同平台所有群共享一份持久化上下文，自动注入 LLM 请求（可按时效过滤、LLM 摘要压缩、按关键词清理） |
 | ✂️ **分段回复** | 把机器人回复拆成多条消息分次发送，模拟逐条回复。支持标点/长度/LLM 语义三种分段模式 |
@@ -225,6 +227,7 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 | `/femboy` | `/男娘` | 男娘图片 |
 | `/dglab` | `/电击` | DG-LAB 设备管理 |
 | `/wikidot` | `/wd` `/维基` | Wikidot 页面编辑与站点管理 |
+| `/地震` | `/earthquake` `/eq` `/预警` | 群聊白名单地震预警（多城市/倒计时可关，先基本信息后纯数字倒计时） |
 | `/开关` | `/toggle` `/switch` | 按群聊开关本插件全部命令（支持限时、按功能域分级） |
 | `/开关列表` | `/switch_list` `/开关状态列表` | 查看本平台被关闭的群与功能域（管理员） |
 | `/忘记` | `/forget_memory` `/忘记记忆` | 按关键词清理跨群聊记忆（管理员） |
@@ -631,16 +634,124 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 
 ---
 
+### 9. 地震预警 (`/地震`，别名 `/earthquake` `/eq` `/预警`)
+
+群聊**白名单制**：默认不向任何群推送。群主或群管理员在目标群发送启用命令后，该群才会加入白名单并接收预警。
+
+#### 基本指令
+
+| 指令 | 说明 |
+| --- | --- |
+| `/地震 开启 <城市名>` | **群主/群管理员**启用本群并添加接收城市，如 `/地震 开启 北京`。重复执行会继续追加城市 |
+| `/地震 添加城市 <城市名 \| 纬度 经度 [地点]>` | 再添加一个接收城市（每群最多 20 个） |
+| `/地震 移除城市 <城市名>` | 移除一个接收城市；移除最后一个时自动关闭本群预警 |
+| `/地震 城市列表` | 查看本群全部接收城市与倒计时开关状态 |
+| `/地震 倒计时 开\|关` | 设置本群是否逐条发送倒计时数字（默认开；关闭后只发基本信息与到达指引，防刷屏） |
+| `/地震 位置 <城市名 \| 纬度 经度 [地点]>` | 将接收城市**替换为唯一城市**（追加请用「添加城市」） |
+| `/地震 关闭` | 停用本群预警（保留城市列表，可随时重新开启） |
+| `/地震 状态` | 查看本群启用状态、接收城市、倒计时状态、白名单群数、最近预警与预警源健康度 |
+| `/地震 帮助` | 显示命令帮助 |
+
+> 权限：仅**群主 / 群管理员**可执行开启、关闭、添加/移除城市、修改位置和倒计时开关；AstrBot 全局管理员同样可以操作。其他群成员只能查看状态与城市列表。
+>
+> **不用查经纬度**：直接发城市名即可。内置约 300 个地级市/直辖市坐标（含港澳台及常用境外城市），离线秒查；区县、街道或未收录的境外地名会自动调用 OpenStreetMap Nominatim 解析（免 Key，带缓存与 1 次/秒限流）。例如 `/地震 开启 北京`、`/地震 添加城市 上海`、`/地震 添加城市 乌鲁木齐`、`/地震 添加城市 台北`。区县请带「区/县」后缀（如 `/地震 添加城市 朝阳区`），避免与同名城市混淆；城市名解析失败时仍可改用经纬度，如 `/地震 开启 39.9042 116.4074 北京`。
+
+#### 预警来源与聚合
+
+| 源 | 类型 | 说明 |
+| --- | --- | --- |
+| 中国地震台网 CENC | 预警 | 经 Wolfx 公开镜像获取最新预警 |
+| 四川/云南地震预警 | 预警 | 区域预警源（Wolfx 镜像） |
+| 福建地震预警 | 预警 | 区域预警源（Wolfx 镜像） |
+| 日本气象厅 JMA | 紧急地震速报 | 经 Wolfx 公开镜像获取 |
+| 中国地震台网 CENC | 速报 | 最近 50 条正式/自动速报 |
+| USGS | 全球地震 | 最近一小时全球地震 feed |
+
+- 多个源**并行请求**，单源失败不影响其他源；Pages「地震预警」页会显示每个源的健康度与最近错误。
+- 同一地震可能在多个源重复出现：按「发震时间 ±3 分钟、震中 200 km 内、震级差 ≤1.0」聚类，只播报一次；后续震级/烈度显著增强时补发一条「预警更新」，**不重新开始倒计时**。
+- 只播报**震级 ≥ 阈值**且**发震/发布时间在时效窗口内**的事件，避免插件启动时补发旧闻；白名单为空或全局开关关闭时**不会请求任何上游**。
+
+#### 播报流程
+
+1. **基本信息**：震中、震级、深度、发震时间、最大烈度、**本群各接收城市的震中距与预计到达**、来源与分震级行动指引（倒计时关闭时会注明）。
+2. **逐条倒计时**：按每个群**最近的接收城市**与 S 波速度估算剩余秒数，抵达前逐条发送；倒计时消息极简，**只发送 `12s`、`11s`…`0s`**，不带表情或说明。默认最多最后 30 条、每秒一条；群主/群管理员可用 `/地震 倒计时 关` 关闭数字，关闭后仍会发送到达指引。
+3. **到达提示**：`0s` 之后单独发送一条「地震波已到达」+ 对应震级的规避指引（关闭逐条倒计时时也会发送这一条）。
+
+**分震级指引**（基本信息中自动切换）：
+
+| 震级 | 指引 |
+| --- | --- |
+| M < 3.0 | 微震，一般无明显震感，无需特别行动 |
+| 3.0 ≤ M < 4.0 | 有感地震：保持冷静，远离窗户、吊灯和易坠物 |
+| 4.0 ≤ M < 5.0 | 明显震感：远离玻璃、高大家具，做好就近避险准备 |
+| 5.0 ≤ M < 6.0 | 较强地震：立即伏地、遮挡、手抓牢，不要使用电梯 |
+| 6.0 ≤ M < 7.0 | 强烈地震：就近伏地遮挡、保护头颈，远离外墙和玻璃 |
+| M ≥ 7.0 | 大地震：立即避险、保护头颈，远离建筑外墙/玻璃，听从官方指引 |
+
+> 多城市群：基本信息会列出各接收城市的距离/预计到达，倒计时只按最近城市跑一条，避免同一群收到多套倒计时刷屏。
+>
+> 位置未设置且没有默认坐标时，仍会播报基本信息，但无法估算到达时间与倒计时；建议直接用 `/地震 开启 城市名` 设置。
+>
+> 估算使用 S 波速度（默认 3.5 km/s）与震源深度，仅为近似值，实际到达时间受地质结构影响；**数据仅供参考，请以官方发布为准**。
+>
+> 机器人不会 @全体成员；多群发送之间有可配置的间隔，降低平台频控风险。QQ 官方机器人等平台若限制主动消息，可能无法推送。
+
+#### 模拟预警（Pages）
+
+在 **总 Pages → 地震预警 → 模拟预警** 填写的震级、震中名称、**震中城市（可选，填了可代替经纬度）**、深度、震中经纬度与倒计时秒数，点击「发起模拟预警」后：
+
+- 向**全部启用中的白名单群**广播；
+- **先发送一条「这不是真实地震，仅为模拟演练」的提醒**，再发模拟基本信息与倒计时；某群关闭了逐条倒计时时，该群只收到基本信息与到达演练指引；
+- 有冷却时间（默认 30 秒），防止连续点击刷屏；
+- 支持「立即检查预警源」，不必等待下一轮轮询。
+
+##### 极限演练模式
+
+模拟预警卡片内提供「极限演练模式」开关。开启并输入确认词 **「极限演练」** 后：
+
+- **不发送**「仅为模拟」「演练」等任何提示，群成员收到的消息与真实地震预警**完全一致**（标题、来源、倒计时、到达指引均按真实预警生成）；
+- 使用真实 S 波距离估算倒计时，表单里的「倒计时秒数」在极限演练中不生效；
+- 使用**独立冷却** `earthquake_extreme_cooldown`（默认 300 秒），并有后台审计日志记录震中/震级/群数；
+- 仅能在 AstrBot WebUI（管理员）操作，群聊命令无法触发。
+
+> ⚠️ **极限演练会产生无法与真实预警区分的消息，可能引起群成员恐慌。** 请仅在已明确告知白名单群成员的演练场景使用，并确保能及时说明；不要在日常测试或真实地震期间使用。
+
+#### 配置项
+
+| 配置项 | 默认 | 说明 |
+| --- | --- | --- |
+| `earthquake_enable` | `true` | 总开关；关闭后不请求任何上游 |
+| `earthquake_poll_interval` | `30` | 轮询间隔（秒），最小 10 |
+| `earthquake_min_magnitude` | `4.0` | 最低播报震级 |
+| `earthquake_max_age_sec` | `300` | 事件最大时效（秒） |
+| `earthquake_max_distance_km` | `1000` | 最大震中距过滤，0 = 不限 |
+| `earthquake_default_lat` / `earthquake_default_lon` | `0` / `0` | 默认接收坐标（0,0 视为未设置） |
+| `earthquake_default_place` | 空 | 默认接收地点名 |
+| `earthquake_countdown_max_ticks` | `30` | 倒计时最多发送条数 |
+| `earthquake_countdown_max_wait_sec` | `300` | 超过该剩余秒数只发基本信息、不启动长倒计时 |
+| `earthquake_countdown_interval` | `1.0` | 倒计时发送间隔（秒，最小 1；设为 2 时数字按 2 秒步长递减） |
+| `earthquake_s_wave_km_s` | `3.5` | S 波速度（km/s） |
+| `earthquake_broadcast_interval` | `0.6` | 多群发送间隔（秒） |
+| `earthquake_http_timeout` | `10` | 单源请求超时（秒） |
+| `earthquake_sim_cooldown` | `30` | 模拟预警冷却（秒） |
+| `earthquake_extreme_cooldown` | `300` | 极限演练冷却（秒，建议不要调低） |
+| `earthquake_group_whitelist` | `[]` | 群聊白名单（一般由命令写入，也可在插件配置中查看/删除） |
+
+> 白名单也可在 AstrBot 插件配置页的 `earthquake_group_whitelist` 中查看、删除；Pages「地震预警」页提供更直观的白名单表格与移除按钮。`/开关 off earthquake` 可让本群临时静音后台播报。
+
+---
+
 ## 🖥️ 总 Pages
 
 > 自 **v1.9.0** 起，插件集成了 AstrBot 插件 Pages 总面板（mdui 2 Material Design 3 风格，晴空蓝 + 雪雾白）。在 AstrBot WebUI 的 **插件详情 → Pages**（或侧边栏「插件 Pages」分组）中打开。
 
-总面板共 5 个页面：
+总面板共 6 个页面：
 
 | 页面 | 说明 |
 | --- | --- |
 | 📊 **仪表板** | 插件运行总览：运行时长、已绑定设备、活跃连接、注册用户、插件版本/作者/启动时间、功能开关状态 |
-| 📖 **帮助中心** | 内置使用文档与常见问题（快速开始 / 郊狼 / 分段回复 / 跨群记忆 / 故障排查） |
+| 🌏 **地震预警** | 白名单群聊管理 / 预警源健康度 / 最近事件 / 立即检查 / **模拟预警**（可设置震级、震中、深度、倒计时；先提醒仅为模拟） |
+| 📖 **帮助中心** | 内置使用文档与常见问题（快速开始 / 地震预警 / 郊狼 / 分段回复 / 跨群记忆 / 故障排查） |
 | ⚙️ **设置** | 可视化修改全部插件配置：每个配置项都有中文名 + 人话解释，保存后**自动热重载**生效，无需手动重启 |
 | ⚡ **郊狼控制** | 中转服务器一键部署（v3/v4 · 暴露公网开关）+ CCDG WebUI 总开关 + **暴露公网开关**（见下） |
 | 💬 **联系我们** | 开发者信息、GitHub 仓库、QQ 交流群（一键加群） |
@@ -693,7 +804,7 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 
 > 别名：`/toggle`、`/switch`（如 `/toggle off 2h`）。时长单位：`s`/`秒`、`m`/`分`/`分钟`、`h`/`时`/`小时`、`d`/`天`，可组合。
 >
-> **功能域**（可不填，不填 = 全局全部命令）：`media` 媒体解析 · `image` 图片获取 · `music` 音乐点歌 · `utility` 实用工具 · `dglab` DG-LAB 设备 · `memory` 跨群聊记忆。功能域支持中文名（如 `/开关 off 图片`）。
+> **功能域**（可不填，不填 = 全局全部命令）：`media` 媒体解析 · `image` 图片获取 · `music` 音乐点歌 · `utility` 实用工具 · `dglab` DG-LAB 设备 · `earthquake` 地震预警 · `memory` 跨群聊记忆。功能域支持中文名（如 `/开关 off 图片`）。`/开关 off earthquake` 会同时停止向本群发送后台预警。
 
 #### 使用示例
 
@@ -967,6 +1078,29 @@ v1.2.0 及更早版本使用 JSON 字符串配置（已弃用）：
 | `wikidot_admin_only` | bool | true | 全部命令仅管理员可用（关闭后只读放开） |
 | `wikidot_timeout` | int | 20 | 接口请求超时（秒） |
 
+### 地震预警
+
+见 [9. 地震预警](#9-地震预警-地震别名-earthquake-eq-预警) 章节。
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `earthquake_enable` | bool | true | 总开关；关闭后不请求任何上游 |
+| `earthquake_poll_interval` | int | 30 | 轮询间隔（秒，最小 10） |
+| `earthquake_min_magnitude` | float | 4.0 | 最低播报震级 |
+| `earthquake_max_age_sec` | int | 300 | 事件最大时效（秒） |
+| `earthquake_max_distance_km` | int | 1000 | 最大震中距过滤（0 = 不限） |
+| `earthquake_default_lat` / `earthquake_default_lon` | float | 0 / 0 | 默认接收坐标（0,0 视为未设置） |
+| `earthquake_default_place` | string | （空） | 默认接收地点名 |
+| `earthquake_countdown_max_ticks` | int | 30 | 倒计时最多发送条数 |
+| `earthquake_countdown_max_wait_sec` | int | 300 | 剩余时间超过该值时只发基本信息、不启动长倒计时 |
+| `earthquake_countdown_interval` | float | 1.0 | 倒计时发送间隔（秒） |
+| `earthquake_s_wave_km_s` | float | 3.5 | S 波速度（km/s） |
+| `earthquake_broadcast_interval` | float | 0.6 | 多群发送间隔（秒） |
+| `earthquake_http_timeout` | int | 10 | 单源请求超时（秒） |
+| `earthquake_sim_cooldown` | int | 30 | 模拟预警冷却（秒） |
+| `earthquake_extreme_cooldown` | int | 300 | 极限演练冷却（秒，建议不要调低） |
+| `earthquake_group_whitelist` | list | `[]` | 群聊白名单（一般由 `/地震 开启` 写入，可在配置页查看/删除） |
+
 ### 跨群聊记忆
 
 见 [🧠 跨群聊记忆](#-跨群聊记忆) 章节。
@@ -1085,13 +1219,15 @@ v1.2.0 及更早版本使用 JSON 字符串配置（已弃用）：
 ```text
 astrbot_plugin_currentcortex/
 ├── main.py                      # 主程序：所有命令注册与 API 客户端
-├── _pages_api.py                # 总 Pages 后端 API（仪表板/设置/郊狼/帮助）
+├── _pages_api.py                # 总 Pages 后端 API（仪表板/地震预警/设置/郊狼/帮助）
 ├── pages/                       # 总 Pages 前端（mdui 2 组件库，全部本地化）
 │   └── cc-dashboard/
 │       ├── index.html           # Pages 入口
-│       ├── app.js               # Vue 3 单页应用（5 个页面）
+│       ├── app.js               # Vue 3 单页应用（6 个页面）
 │       ├── app.css              # 晴空蓝 + 雪雾白主题
 │       └── vendor/              # 本地依赖：Vue 3 / mdui 2 / Material Icons 字体
+├── earthquake.py                # 地震预警：多源解析/聚合去重/白名单群播报/倒计时
+├── earthquake_locations.py      # 地震预警内置城市坐标表（离线优先，约 300 个地级市）
 ├── cross_group_memory.py        # 跨群聊记忆持久化存储
 ├── group_switch_store.py        # 按群聊开关状态持久化存储
 ├── media_parser.py              # 小红书/B站/抖音 媒体解析
@@ -1128,10 +1264,12 @@ astrbot_plugin_currentcortex/
 - **MediaParserManager** ([media_parser.py](media_parser.py))：小红书 / B站 / 抖音 链接解析
 - **CommandParser** ([main.py](main.py))：`key:value` 参数与快捷语法解析器
 
+**地震预警：**
+- **EarthquakeService** ([earthquake.py](earthquake.py))：6 个公开源并行拉取与归一化、跨源聚类去重、按白名单群坐标估算 S 波到达时间、基本信息 + 逐群倒计时播报、模拟演练；城市名解析为「内置表（[earthquake_locations.py](earthquake_locations.py)）优先 + Nominatim 兜底」；状态文件 `currentcortex_earthquake.json` 防止重启重复预警
+
 **DG-LAB 设备管理：**
 - **DGLabClient** ([dglab_client.py](dglab_client.py))：WebSocket 客户端，连接管理 / 消息收发 / 心跳保活
-- **DeviceStore** ([dglab_device_store.py](dglab_device_store.py))：用户-设备绑定关系持久化（线程安全）
-- **DeviceConnectionPool** ([dglab_connection_pool.py](dglab_connection_pool.py))：连接池，多用户并发 / 连接复用 / 自动重连 / 空闲清理
+- **DeviceStore** ([dglab_device_store.py](dglab_device_store.py))：用户-设备绑定关系持久化（线程安全）- **DeviceConnectionPool** ([dglab_connection_pool.py](dglab_connection_pool.py))：连接池，多用户并发 / 连接复用 / 自动重连 / 空闲清理
 - **DGLabCommandHandler** ([dglab_commands.py](dglab_commands.py))：命令解析 / 校验 / 执行 / 格式化
 - **DGLabWebUI** ([dglab_webui.py](dglab_webui.py))：CCDG WebUI 浏览器远程控制面板
 
@@ -1171,12 +1309,14 @@ astrbot_plugin_currentcortex/
 - [LeiZ API](https://api.bileizhen.top) — 提供 Pixiv / 一言 / 天气 / 男娘 / 网易云 等 API 服务
 - [AstrBot](https://github.com/AstrBot) — 聊天机器人框架
 - [dglab-websocket-server](https://github.com/dungeonlab-open/dglab-websocket-server) — DG-LAB WebSocket 协议与中转服务器
+- [chenny/city-geo](https://github.com/chenny/city-geo) — 内置城市坐标数据（木兰宽松许可证第 2 版）
+- [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org/) / [OpenStreetMap](https://www.openstreetmap.org/copyright) — 未收录地名的在线解析（OpenStreetMap 数据，ODbL）
 
 ---
 
 <div align="center">
 
-**CurrentCortex** · v2.0.11 · [更新日志](CHANGELOG.md) · [问题反馈](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/issues) · [MIT License](LICENSE)
+**CurrentCortex** · v2.9.0 · [更新日志](CHANGELOG.md) · [问题反馈](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/issues) · [MIT License](LICENSE)
 
 如果这个插件对你有帮助，欢迎点一个 ⭐ Star 支持作者！
 

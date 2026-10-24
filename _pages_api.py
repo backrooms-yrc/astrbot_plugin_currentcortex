@@ -155,6 +155,29 @@ _CONFIG_GROUPS: List[Dict[str, Any]] = [
         "items": ["group_switch_enable", "group_switch_admin_only"],
     },
     {
+        "key": "earthquake",
+        "title": "地震预警",
+        "icon": "warning",
+        "items": [
+            "earthquake_enable",
+            "earthquake_poll_interval",
+            "earthquake_min_magnitude",
+            "earthquake_max_age_sec",
+            "earthquake_max_distance_km",
+            "earthquake_default_lat",
+            "earthquake_default_lon",
+            "earthquake_default_place",
+            "earthquake_countdown_max_ticks",
+            "earthquake_countdown_max_wait_sec",
+            "earthquake_countdown_interval",
+            "earthquake_s_wave_km_s",
+            "earthquake_broadcast_interval",
+            "earthquake_http_timeout",
+            "earthquake_sim_cooldown",
+            "earthquake_extreme_cooldown",
+        ],
+    },
+    {
         "key": "reply_seg",
         "title": "分段回复",
         "icon": "scissors",
@@ -348,6 +371,7 @@ async def page_status(plugin):
             "dglab_auto_connect",
             "cross_group_enable",
             "group_switch_enable",
+            "earthquake_enable",
             "reply_seg_enable",
         ]:
             try:
@@ -1279,6 +1303,46 @@ _HELP_DOCS: List[Dict[str, Any]] = [
         ],
     },
     {
+        "category": "地震预警",
+        "items": [
+            {
+                "q": "为什么群里收不到地震预警？",
+                "a": "地震预警是群聊白名单制。请让群主/群管理员在目标群发送 "
+                     "/地震 开启 北京（也支持经纬度）；再检查 earthquake_enable 是否开启、"
+                     "本群是否被 /开关 off earthquake 静音。",
+            },
+            {
+                "q": "一个群能接收多个城市吗？",
+                "a": "可以。先用 /地震 开启 北京，再用 /地震 添加城市 上海；"
+                     "最多 20 个。用 /地震 城市列表 查看，/地震 移除城市 上海 移除。"
+                     "预警时基本信息会列出各城市，倒计时只按最近城市跑一条，避免刷屏。",
+            },
+            {
+                "q": "倒计时数字为什么和别的群不一样？",
+                "a": "倒计时按本群最近接收城市与 S 波速度估算，距离不同则剩余秒数不同。"
+                     "城市可用 /地震 添加城市、/地震 移除城市 调整；"
+                     "不想看到逐条数字可发 /地震 倒计时 关。",
+            },
+            {
+                "q": "模拟预警会真的发到群里吗？",
+                "a": "会。模拟预警向全部启用中的白名单群广播，但会先发送"
+                     "「仅为模拟、不是真实地震」的提醒，再发模拟信息和倒计时；"
+                     "群内关闭逐条倒计时时只发基本信息和到达指引。有冷却时间。",
+            },
+            {
+                "q": "极限演练和模拟预警有什么区别？",
+                "a": "极限演练不发送任何「模拟/演练」提示，来源、倒计时和到达指引都与真实预警一致，"
+                     "且按真实 S 波距离估算；需要输入确认词「极限演练」，有独立冷却（默认 300 秒），"
+                     "仅 WebUI 管理员可触发。⚠️ 可能引起恐慌，请只在已告知群成员的演练中使用。",
+            },
+            {
+                "q": "数据准确吗？",
+                "a": "预警来自 CENC/川滇/福建/日本气象厅及 USGS 等公开源，经 Wolfx 镜像聚合；"
+                     "到达时间按 S 波速度估算，仅供参考，请以官方发布为准。",
+            },
+        ],
+    },
+    {
         "category": "故障排查",
         "items": [
             {
@@ -1307,6 +1371,91 @@ async def page_help(plugin):
     except Exception as e:
         logger.error(f"[Pages] /cc/help 失败: {e}", exc_info=True)
         return error_response(f"加载帮助失败: {e}", status_code=500)
+
+
+# ----------------------------------------------------------------------- #
+# Handler：地震预警（状态 / 立即检查 / 模拟 / 白名单移除）
+# ----------------------------------------------------------------------- #
+
+
+async def page_quake_status(plugin):
+    """返回地震预警运行状态、白名单、最近事件与各源健康度。"""
+    try:
+        service = getattr(plugin, "_earthquake_service", None)
+        if service is not None:
+            return json_response(service.status())
+        groups = []
+        getter = getattr(plugin, "get_earthquake_groups", None)
+        if callable(getter):
+            groups = getter()
+        cfg = getattr(plugin, "config", {}) or {}
+        active = [g for g in groups if g.get("enabled", True)]
+        return json_response(
+            {
+                "enabled": bool(cfg.get("earthquake_enable", False)),
+                "running": False,
+                "poll_interval": int(cfg.get("earthquake_poll_interval", 30) or 30),
+                "min_magnitude": float(cfg.get("earthquake_min_magnitude", 4.0) or 4.0),
+                "countdown_max_ticks": int(cfg.get("earthquake_countdown_max_ticks", 30) or 30),
+                "countdown_max_wait_sec": int(cfg.get("earthquake_countdown_max_wait_sec", 300) or 300),
+                "groups": groups,
+                "active_groups": len(active),
+                "sources": {},
+                "last_event": None,
+                "last_simulation": None,
+                "stats": {},
+                "last_skip": "预警服务未初始化（请检查插件日志）",
+            }
+        )
+    except Exception as e:
+        logger.error(f"[Pages] /cc/quake/status 失败: {e}", exc_info=True)
+        return error_response(f"地震预警状态获取失败: {e}", status_code=500)
+
+
+async def page_quake_poll(plugin):
+    """立即执行一轮预警源检查（不等待轮询间隔）。"""
+    try:
+        service = getattr(plugin, "_earthquake_service", None)
+        if service is None:
+            return error_response("地震预警服务未初始化", status_code=503)
+        result = await service.poll_once()
+        return json_response({**result, "status": service.status()})
+    except Exception as e:
+        logger.error(f"[Pages] /cc/quake/poll 失败: {e}", exc_info=True)
+        return error_response(f"立即检查失败: {e}", status_code=500)
+
+
+async def page_quake_simulate(plugin):
+    """向全部白名单群广播一次模拟预警（先提醒「仅为模拟」）。"""
+    try:
+        payload = await request.json(default={})
+        result = await plugin.simulate_earthquake(payload)
+        return json_response(result)
+    except ValueError as e:
+        return error_response(str(e), status_code=400)
+    except Exception as e:
+        logger.error(f"[Pages] /cc/quake/simulate 失败: {e}", exc_info=True)
+        return error_response(f"模拟预警失败: {e}", status_code=500)
+
+
+async def page_quake_remove(plugin):
+    """从白名单中移除一个群聊（彻底删除配置项）。"""
+    try:
+        payload = await request.json(default={})
+        umo = str(payload.get("umo") or "").strip()
+        if not umo:
+            return error_response("缺少群聊会话标识 umo", status_code=400)
+        removed = await plugin.remove_earthquake_group(umo)
+        return json_response(
+            {
+                "removed": bool(removed),
+                "umo": umo,
+                "message": "已从白名单移除" if removed else "该群不在白名单中",
+            }
+        )
+    except Exception as e:
+        logger.error(f"[Pages] /cc/quake/whitelist/remove 失败: {e}", exc_info=True)
+        return error_response(f"移除失败: {e}", status_code=500)
 
 
 # ----------------------------------------------------------------------- #
@@ -1352,6 +1501,10 @@ def register_routes(plugin) -> None:
         (f"/{prefix}/cc/coyote/relay/expose", page_relay_expose, ["POST"], "中转服务器暴露公网(放行端口,需二次确认)"),
         (f"/{prefix}/cc/coyote/relay/unexpose", page_relay_unexpose, ["POST"], "中转服务器取消公网暴露"),
         (f"/{prefix}/cc/help", page_help, ["GET"], "帮助中心文档"),
+        (f"/{prefix}/cc/quake/status", page_quake_status, ["GET"], "地震预警状态与白名单"),
+        (f"/{prefix}/cc/quake/poll", page_quake_poll, ["POST"], "立即检查地震预警源"),
+        (f"/{prefix}/cc/quake/simulate", page_quake_simulate, ["POST"], "向白名单群发起模拟地震预警"),
+        (f"/{prefix}/cc/quake/whitelist/remove", page_quake_remove, ["POST"], "从白名单移除群聊"),
     ]
     for route, handler, methods, desc in routes:
         try:

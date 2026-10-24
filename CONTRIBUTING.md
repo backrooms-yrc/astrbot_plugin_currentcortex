@@ -35,6 +35,8 @@
 | `dglab_*.py` | DG-LAB（郊狼）模块：协议客户端（V3/V4）、连接池、命令、WebUI、各类存储 |
 | `media_parser.py` / `media_cmds.py` | 小红书 / B站 / 抖音链接解析 |
 | `cross_group_memory.py` / `group_switch_store.py` | 跨群聊记忆、按群聊开关 |
+| `earthquake.py` | 地震预警：多源解析/聚类去重、白名单群播报、S 波倒计时、模拟演练 |
+| `earthquake_locations.py` | 内置城市坐标表（离线优先；未收录地名走 Nominatim） |
 | `_pages_api.py` / `pages/` | AstrBot WebUI 集成的 Pages 总面板 |
 | `_conf_schema.json` | 配置面板模式定义（新增配置项必须同步这里） |
 | `metadata.yaml` | 插件元数据（版本号在此修改） |
@@ -47,6 +49,7 @@
 python3 test_dglab_protocol.py    # DG-LAB V3/V4 协议端到端（mock 服务端）
 python3 test_reply_seg.py         # 语义分段回复
 python3 test_music_audio.py       # 点歌音频
+python3 test_earthquake.py        # 地震预警：多源解析/聚类/白名单/倒计时/模拟播报
 ```
 
 **注意**：`.gitignore` 默认忽略 `test_*.py`（防止误提交带内网信息的临时脚本），采用白名单机制收录正式测试。**新增测试文件时，记得在 `.gitignore` 追加一行 `!test_xxx.py`**，否则不会被纳入版本管理。
