@@ -71,6 +71,9 @@ const quakeForm = reactive({
   extreme: false,
   extremeConfirm: "",
 });
+// 气象预警：状态 / 立即检查
+const weather = ref(null);
+const weatherBusy = ref(false);
 const relayMeta = {
   v3: {
     title: "V3 中转服务器",
@@ -85,7 +88,7 @@ let toastTimer = null;
 
 function parseHash() {
   const h = location.hash.replace(/^#\/?/, "");
-  current.value = ["dashboard", "quake", "help", "settings", "coyote", "contact"].includes(h)
+  current.value = ["dashboard", "quake", "weather", "help", "settings", "coyote", "contact"].includes(h)
     ? h
     : "dashboard";
 }
@@ -243,6 +246,55 @@ async function removeQuakeGroup(group) {
     const res = await apiPost("cc/quake/whitelist/remove", { umo: group.umo });
     toast(res.message || "已移除");
     await loadQuake();
+  } catch (e) {
+    toast("移除失败: " + (e && e.message ? e.message : e));
+  }
+}
+
+async function loadWeather() {
+  try {
+    weather.value = await apiGet("cc/weather/status");
+  } catch (e) {
+    toast("加载气象预警状态失败: " + (e && e.message ? e.message : e));
+  }
+}
+
+async function pollWeather() {
+  weatherBusy.value = true;
+  try {
+    const res = await apiPost("cc/weather/poll", {});
+    if (res && res.ok) {
+      toast(`检查完成：上游 ${res.candidates || 0} 条，本次播报 ${res.broadcast || 0} 条`);
+    } else {
+      toast((res && res.reason) || "检查完成，无更新");
+    }
+    await loadWeather();
+  } catch (e) {
+    toast("立即检查失败: " + (e && e.message ? e.message : e));
+  } finally {
+    weatherBusy.value = false;
+  }
+}
+
+async function removeWeatherGroup(group) {
+  if (!group || !group.umo) return;
+  const label = group.group_id || group.umo;
+  if (window.mdui && mdui.confirm) {
+    try {
+      await mdui.confirm({
+        headline: "移除气象预警白名单群聊？",
+        description: `群 ${label} 将不再接收气象预警，直到群主/管理员重新发送 /气象预警 开启。`,
+        confirmText: "移除",
+        cancelText: "取消",
+      });
+    } catch (e) {
+      return;
+    }
+  }
+  try {
+    const res = await apiPost("cc/weather/whitelist/remove", { umo: group.umo });
+    toast(res.message || "已移除");
+    await loadWeather();
   } catch (e) {
     toast("移除失败: " + (e && e.message ? e.message : e));
   }
@@ -616,12 +668,16 @@ const SETTINGS_META = {
   earthquake_enable: { name: "地震预警总开关", hint: "开启且至少一个群在白名单中时才会轮询预警源。关闭后不请求任何上游；白名单由群主/管理员用 /地震 开启 添加。" },
   earthquake_poll_interval: { name: "轮询间隔（秒）", hint: "多久检查一次预警源。越短越及时，但请求越频繁；默认 30，追求及时性可调 10~15 秒。" },
   earthquake_min_magnitude: { name: "最低播报震级", hint: "低于此震级不播报。默认 4.0；调低会收到更多小震。" },
-  earthquake_max_age_sec: { name: "事件最大时效（秒）", hint: "只播报在此时间窗口内发震/发布的事件，避免启动时补发旧闻。默认 300 秒。" },
+  earthquake_max_age_sec: { name: "事件最大时效（秒）", hint: "只播报发震时间在此窗口内的事件，迟到速报/目录更新不再当成新预警补发。默认 300 秒。" },
+  earthquake_update_window_sec: { name: "预警更新窗口（秒）", hint: "已播报事件允许补发「预警更新」的最大发震后秒数；默认 600，0 = 完全不补发。每个事件最多补发一条。" },
+  earthquake_aftershock_suppress: { name: "余震抑制", hint: "主震（≥6.0）后 2 小时内、300 km 内低于 5.0 的后续事件不单独广播，避免余震刷屏；需要逐条播报余震可关闭。" },
+  earthquake_map_enable: { name: "震中示意图", hint: "与预警基本信息合并为同一条消息（图在上、文字在下）：OpenStreetMap 底图 + 震中星标 + 本群接收城市圆点。需服务器能访问 OSM 瓦片并装有 Pillow；失败自动降级为纯文字。" },
+  earthquake_map_tiles: { name: "示意图边长（瓦片数）", hint: "每张瓦片 256px，3 = 768×768；范围 1~4。调大更清晰但文件更大。" },
   earthquake_max_distance_km: { name: "最大震中距（km）", hint: "白名单群接收位置超过此距离不播报；0 = 不过滤。" },
   earthquake_default_lat: { name: "默认接收纬度", hint: "群未单独设置位置时使用；需和默认经度同时填写，(0,0) 视为未设置。" },
   earthquake_default_lon: { name: "默认接收经度", hint: "与默认接收纬度配合使用。" },
   earthquake_default_place: { name: "默认接收地点名", hint: "仅用于播报展示，如「北京」；群内可用 /地震 位置 覆盖。" },
-  earthquake_countdown_max_ticks: { name: "倒计时条数上限", hint: "最多逐条发送多少条倒计时。剩余时间更长时先只发基本信息，抵达前最后 N 秒开始倒计时。" },
+  earthquake_countdown_max_ticks: { name: "倒计时末段秒数", hint: "倒计时从真实剩余秒数开始：超出末段的部分自动稀疏播报（如 76s → 76s/71s/66s/61s），进入末段（默认 60 秒）后每秒一条直到 0s。设小可减少末段条数。" },
   earthquake_countdown_max_wait_sec: { name: "倒计时最长等待（秒）", hint: "估算到达时间超过此值时只发基本信息，不启动长倒计时任务，避免远距离事件的任务长时间挂起。" },
   earthquake_countdown_interval: { name: "倒计时发送间隔（秒）", hint: "默认 1.0（每秒一条），最小 1 秒；设为 2 时数字按 2 秒步长递减（如 10s、8s、6s…），降低刷屏频率。" },
   earthquake_s_wave_km_s: { name: "S 波速度（km/s）", hint: "用于按接收位置估算到达时间，默认 3.5；不同地质区域有差异，仅供参考。" },
@@ -629,6 +685,13 @@ const SETTINGS_META = {
   earthquake_http_timeout: { name: "预警源超时（秒）", hint: "单个上游请求超时；源之间并行，单源失败不影响其他源。" },
   earthquake_sim_cooldown: { name: "模拟预警冷却（秒）", hint: "Pages 模拟预警的冷却时间，防止连续点击向白名单群刷屏。默认 30。" },
   earthquake_extreme_cooldown: { name: "极限演练冷却（秒）", hint: "极限演练不显示模拟提示、消息与真实预警一致，误触风险更高；默认 300 秒，建议不要调低。" },
+  // —— 气象预警 ——
+  weather_enable: { name: "气象预警总开关", hint: "开启且至少一个群在白名单中时才轮询中央气象台预警。关闭后不请求上游；白名单由群主/管理员用 /气象预警 开启 添加。" },
+  weather_poll_interval: { name: "轮询间隔（秒）", hint: "预警变化缓慢，默认 120 秒；最小 60。" },
+  weather_min_level: { name: "最低播报级别", hint: "低于该级别不播报。默认黄色及以上（蓝色多为指导性提示）；强灾种可调到橙色及以上或仅红色。" },
+  weather_detail_enable: { name: "附预警正文", hint: "播报时抓取详情页，附上发布内容与防御指南；关闭后只发标题摘要，省一次请求。" },
+  weather_broadcast_interval: { name: "多群发送间隔（秒）", hint: "向多个白名单群逐条发送时的间隔，降低平台频控风险。默认 0.6。" },
+  weather_http_timeout: { name: "预警源超时（秒）", hint: "请求中央气象台的超时时间。" },
   // —— 分段回复 ——
   reply_seg_enable: { name: "分段回复总开关", hint: "开启后，机器人的回复会拆成多条消息分次发送，更像真人逐句说话。注意别和框架自带的分段同时开。" },
   reply_seg_only_llm: { name: "只分段 AI 回复", hint: "只拆 AI 说的话；关闭的话，/pixiv 这类命令的回复也会被拆。" },
@@ -656,6 +719,7 @@ function metaOf(key) {
 const NAV = [
   { key: "dashboard", label: "仪表板", icon: "dashboard--outlined" },
   { key: "quake", label: "地震预警", icon: "warning--outlined" },
+  { key: "weather", label: "气象预警", icon: "cloud--outlined" },
   { key: "help", label: "帮助中心", icon: "help--outlined" },
   { key: "settings", label: "设置", icon: "settings--outlined" },
   { key: "coyote", label: "郊狼控制", icon: "bolt--outlined" },
@@ -944,6 +1008,122 @@ const TEMPLATE = /* html */ `
               </table>
             </div>
             <div v-else class="cc-quake-empty">预警服务未启动（全局开关关闭或服务未初始化）。</div>
+          </mdui-card>
+        </template>
+        <div v-else class="cc-loading">
+          <mdui-circular-progress></mdui-circular-progress>
+        </div>
+      </section>
+
+      <!-- ===== 气象预警 ===== -->
+      <section v-if="current === 'weather'" class="cc-section">
+        <div class="cc-head">
+          <h1>气象预警</h1>
+          <p>中央气象台预警聚合 · 群聊白名单（按城市行政区匹配）· 级别过滤</p>
+        </div>
+
+        <template v-if="weather">
+          <div class="cc-cards">
+            <mdui-card class="cc-card">
+              <mdui-icon slot="icon" name="groups" class="cc-card-icon"></mdui-icon>
+              <div class="cc-card-value">{{ weather.active_groups || 0 }}</div>
+              <div class="cc-card-label">白名单群聊</div>
+            </mdui-card>
+            <mdui-card class="cc-card">
+              <mdui-icon slot="icon" name="cloud_sync" class="cc-card-icon"></mdui-icon>
+              <div class="cc-card-value">{{ weather.running ? "运行中" : (weather.enabled ? "待机" : "已关闭") }}</div>
+              <div class="cc-card-label">轮询状态</div>
+            </mdui-card>
+            <mdui-card class="cc-card">
+              <mdui-icon slot="icon" name="filter_alt" class="cc-card-icon"></mdui-icon>
+              <div class="cc-card-value">≥{{ weather.min_level ? weather.min_level.replace("及以上", "") : "-" }}</div>
+              <div class="cc-card-label">最低播报级别</div>
+            </mdui-card>
+            <mdui-card class="cc-card">
+              <mdui-icon slot="icon" name="campaign" class="cc-card-icon"></mdui-icon>
+              <div class="cc-card-value">{{ (weather.stats && weather.stats.broadcasts) || 0 }}</div>
+              <div class="cc-card-label">累计播报</div>
+            </mdui-card>
+          </div>
+
+          <mdui-card class="cc-panel">
+            <h2 class="cc-panel-title">
+              <mdui-icon name="cloud" class="cc-panel-icon"></mdui-icon>
+              运行状态
+            </h2>
+            <div class="cc-quake-meta">
+              <span>轮询间隔：{{ weather.poll_interval }} 秒</span>
+              <span>数据源：{{ (weather.source && weather.source.label) || "中央气象台" }}</span>
+              <span>白名单：{{ weather.groups.length }} 个（启用 {{ weather.active_groups }}）</span>
+            </div>
+            <div class="cc-quake-actions">
+              <mdui-button variant="outlined" icon="refresh" :disabled="weatherBusy" @click="pollWeather">
+                {{ weatherBusy ? "检查中…" : "立即检查预警源" }}
+              </mdui-button>
+              <span v-if="weather.last_poll_error" class="cc-coyote-busy">{{ weather.last_poll_error }}</span>
+            </div>
+            <div v-if="weather.last_warning" class="cc-quake-last">
+              最近播报：{{ weather.last_warning.wtype }}{{ weather.last_warning.level }}预警
+              （{{ weather.last_warning.region }}，{{ weather.last_warning.issue_time }}）
+            </div>
+            <div v-else class="cc-quake-last">尚无播报记录。群内发送 <code>/气象预警 开启 城市名</code> 后，命中城市的预警会自动推送。</div>
+          </mdui-card>
+
+          <mdui-card class="cc-panel">
+            <h2 class="cc-panel-title">
+              <mdui-icon name="group" class="cc-panel-icon"></mdui-icon>
+              群聊白名单
+            </h2>
+            <div v-if="weather.groups.length" class="mdui-table cc-quake-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>群号</th><th>平台</th><th>关注城市</th><th>状态</th><th>启用人 / 时间</th><th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="g in weather.groups" :key="g.umo">
+                    <td>{{ g.group_id || "-" }}</td>
+                    <td>{{ g.platform_id || "-" }}</td>
+                    <td>
+                      <template v-if="g.locations && g.locations.length">
+                        <div v-for="(loc, li) in g.locations" :key="li">{{ loc.place || "未命名" }}</div>
+                      </template>
+                      <span v-else>{{ g.place || "未设置" }}</span>
+                    </td>
+                    <td>{{ g.enabled ? "✅ 启用" : "⛔ 停用" }}</td>
+                    <td>{{ g.enabled_by || "-" }}<br><small>{{ g.enabled_at || "-" }}</small></td>
+                    <td>
+                      <mdui-button variant="text" icon="delete" @click="removeWeatherGroup(g)">移除</mdui-button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else class="cc-quake-empty">
+              尚无群聊启用。请让群主/管理员在目标群发送：<br>
+              <code>/气象预警 开启 城市名</code>（如 六安、合肥、北京）
+            </div>
+          </mdui-card>
+
+          <mdui-card class="cc-panel">
+            <h2 class="cc-panel-title">
+              <mdui-icon name="dns" class="cc-panel-icon"></mdui-icon>
+              预警源状态
+            </h2>
+            <div class="mdui-table cc-quake-table">
+              <table>
+                <thead><tr><th>预警源</th><th>状态</th><th>最近条数</th><th>最近错误</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td>{{ (weather.source && weather.source.label) || "中央气象台" }}</td>
+                    <td>{{ (weather.source && weather.source.last_ts) ? ((weather.source && weather.source.ok) ? "✅ 正常" : "⚠️ 异常") : "⏳ 尚未检查" }}</td>
+                    <td>{{ (weather.source && weather.source.count) || 0 }}</td>
+                    <td class="cc-quake-error">{{ (weather.source && weather.source.error) || "-" }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </mdui-card>
         </template>
         <div v-else class="cc-loading">
@@ -1347,6 +1527,7 @@ function groupIcon(icon) {
     switch: "toggle_on",
     scissors: "format_align_left",
     warning: "warning",
+    cloud: "cloud",
   };
   return map[icon] || "tune";
 }
@@ -1377,6 +1558,11 @@ createApp({
       quakeBusy,
       quakePolling,
       quakeSources,
+      weather,
+      weatherBusy,
+      loadWeather,
+      pollWeather,
+      removeWeatherGroup,
       loadQuake,
       pollQuake,
       simulateQuake,
@@ -1431,6 +1617,7 @@ createApp({
     current(tab) {
       if (tab === "dashboard") this.loadStatus();
       if (tab === "quake") this.loadQuake();
+      if (tab === "weather") this.loadWeather();
       if (tab === "help") this.loadHelp();
       if (tab === "settings") this.loadConfig();
       if (tab === "coyote") {
@@ -1442,5 +1629,6 @@ createApp({
   created() {
     this.loadStatus();
     if (current.value === "quake") this.loadQuake();
+    if (current.value === "weather") this.loadWeather();
   },
 }).mount("#app");

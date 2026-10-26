@@ -210,6 +210,7 @@ Every command accepts both Chinese and English aliases:
 | `/femboy` | `/男娘` | Femboy image |
 | `/dglab` | `/电击` | DG-LAB device management |
 | `/地震` | `/earthquake` `/eq` `/预警` | Group-whitelisted earthquake early warning (owner/admin enables; basic info then countdown) |
+| `/气象预警` | `/天气预警` | Group-whitelisted weather alerts from CMA (matched by city districts, severity filter) |
 | `/开关` | `/toggle` `/switch` | Turn this plugin's commands on/off for a group (timed and per-category scope supported) |
 | `/开关列表` | `/switch_list` `/开关状态列表` | List disabled groups and scopes on this platform (admin) |
 | `/忘记` | `/forget_memory` `/忘记记忆` | Remove cross-group memory records by keyword (admin) |
@@ -589,9 +590,11 @@ With `dglab_webui_enabled` turned on, the plugin serves a CCDG WebUI remote-cont
 >
 > **No coordinates needed:** just send a city name. About 300 prefecture-level cities/municipalities are built in (including Hong Kong, Macau, Taiwan and common international cities), looked up offline; districts, streets and unknown places fall back to OpenStreetMap Nominatim (no key, cached, 1 request/sec). Examples: `/地震 开启 北京`, `/地震 添加城市 上海`, `/地震 添加城市 乌鲁木齐`, `/地震 添加城市 台北`.
 
-**Sources:** CENC EEW, Sichuan/Yunnan EEW, Fujian EEW, JMA EEW (via the public Wolfx mirrors), CENC earthquake reports, and the USGS global feed. All sources are fetched in parallel; one failing source does not block the others. The same earthquake is clustered across sources (origin time ±3 min, epicenter within 200 km, magnitude difference ≤1.0) and reported once; significant later revisions send an update without restarting the countdown.
+**Sources:** CENC EEW, Sichuan/Yunnan EEW, Fujian EEW, JMA EEW (via the public Wolfx mirrors), CENC earthquake reports, and the USGS global feed. All sources are fetched in parallel; one failing source does not block the others. The same earthquake is clustered across sources (origin time ±3 min, epicenter within 200 km, magnitude difference ≤1.0; the same source + EventID is always merged) and reported once; a significant revision may send one update within `earthquake_update_window_sec` (default 600 s, max one per event) without restarting the countdown. Late reports are not treated as new warnings. Smaller aftershocks (<5.0 within 2 h / 300 km of a ≥6.0 mainshock) are suppressed by default (`earthquake_aftershock_suppress`).
 
-**Broadcast flow:** basic information first (epicenter, magnitude, depth, origin time, intensity, distance/arrival for each receiving city, magnitude-based guidance), then a countdown for the group's **nearest** receiving city based on an S-wave speed of 3.5 km/s (last 30 ticks by default, one per second). Countdown messages are minimal: only `12s`, `11s` … `0s`. After `0s`, a separate arrival message is sent with “seismic wave has arrived” and the magnitude-based avoidance guidance; turning countdown off with `/地震 倒计时 关` still keeps that arrival message. No `@all`; multi-group sends are spaced to reduce platform rate-limit risk. Estimates are approximate — always follow official information.
+**Broadcast flow:**
+
+**Weather alerts (`/气象预警`, alias `/天气预警`):** same whitelist logic as the earthquake warning — the group owner/admin runs `/气象预警 开启 六安` to enable a group with watched cities (up to 20). CMA (nmc.cn) national warnings are matched against the province/city/county path in the warning title; a bare city name auto-resolves its province. Severity filter defaults to yellow and above (`weather_min_level`); each broadcast carries the alert body and defense guidelines (`weather_detail_enable`). Dedup by alert ID (48 h retention), max 5 new alerts per poll, default 120 s polling. `/开关 off weather` mutes a group. one message combining an **epicenter map** (image on top: OpenStreetMap tiles with a red star at the epicenter and blue dots for the group's cities) and the basic information text below (epicenter, magnitude, depth, origin time, intensity, distance/arrival for each receiving city, magnitude-based guidance); auto-degrades to text-only on failure. Then a countdown for the group's **nearest** receiving city based on an S-wave speed of 3.5 km/s — **starting from the actual remaining seconds** (e.g. 76 s remaining → `76s`): beyond the final span (default 60 s) ticks are sparse (`76s, 71s, 66s, 61s`; step grows with distance), then one per second down to `0s`. Countdown messages are minimal. After `0s`, a separate arrival message is sent with “seismic wave has arrived” and the magnitude-based avoidance guidance; turning countdown off with `/地震 倒计时 关` still keeps that arrival message. No `@all`; multi-group sends are spaced to reduce platform rate-limit risk. Estimates are approximate — always follow official information.
 
 **Pages → Earthquake Warning → Simulated Warning** broadcasts a drill to every enabled whitelist group, **first sending “this is only a simulation, not a real earthquake”**, then the simulated basic info and countdown (groups that disabled countdown receive basic info and the arrival drill guidance only). The form accepts magnitude, epicenter name, an optional epicenter city (replaces coordinates), depth, coordinates and countdown; it has a cooldown and a “Check sources now” button.
 
@@ -605,13 +608,15 @@ Key options: `earthquake_enable`, `earthquake_poll_interval` (30 s), `earthquake
 
 > Since **v1.9.0**, the plugin ships an all-in-one AstrBot Pages panel (mdui 2 Material Design 3 style, sky-blue + snow-white theme). Open it from the AstrBot WebUI under **Plugin Details → Pages** (or the "Plugin Pages" group in the sidebar).
 
-The panel has 6 pages:
+The panel has 7 pages:
 
 | Page | Description |
 | --- | --- |
 | 📊 **Dashboard** | Plugin overview: uptime, bound devices, active connections, registered users, plugin version / author / start time, feature-toggle states |
 | 🌏 **Earthquake Warning** | Whitelist groups / multiple cities / source health / last event / check now / **simulated warning** and **extreme drill** (real-like messages; typed confirmation) |
-| 📖 **Help Center** | Built-in docs and FAQs (quick start / earthquake warning / DG-LAB / segmented replies / cross-group memory / troubleshooting) |
+| ⛅ **Weather Alerts** | CMA (nmc.cn) national warnings (typhoon/rain/fog/cold wave…); group whitelist matched by province/city/county path; severity filter (yellow+ by default); alert body & defense guidelines attached |
+| ⛅ **Weather Alerts** | Whitelist groups & watched cities / CMA source health / last broadcasts / check now |
+| 📖 **Help Center** | Built-in docs and FAQs (quick start / earthquake warning / weather alerts / DG-LAB / segmented replies / cross-group memory / troubleshooting) |
 | ⚙️ **Settings** | Edit every plugin option visually: each has a friendly name and plain-language explanation; saving **hot-reloads** the config — no restart needed |
 | ⚡ **DG-LAB Control** | One-click relay server deployment (v3/v4 · public-exposure toggle) + master switch for the CCDG WebUI + **public-exposure toggle** (see below) |
 | 💬 **Contact Us** | Developer info, GitHub repository, QQ group (one-click join) |
@@ -907,7 +912,7 @@ The new format uses three standalone options: `dglab_server_url`, `dglab_heartbe
 
 ### Earthquake Early Warning
 
-See [8. Earthquake Early Warning](#8-earthquake-early-warning-地震-alias-earthquake-eq-预警). Main options: `earthquake_enable` (true), `earthquake_poll_interval` (30 s), `earthquake_min_magnitude` (4.0), `earthquake_max_age_sec` (300), `earthquake_default_lat` / `lon` (0 = unset), `earthquake_countdown_max_ticks` (30), `earthquake_countdown_max_wait_sec` (300), `earthquake_countdown_interval` (1.0), `earthquake_s_wave_km_s` (3.5), `earthquake_broadcast_interval` (0.6), `earthquake_http_timeout` (10), `earthquake_sim_cooldown` (30), `earthquake_extreme_cooldown` (300), and `earthquake_group_whitelist` (managed by `/地震 开启`, viewable/removable in the config page).
+See [8. Earthquake Early Warning](#8-earthquake-early-warning-地震-alias-earthquake-eq-预警). Main options: `earthquake_enable` (true), `earthquake_poll_interval` (30 s), `earthquake_min_magnitude` (4.0), `earthquake_max_age_sec` (300), `earthquake_default_lat` / `lon` (0 = unset), `earthquake_countdown_max_ticks` (60), `earthquake_update_window_sec` (600), `earthquake_aftershock_suppress` (true), `earthquake_map_enable` (true), `earthquake_map_tiles` (3), `earthquake_countdown_max_wait_sec` (300), `earthquake_countdown_interval` (1.0), `earthquake_s_wave_km_s` (3.5), `earthquake_broadcast_interval` (0.6), `earthquake_http_timeout` (10), `earthquake_sim_cooldown` (30), `earthquake_extreme_cooldown` (300), and `earthquake_group_whitelist` (managed by `/地震 开启`, viewable/removable in the config page).
 
 ### Cross-Group Memory
 
@@ -1116,7 +1121,7 @@ Acknowledgements:
 
 ---
 
-**Version**: v2.9.0 (per-version changes in [CHANGELOG.md](CHANGELOG.md))
+**Version**: v2.10.0 (per-version changes in [CHANGELOG.md](CHANGELOG.md))
 **Repository**: [GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
 
 

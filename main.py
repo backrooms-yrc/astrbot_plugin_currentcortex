@@ -47,6 +47,7 @@ from .earthquake import (
     set_group_enabled,
     upsert_group,
 )
+from .weather import WeatherService
 from astrbot.api.provider import ProviderRequest, LLMResponse
 from astrbot.core.agent.message import TextPart
 from astrbot.api.platform import MessageType
@@ -241,6 +242,13 @@ COMMAND_CATEGORIES = [
         "title": "地震预警",
         "commands": [
             {"cmd": "/地震", "alias": "earthquake/eq/预警", "desc": "群聊白名单预警：多源聚合，先发基本信息再逐条倒计时"},
+        ],
+    },
+    {
+        "icon": "cloud",
+        "title": "气象预警",
+        "commands": [
+            {"cmd": "/气象预警", "alias": "天气预警/weather", "desc": "中央气象台预警：按城市白名单播报（台风/暴雨/大雾等）"},
         ],
     },
     {
@@ -1513,8 +1521,8 @@ def _remove_file_safe(file_path: str) -> None:
 @register(
     "astrbot_plugin_currentcortex",
     "Rcst20",
-    "多功能 AstrBot 插件（CurrentCortex）—— Pixiv 随机图片 ·网易云点歌 ·小红书/B站/抖音媒体解析 ·每日一言 ·天气 ·男娘 ·地震预警 ·DG-LAB（郊狼） 设备管理 ·Wikidot 站点管理 ·跨群聊记忆 ·按群聊开关。基于 LeiZ API。",
-    "2.9.0",
+    "多功能 AstrBot 插件（CurrentCortex）—— Pixiv 随机图片 ·网易云点歌 ·小红书/B站/抖音媒体解析 ·每日一言 ·天气 ·男娘 ·地震预警 ·气象预警 ·DG-LAB（郊狼） 设备管理 ·Wikidot 站点管理 ·跨群聊记忆 ·按群聊开关。基于 LeiZ API。",
+    "2.10.0",
 )
 class CurrentCortexPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -1967,6 +1975,18 @@ class CurrentCortexPlugin(Star):
         except Exception as e:
             logger.warning(f"[Earthquake] 初始化失败，地震预警不可用: {e}")
             self._earthquake_service = None
+        # 气象预警：中央气象台预警聚合 + 群聊白名单（按城市行政区匹配）。
+        self._weather_enable = bool(config.get("weather_enable", True))
+        self._weather_service: Optional[WeatherService] = None
+        try:
+            self._weather_service = WeatherService(self, data_dir=PLUGIN_DATA_DIR)
+            if self._weather_enable:
+                self._weather_service.start()
+            else:
+                logger.info("[Weather] 全局开关关闭，未启动轮询")
+        except Exception as e:
+            logger.warning(f"[Weather] 初始化失败，气象预警不可用: {e}")
+            self._weather_service = None
         # 记录启动时间（用于仪表板「运行时长」）
         self._started_at = time.time()
         # 注册 Page 后端 API（仪表板 / 设置 / 郊狼 / 帮助 / 联系）
@@ -2034,6 +2054,11 @@ class CurrentCortexPlugin(Star):
             "commands": ("地震", "earthquake", "eq", "预警", "地震预警"),
             "aliases": ("earthquake", "地震", "预警", "eq"),
         },
+        "weather": {
+            "label": "气象预警",
+            "commands": ("气象预警", "天气预警"),
+            "aliases": ("weather", "气象", "天气预警"),
+        },
         "memory": {
             "label": "跨群聊记忆",
             "commands": (),
@@ -2052,6 +2077,8 @@ class CurrentCortexPlugin(Star):
 
     # 地震预警命令名与别名（用于从 event.message_str 剥离命令前缀）
     _EQ_COMMAND_ALIASES = ("地震", "earthquake", "eq", "预警", "地震预警")
+    # 气象预警命令名与别名
+    _WEATHER_COMMAND_ALIASES = ("气象预警", "天气预警")
 
     # 关闭期间「仅提醒一次」的节流间隔（同一群同一域）
     _SWITCH_HINT_INTERVAL_SECONDS = 3600.0
@@ -2495,6 +2522,76 @@ class CurrentCortexPlugin(Star):
             return not store.is_enabled(umo, "earthquake")
         except Exception:
             return False
+
+    def is_weather_muted(self, umo: str) -> bool:
+        """群级 /开关 off weather 时，气象预警播报同样静音。"""
+        store = getattr(self, "_group_switch_store", None)
+        if store is None:
+            return False
+        try:
+            return not store.is_enabled(umo, "weather")
+        except Exception:
+            return False
+
+    def get_weather_groups(self, active_only: bool = False) -> List[Dict[str, Any]]:
+        """读取气象预警群聊白名单。"""
+        try:
+            groups = normalize_groups(
+                self.config.get("weather_group_whitelist", [])
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[Weather] 读取白名单失败: {e}")
+            groups = []
+        if active_only:
+            return [g for g in groups if g.get("enabled", True)]
+        return groups
+
+    async def _save_weather_groups(self, groups: List[Dict[str, Any]]) -> None:
+        """写回气象预警白名单并落盘（不触发热重载，轮询下一轮生效）。"""
+        clean: List[Dict[str, Any]] = []
+        for group in groups:
+            clean.append(
+                {
+                    "umo": group.get("umo", ""),
+                    "platform_id": group.get("platform_id", ""),
+                    "group_id": group.get("group_id", ""),
+                    "place": group.get("place", ""),
+                    "latitude": group.get("latitude"),
+                    "longitude": group.get("longitude"),
+                    "locations": [
+                        {
+                            "place": loc.get("place", ""),
+                            "latitude": loc.get("latitude"),
+                            "longitude": loc.get("longitude"),
+                        }
+                        for loc in (group.get("locations") or [])
+                    ],
+                    "countdown_enabled": bool(
+                        group.get("countdown_enabled", True)
+                    ),
+                    "enabled": bool(group.get("enabled", True)),
+                    "enabled_by": group.get("enabled_by", ""),
+                    "enabled_at": group.get("enabled_at", ""),
+                }
+            )
+        self.config["weather_group_whitelist"] = clean
+        try:
+            save = getattr(self.config, "save_config_async", None)
+            if callable(save):
+                await save()
+            else:
+                await asyncio.to_thread(self.config.save_config)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[Weather] 保存白名单失败: {e}")
+
+    async def remove_weather_group(self, umo: str) -> bool:
+        """Pages 管理：从气象预警白名单中彻底移除一个群。"""
+        groups = self.get_weather_groups()
+        kept = [g for g in groups if g.get("umo") != umo]
+        if len(kept) == len(groups):
+            return False
+        await self._save_weather_groups(kept)
+        return True
 
     async def remove_earthquake_group(self, umo: str) -> bool:
         """Pages 管理：从白名单中彻底移除一个群。"""
@@ -3075,6 +3172,333 @@ class CurrentCortexPlugin(Star):
             + "\n🌐 预警源：CENC/川滇/福建/日本气象厅 + CENC速报 + USGS\n"
             "⏳ 预警时先发基本信息，再按最近接收点逐条倒计时。\n"
             "💡 添加更多城市：/地震 添加城市 上海；关倒计时：/地震 倒计时 关"
+        )
+
+    # =================================================================== #
+    # 气象预警：群聊白名单制（群主/群管理员按城市启用，逻辑同地震预警）
+    # =================================================================== #
+    @classmethod
+    def _weather_strip_command(cls, message: str) -> str:
+        text = re.sub(r"^[/!！]\s*", "", (message or "").strip()).strip()
+        if not text:
+            return ""
+        parts = text.split(maxsplit=1)
+        if parts[0].lower() in cls._WEATHER_COMMAND_ALIASES:
+            return parts[1].strip() if len(parts) > 1 else ""
+        return text
+
+    @staticmethod
+    def _weather_help_text() -> str:
+        return (
+            "⛅ 气象预警（群聊白名单制）\n\n"
+            "  /气象预警 开启 <城市名>\n"
+            "      启用本群并添加关注城市，如 /气象预警 开启 六安\n"
+            "  /气象预警 添加城市 <城市名>\n"
+            "      一个群可添加多个城市（最多 20 个），支持省/市/区县\n"
+            "  /气象预警 移除城市 <城市名>\n"
+            "      移除一个关注城市\n"
+            "  /气象预警 城市列表\n"
+            "      查看本群全部关注城市\n"
+            "  /气象预警 位置 <城市名>\n"
+            "      将关注城市替换为唯一城市\n"
+            "  /气象预警 关闭\n"
+            "      停用本群气象预警（保留城市列表）\n"
+            "  /气象预警 状态\n"
+            "      查看本群与全局运行状态、最近预警\n"
+            "  /气象预警 帮助\n"
+            "      显示本帮助\n\n"
+            "💡 仅群主/群管理员可修改；预警来自中央气象台（台风/暴雨/大雾/寒潮等），"
+            "按预警标题的省市区路径匹配关注城市，级别默认黄色及以上。\n"
+            "💡 示例：/气象预警 开启 六安、/气象预警 添加城市 合肥"
+        )
+
+    def _weather_locations_lines(self, group: Optional[Dict[str, Any]]) -> List[str]:
+        if group is None:
+            return ["关注城市：未设置"]
+        locations = group_locations(group)
+        if not locations:
+            return ["关注城市：未设置"]
+        lines = ["关注城市："]
+        for location in locations[:10]:
+            lines.append(f"  · {location.get('place') or '未命名'}")
+        if len(locations) > 10:
+            lines.append(f"  · 等共 {len(locations)} 个城市")
+        return lines
+
+    def _weather_status_text(
+        self,
+        group: Optional[Dict[str, Any]],
+        service_status: Optional[Dict[str, Any]],
+    ) -> str:
+        lines = ["⛅ 气象预警状态"]
+        if group is None:
+            lines.append("本群：尚未启用（群主/管理员发送 /气象预警 开启 六安）")
+        else:
+            state = "✅ 已启用" if group.get("enabled", True) else "⛔ 已关闭"
+            lines.append(f"本群：{state}")
+            lines.extend(self._weather_locations_lines(group))
+        if service_status:
+            running = "✅ 运行中" if service_status.get("running") else "⛔ 未运行"
+            lines.append(
+                f"全局：{running}｜白名单 {service_status.get('active_groups', 0)} 群"
+                f"｜轮询 {service_status.get('poll_interval', '-')}s"
+                f"｜级别 ≥{service_status.get('min_level', '-')}"
+            )
+            last = service_status.get("last_warning")
+            if last:
+                lines.append(
+                    f"最近播报：{last.get('wtype', '-')}{last.get('level', '-')}预警"
+                    f"（{last.get('region', '-')}，{last.get('issue_time', '-')}）"
+                )
+            source = service_status.get("source") or {}
+            if source:
+                state_txt = "✅ 正常" if source.get("ok") else "⚠️ 异常"
+                lines.append(f"预警源：{source.get('label', '-')} {state_txt}")
+        else:
+            lines.append("⚠️ 预警服务未初始化，请检查插件日志或重新加载插件")
+        lines.append(
+            "用法：/气象预警 开启 <城市名> · 添加城市 · 移除城市 · 城市列表 · 帮助"
+        )
+        return "\n".join(lines)
+
+    @filter.command("气象预警", alias={"天气预警"})
+    async def weather_alert_command(self, event: AstrMessageEvent):
+        """气象预警：群聊白名单制，按城市行政区匹配中央气象台预警。"""
+        service = getattr(self, "_weather_service", None)
+        service_status = None
+        if service is not None:
+            try:
+                service_status = service.status()
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"[Weather] 读取状态失败: {e}")
+
+        umo = event.unified_msg_origin or ""
+        group = find_group(self.get_weather_groups(), umo) if umo else None
+        rest = self._weather_strip_command(event.message_str)
+        tokens = rest.split()
+        action = tokens[0].lower() if tokens else ""
+
+        if action in ("", "状态", "status", "info"):
+            yield event.plain_result(self._weather_status_text(group, service_status))
+            return
+        if action in ("帮助", "help", "?", "？"):
+            yield event.plain_result(self._weather_help_text())
+            return
+        if action in ("列表", "城市列表", "城市", "list"):
+            if group is None:
+                yield event.plain_result(
+                    "ℹ️ 本群尚未启用气象预警\n"
+                    "💡 发送 /气象预警 开启 六安 即可启用并添加关注城市"
+                )
+                return
+            yield event.plain_result(
+                "⛅ 本群气象预警关注城市\n"
+                + "\n".join(self._weather_locations_lines(group))
+                + "\n\n💡 添加：/气象预警 添加城市 合肥；移除：/气象预警 移除城市 合肥"
+            )
+            return
+        if action not in (
+            "开启", "on", "enable", "打开",
+            "关闭", "off", "disable", "关",
+            "位置", "location", "loc", "设置位置",
+            "添加", "添加城市", "add",
+            "移除", "移除城市", "删除", "remove", "del", "删除城市",
+        ):
+            yield event.plain_result("❌ 未知操作\n\n" + self._weather_help_text())
+            return
+
+        ok, reason = await self._eq_can_manage(event)
+        if not ok:
+            yield event.plain_result(reason)
+            return
+        if event.get_message_type() != MessageType.GROUP_MESSAGE:
+            yield event.plain_result("💡 气象预警按群启用，请在群聊中操作")
+            return
+        if not umo:
+            yield event.plain_result("❌ 无法获取当前会话标识，操作失败")
+            return
+
+        operator = str(event.get_sender_name() or event.get_sender_id() or "")
+        stamp = format_time(time.time())
+        groups = self.get_weather_groups()
+
+        if action in ("关闭", "off", "disable", "关"):
+            if group is None or not group.get("enabled", True):
+                yield event.plain_result("ℹ️ 本群尚未启用气象预警")
+                return
+            groups = set_group_enabled(
+                groups, umo, False, operator=operator, timestamp=stamp
+            )
+            await self._save_weather_groups(groups)
+            yield event.plain_result(
+                "⛔ 已关闭本群气象预警\n"
+                "💡 重新启用：/气象预警 开启 <城市名>"
+            )
+            return
+
+        if action in ("位置", "location", "loc", "设置位置"):
+            if group is None:
+                yield event.plain_result(
+                    "❌ 本群尚未启用气象预警\n💡 请先发送 /气象预警 开启 <城市名>"
+                )
+                return
+            if not tokens[1:]:
+                yield event.plain_result(
+                    "❌ 请提供城市：/气象预警 位置 上海\n"
+                    "💡 这会替换本群全部关注城市；追加请用 /气象预警 添加城市"
+                )
+                return
+            latitude, longitude, place, error = await self._eq_parse_location_or_city(
+                tokens[1:]
+            )
+            if error:
+                yield event.plain_result(error)
+                return
+            updated = dict(group)
+            updated["locations"] = [
+                {"place": place, "latitude": latitude, "longitude": longitude}
+            ]
+            updated["place"] = place
+            updated["latitude"] = latitude
+            updated["longitude"] = longitude
+            updated["enabled_by"] = operator
+            updated["enabled_at"] = stamp
+            groups = upsert_group(groups, updated)
+            await self._save_weather_groups(groups)
+            yield event.plain_result(f"✅ 本群关注城市已设为唯一城市：{place}")
+            return
+
+        if action in ("添加", "添加城市", "add"):
+            if group is None:
+                yield event.plain_result(
+                    "❌ 本群尚未启用气象预警\n"
+                    "💡 先发送 /气象预警 开启 六安，再用 /气象预警 添加城市 合肥"
+                )
+                return
+            if not tokens[1:]:
+                yield event.plain_result(
+                    "❌ 请提供要添加的城市：/气象预警 添加城市 合肥"
+                )
+                return
+            latitude, longitude, place, error = await self._eq_parse_location_or_city(
+                tokens[1:]
+            )
+            if error:
+                yield event.plain_result(error)
+                return
+            existing = group_locations(group)
+            if len(existing) >= 20 and not any(
+                abs(float(loc["latitude"]) - latitude) < 0.001
+                and abs(float(loc["longitude"]) - longitude) < 0.001
+                for loc in existing
+            ):
+                yield event.plain_result("❌ 每个群最多添加 20 个关注城市")
+                return
+            updated, _added = add_group_location(
+                group,
+                {"place": place, "latitude": latitude, "longitude": longitude},
+            )
+            updated["enabled_by"] = operator
+            updated["enabled_at"] = stamp
+            groups = upsert_group(groups, updated)
+            await self._save_weather_groups(groups)
+            state_note = (
+                ""
+                if group.get("enabled", True)
+                else "\n⚠️ 本群当前为关闭状态，发送 /气象预警 开启 后才会接收预警"
+            )
+            yield event.plain_result(
+                "✅ 已添加关注城市\n"
+                + "\n".join(self._weather_locations_lines(updated))
+                + state_note
+            )
+            return
+
+        if action in ("移除", "移除城市", "删除", "remove", "del", "删除城市"):
+            if group is None:
+                yield event.plain_result("ℹ️ 本群尚未启用气象预警")
+                return
+            query = " ".join(tokens[1:]).strip()
+            if not query:
+                yield event.plain_result(
+                    "❌ 请提供要移除的城市：/气象预警 移除城市 合肥\n"
+                    + "\n".join(self._weather_locations_lines(group))
+                )
+                return
+            updated, removed, removed_loc = remove_group_location(group, query)
+            if not removed:
+                yield event.plain_result(
+                    f"❌ 没有找到关注城市「{query}」\n"
+                    + "\n".join(self._weather_locations_lines(group))
+                )
+                return
+            if not group_locations(updated):
+                updated["enabled"] = False
+            updated["enabled_by"] = operator
+            updated["enabled_at"] = stamp
+            groups = upsert_group(groups, updated)
+            await self._save_weather_groups(groups)
+            removed_name = (removed_loc or {}).get("place") or query
+            if not group_locations(updated):
+                yield event.plain_result(
+                    f"✅ 已移除关注城市：{removed_name}\n"
+                    "⚠️ 已没有关注城市，本群气象预警已自动关闭。"
+                )
+            else:
+                yield event.plain_result(
+                    f"✅ 已移除关注城市：{removed_name}\n"
+                    + "\n".join(self._weather_locations_lines(updated))
+                )
+            return
+
+        # 开启（可带城市名；重复执行会追加城市）
+        if not tokens[1:]:
+            existing = group_locations(group) if group is not None else []
+            if existing:
+                updated = dict(group or {})
+                updated["enabled"] = True
+                updated["enabled_by"] = operator
+                updated["enabled_at"] = stamp
+                groups = upsert_group(groups, updated)
+                await self._save_weather_groups(groups)
+                yield event.plain_result(
+                    "✅ 已在本群启用气象预警\n"
+                    + "\n".join(self._weather_locations_lines(updated))
+                )
+                return
+            yield event.plain_result(
+                "❌ 请告诉我关注哪个城市：\n"
+                "  /气象预警 开启 六安\n"
+                "  /气象预警 开启 合肥"
+            )
+            return
+        latitude, longitude, place, error = await self._eq_parse_location_or_city(
+            tokens[1:]
+        )
+        if error:
+            yield event.plain_result(error)
+            return
+        base = dict(group) if group is not None else {
+            "umo": umo,
+            "platform_id": event.get_platform_id(),
+            "group_id": event.get_group_id(),
+            "locations": [],
+            "countdown_enabled": True,
+        }
+        base["enabled"] = True
+        base["enabled_by"] = operator
+        base["enabled_at"] = stamp
+        updated, _added = add_group_location(
+            base, {"place": place, "latitude": latitude, "longitude": longitude}
+        )
+        groups = upsert_group(groups, updated)
+        await self._save_weather_groups(groups)
+        yield event.plain_result(
+            "✅ 已在本群启用气象预警\n"
+            + "\n".join(self._weather_locations_lines(updated))
+            + "\n🌐 预警源：中央气象台（台风/暴雨/大雾/寒潮等）\n"
+            "⛔ 预警按省市区路径匹配城市，级别默认黄色及以上（可在设置调整）。\n"
+            "💡 添加更多城市：/气象预警 添加城市 合肥"
         )
 
     def _parse_switch_action(self, message: str) -> str:
@@ -7220,7 +7644,7 @@ class CurrentCortexPlugin(Star):
             return "127.0.0.1"
 
     async def initialize(self):
-        # 兜底：若插件实例化时没有可用事件循环，这里再尝试启动地震预警轮询。
+        # 兜底：若插件实例化时没有可用事件循环，这里再尝试启动地震/气象预警轮询。
         # start() 幂等，已启动时不会重复创建任务。
         service = getattr(self, "_earthquake_service", None)
         if service is not None and getattr(self, "_earthquake_enable", False):
@@ -7228,6 +7652,12 @@ class CurrentCortexPlugin(Star):
                 service.start()
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"[Earthquake] 启动轮询失败: {e}")
+        weather = getattr(self, "_weather_service", None)
+        if weather is not None and getattr(self, "_weather_enable", False):
+            try:
+                weather.start()
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"[Weather] 启动轮询失败: {e}")
 
     async def terminate(self):
         logger.info("CurrentCortexPlugin is being terminated")
@@ -7256,6 +7686,12 @@ class CurrentCortexPlugin(Star):
                 logger.info("✅ 地震预警轮询已停止")
             except Exception as e:
                 logger.warning(f"[Earthquake] 停止轮询失败: {e}")
+        if getattr(self, "_weather_service", None) is not None:
+            try:
+                await self._weather_service.stop()
+                logger.info("✅ 气象预警轮询已停止")
+            except Exception as e:
+                logger.warning(f"[Weather] 停止轮询失败: {e}")
 
     @filter.command("dglab", alias={"电击"})
     async def dglab_command(self, event: AstrMessageEvent):

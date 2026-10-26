@@ -163,6 +163,10 @@ _CONFIG_GROUPS: List[Dict[str, Any]] = [
             "earthquake_poll_interval",
             "earthquake_min_magnitude",
             "earthquake_max_age_sec",
+            "earthquake_update_window_sec",
+            "earthquake_aftershock_suppress",
+            "earthquake_map_enable",
+            "earthquake_map_tiles",
             "earthquake_max_distance_km",
             "earthquake_default_lat",
             "earthquake_default_lon",
@@ -175,6 +179,19 @@ _CONFIG_GROUPS: List[Dict[str, Any]] = [
             "earthquake_http_timeout",
             "earthquake_sim_cooldown",
             "earthquake_extreme_cooldown",
+        ],
+    },
+    {
+        "key": "weather",
+        "title": "气象预警",
+        "icon": "cloud",
+        "items": [
+            "weather_enable",
+            "weather_poll_interval",
+            "weather_min_level",
+            "weather_detail_enable",
+            "weather_broadcast_interval",
+            "weather_http_timeout",
         ],
     },
     {
@@ -372,6 +389,7 @@ async def page_status(plugin):
             "cross_group_enable",
             "group_switch_enable",
             "earthquake_enable",
+            "weather_enable",
             "reply_seg_enable",
         ]:
             try:
@@ -1336,6 +1354,24 @@ _HELP_DOCS: List[Dict[str, Any]] = [
                      "仅 WebUI 管理员可触发。⚠️ 可能引起恐慌，请只在已告知群成员的演练中使用。",
             },
             {
+                "q": "气象预警怎么匹配到我的群？",
+                "a": "按预警标题里的省/市/区县路径与群内关注城市名匹配。"
+                     "例如群关注「六安」，安徽省发布的省级预警和六安市/县发布的预警都会命中；"
+                     "裸城市名会自动反查所属省。用 /气象预警 开启 城市名 添加。",
+            },
+            {
+                "q": "气象预警太多/太少？",
+                "a": "在设置中调整「最低播报级别」：默认黄色及以上；"
+                     "蓝色多为指导性提示，可选全部级别；只想收强灾种可调橙色及以上或仅红色。"
+                     "轮询间隔默认 120 秒，预警变化缓慢不建议调太小。",
+            },
+            {
+                "q": "为什么同一次地震会重复预警/更新？",
+                "a": "已修复：同源同 EventID 强制合并；时效按发震时间计算，迟到速报不补发；"
+                     "每个事件最多补发一条「预警更新」；低优先级源不再覆盖主震级/烈度；"
+                     "主震后 2h/300km 内低于 5.0 的余震默认抑制。可在设置页调整更新窗口与余震抑制。",
+            },
+            {
                 "q": "数据准确吗？",
                 "a": "预警来自 CENC/川滇/福建/日本气象厅及 USGS 等公开源，经 Wolfx 镜像聚合；"
                      "到达时间按 S 波速度估算，仅供参考，请以官方发布为准。",
@@ -1396,7 +1432,7 @@ async def page_quake_status(plugin):
                 "running": False,
                 "poll_interval": int(cfg.get("earthquake_poll_interval", 30) or 30),
                 "min_magnitude": float(cfg.get("earthquake_min_magnitude", 4.0) or 4.0),
-                "countdown_max_ticks": int(cfg.get("earthquake_countdown_max_ticks", 30) or 30),
+                "countdown_max_ticks": int(cfg.get("earthquake_countdown_max_ticks", 60) or 60),
                 "countdown_max_wait_sec": int(cfg.get("earthquake_countdown_max_wait_sec", 300) or 300),
                 "groups": groups,
                 "active_groups": len(active),
@@ -1459,6 +1495,76 @@ async def page_quake_remove(plugin):
 
 
 # ----------------------------------------------------------------------- #
+# Handler：气象预警（状态 / 立即检查 / 白名单移除）
+# ----------------------------------------------------------------------- #
+
+
+async def page_weather_status(plugin):
+    """返回气象预警运行状态、白名单、最近播报与源健康度。"""
+    try:
+        service = getattr(plugin, "_weather_service", None)
+        if service is not None:
+            return json_response(service.status())
+        groups = []
+        getter = getattr(plugin, "get_weather_groups", None)
+        if callable(getter):
+            groups = getter()
+        cfg = getattr(plugin, "config", {}) or {}
+        active = [g for g in groups if g.get("enabled", True)]
+        return json_response(
+            {
+                "enabled": bool(cfg.get("weather_enable", False)),
+                "running": False,
+                "poll_interval": int(cfg.get("weather_poll_interval", 120) or 120),
+                "min_level": str(cfg.get("weather_min_level", "黄色及以上")),
+                "groups": groups,
+                "active_groups": len(active),
+                "source": {},
+                "last_warning": None,
+                "recent_warnings": [],
+                "stats": {},
+                "last_poll_error": "预警服务未初始化（请检查插件日志）",
+            }
+        )
+    except Exception as e:
+        logger.error(f"[Pages] /cc/weather/status 失败: {e}", exc_info=True)
+        return error_response(f"气象预警状态获取失败: {e}", status_code=500)
+
+
+async def page_weather_poll(plugin):
+    """立即执行一轮气象预警检查（不等待轮询间隔）。"""
+    try:
+        service = getattr(plugin, "_weather_service", None)
+        if service is None:
+            return error_response("气象预警服务未初始化", status_code=503)
+        result = await service.poll_once()
+        return json_response({**result, "status": service.status()})
+    except Exception as e:
+        logger.error(f"[Pages] /cc/weather/poll 失败: {e}", exc_info=True)
+        return error_response(f"立即检查失败: {e}", status_code=500)
+
+
+async def page_weather_remove(plugin):
+    """从气象预警白名单中移除一个群聊。"""
+    try:
+        payload = await request.json(default={})
+        umo = str(payload.get("umo") or "").strip()
+        if not umo:
+            return error_response("缺少群聊会话标识 umo", status_code=400)
+        removed = await plugin.remove_weather_group(umo)
+        return json_response(
+            {
+                "removed": bool(removed),
+                "umo": umo,
+                "message": "已从白名单移除" if removed else "该群不在白名单中",
+            }
+        )
+    except Exception as e:
+        logger.error(f"[Pages] /cc/weather/whitelist/remove 失败: {e}", exc_info=True)
+        return error_response(f"移除失败: {e}", status_code=500)
+
+
+# ----------------------------------------------------------------------- #
 # 注册入口
 # ----------------------------------------------------------------------- #
 
@@ -1505,6 +1611,9 @@ def register_routes(plugin) -> None:
         (f"/{prefix}/cc/quake/poll", page_quake_poll, ["POST"], "立即检查地震预警源"),
         (f"/{prefix}/cc/quake/simulate", page_quake_simulate, ["POST"], "向白名单群发起模拟地震预警"),
         (f"/{prefix}/cc/quake/whitelist/remove", page_quake_remove, ["POST"], "从白名单移除群聊"),
+        (f"/{prefix}/cc/weather/status", page_weather_status, ["GET"], "气象预警状态与白名单"),
+        (f"/{prefix}/cc/weather/poll", page_weather_poll, ["POST"], "立即检查气象预警源"),
+        (f"/{prefix}/cc/weather/whitelist/remove", page_weather_remove, ["POST"], "从气象预警白名单移除群聊"),
     ]
     for route, handler, methods, desc in routes:
         try:

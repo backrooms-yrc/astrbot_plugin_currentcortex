@@ -210,6 +210,7 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 | `/femboy` | `/男娘` | 男娘圖片 |
 | `/dglab` | `/电击` | DG-LAB 裝置管理 |
 | `/地震` | `/earthquake` `/eq` `/预警` | 群聊白名單地震預警（群主／管理員啟用，先基本資訊後倒數） |
+| `/气象预警` | `/天气预警` | 中央氣象台氣象預警（按城市行政區匹配、級別過濾） |
 | `/开关` | `/toggle` `/switch` | 按群聊開關本插件指令（支援限時、按功能域分級） |
 | `/开关列表` | `/switch_list` `/开关状态列表` | 查看本平台被關閉的群與功能域（管理員） |
 | `/忘记` | `/forget_memory` `/忘记记忆` | 依關鍵字清理跨群聊記憶（管理員） |
@@ -589,9 +590,11 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 >
 > **不用查經緯度**：直接傳城市名即可。內建約 300 個地級市／直轄市（含港澳台及常用境外城市），離線秒查；區縣、街道或未收錄的境外地名會自動呼叫 OpenStreetMap Nominatim（免 Key、帶快取與 1 次/秒限流）。例：`/地震 开启 北京`、`/地震 添加城市 上海`、`/地震 添加城市 乌鲁木齐`、`/地震 添加城市 台北`。
 
-**來源：** CENC 預警、川滇預警、福建預警、日本氣象廳緊急地震速報（經公開 Wolfx 鏡像）、CENC 速報、USGS。各來源並行請求，單一失敗不影響其他來源；同一地震依「發震時間 ±3 分鐘、震央 200 km 內、震級差 ≤1.0」聚合，只播報一次，後續顯著更新僅補發「預警更新」，不重新倒數。
+**來源：** CENC 預警、川滇預警、福建預警、日本氣象廳緊急地震速報（經公開 Wolfx 鏡像）、CENC 速報、USGS。各來源並行請求，單一失敗不影響其他來源；同一地震依「發震時間 ±3 分鐘、震央 200 km 內、震級差 ≤1.0」聚合，只播報一次（**同源＋EventID 一律合併**）。顯著更新僅在 `earthquake_update_window_sec`（預設 600 秒）內、**每事件最多補發一次**，不重新倒數；遲到的速報不當成新預警。主震 ≥6.0 後 2 小時/300 km 內、<5.0 的餘震預設抑制（`earthquake_aftershock_suppress`）。
 
-**播報流程：** 先發基本資訊（震央、震級、深度、發震時間、最大烈度、各接收城市震央距與預計到達、分震級行動指引），再依本群**最近接收城市**與 S 波速度 3.5 km/s 逐條倒數（預設最後 30 條、每秒一條）。倒數訊息極簡，只發送 `12s`、`11s`…`0s`。`0s` 後另發一條「地震波已到達」與分震級避險指引；`/地震 倒计时 关` 關閉數字後仍會發這條到達指引。不會 @全體成員，多群發送有可設定的間隔。估算僅供參考，請以官方發布為準。
+**播報流程：**
+
+**氣象預警（`/气象预警`，別名 `/天气预警`）：** 與地震預警同一套白名單邏輯——群主／管理員 `/气象预警 开启 六安` 啟用並添加關注城市（最多 20 個）。中央氣象台（nmc.cn）全國預警按標題的省／市／區縣路徑匹配關注城市，裸城市名自動反查所屬省。級別過濾預設黃色及以上（`weather_min_level`）；播報附預警正文與防禦指南（`weather_detail_enable`）。按 alertid 去重（48 小時保留）、每輪最多 5 條、輪詢預設 120 秒。`/开关 off weather` 可按群靜音。 首先將**震央示意圖與基本資訊合併為同一則訊息**（圖在上：OpenStreetMap 底圖＋紅色星形震央＋本群城市藍點；文字在下為基本資訊。失敗自動降級為純文字），再依本群**最近接收城市**與 S 波速度 3.5 km/s **從真實剩餘秒數直接開始倒數**（如預計 76 秒 → `76s`）——超出末段（預設 60 秒）的部分自動稀疏播報（`76s、71s、66s、61s`，步長隨距離放大），進入末段後每秒一條直到 `0s`；倒數訊息極簡。`0s` 後另發一條「地震波已到達」與分震級避險指引；`/地震 倒计时 关` 關閉數字後仍會發這條到達指引。不會 @全體成員，多群發送有可設定的間隔。估算僅供參考，請以官方發布為準。
 
 **Pages → 地震預警 → 模擬預警** 會向所有啟用中的白名單群廣播演練，**先提醒「這不是真實地震，僅為模擬」**，再發模擬基本資訊與倒數（關閉倒數的群只收基本資訊與到達演練指引）；表單可設震級、震央名稱、震央城市（可選，代替經緯度）、深度、座標與倒數秒數，並具冷卻時間與「立即檢查預警源」按鈕。
 
@@ -605,13 +608,15 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 
 > 自 **v1.9.0** 起，插件整合了 AstrBot 插件 Pages 總覽面板（mdui 2 Material Design 3 風格，晴空藍＋雪霧白）。在 AstrBot WebUI 的**插件詳細資訊 → Pages**（或側邊欄「插件 Pages」分組）中開啟。
 
-總覽面板共 6 個頁面：
+總覽面板共 7 個頁面：
 
 | 頁面 | 說明 |
 | --- | --- |
 | 📊 **儀表板** | 插件執行總覽：執行時長、已綁定裝置、活躍連線、註冊使用者、插件版本／作者／啟動時間、功能開關狀態 |
 | 🌏 **地震預警** | 白名單群聊管理／多城市／預警源健康度／最近事件／立即檢查／**模擬預警**與**極限演練**（與真實預警相同訊息、需確認詞） |
-| 📖 **說明中心** | 內建使用文件與常見問題（快速開始／地震預警／郊狼／分段回覆／跨群記憶／故障排除） |
+| ⛅ **氣象預警** | 中央氣象台全國預警（颱風／暴雨／大霧／寒潮等）；按省市區路徑匹配關注城市；級別過濾（預設黃色及以上）；附預警正文與防禦指南 |
+| ⛅ **氣象預警** | 白名單群聊與關注城市管理／中央氣象台源健康度／最近播報／立即檢查 |
+| 📖 **說明中心** | 內建使用文件與常見問題（快速開始／地震預警／氣象預警／郊狼／分段回覆／跨群記憶／故障排除） |
 | ⚙️ **設定** | 視覺化修改全部插件設定：每個設定項都有中文名＋白話解釋，儲存後**自動熱重載**生效，無需手動重新啟動 |
 | ⚡ **郊狼控制** | 中繼伺服器一鍵部署（v3/v4 · 對外開放開關）＋ CCDG WebUI 總開關＋**對外開放開關**（見下） |
 | 💬 **聯絡我們** | 開發者資訊、GitHub 儲存庫、QQ 交流群（一鍵加群） |
@@ -913,7 +918,7 @@ v1.2.0 及更早版本使用 JSON 字串設定（已棄用）：
 
 ### 地震預警
 
-見 [8. 地震預警](#8-地震預警-地震別名-earthquake-eq-预警)。主要設定：`earthquake_enable`（true）、`earthquake_poll_interval`（30 秒）、`earthquake_min_magnitude`（4.0）、`earthquake_max_age_sec`（300）、`earthquake_default_lat` / `lon`（0 = 未設定）、`earthquake_countdown_max_ticks`（30）、`earthquake_countdown_max_wait_sec`（300）、`earthquake_countdown_interval`（1.0）、`earthquake_s_wave_km_s`（3.5）、`earthquake_broadcast_interval`（0.6）、`earthquake_http_timeout`（10）、`earthquake_sim_cooldown`（30）、`earthquake_extreme_cooldown`（300）、`earthquake_group_whitelist`（由 `/地震 开启` 寫入，可在設定頁查看／刪除）。
+見 [8. 地震預警](#8-地震預警-地震別名-earthquake-eq-预警)。主要設定：`earthquake_enable`（true）、`earthquake_poll_interval`（30 秒）、`earthquake_min_magnitude`（4.0）、`earthquake_max_age_sec`（300）、`earthquake_default_lat` / `lon`（0 = 未設定）、`earthquake_countdown_max_ticks`（60）、`earthquake_update_window_sec`（600）、`earthquake_aftershock_suppress`（true）、`earthquake_map_enable`（true）、`earthquake_map_tiles`（3）、`earthquake_countdown_max_wait_sec`（300）、`earthquake_countdown_interval`（1.0）、`earthquake_s_wave_km_s`（3.5）、`earthquake_broadcast_interval`（0.6）、`earthquake_http_timeout`（10）、`earthquake_sim_cooldown`（30）、`earthquake_extreme_cooldown`（300）、`earthquake_group_whitelist`（由 `/地震 开启` 寫入，可在設定頁查看／刪除）。
 
 ### 跨群聊記憶
 
@@ -1122,7 +1127,7 @@ astrbot_plugin_currentcortex/
 
 ---
 
-**版本**：v2.9.0（各版本變更詳見 [CHANGELOG.md](CHANGELOG.md)）
+**版本**：v2.10.0（各版本變更詳見 [CHANGELOG.md](CHANGELOG.md)）
 **儲存庫**：[GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
 
 

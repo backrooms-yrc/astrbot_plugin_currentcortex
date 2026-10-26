@@ -31,12 +31,34 @@ event_mod = types.ModuleType("astrbot.api.event")
 
 
 class FakeMessageChain:
-    def __init__(self):
+    def __init__(self, chain=None):
         self.text = ""
+        self.chain = list(chain or [])
 
     def message(self, text):
         self.text = text
+        self.chain.append(("text", text))
         return self
+
+
+class _FakePlain:
+    def __init__(self, text=""):
+        self.text = text
+
+
+class _FakeImage:
+    def __init__(self, file=""):
+        self.file = file
+
+    @staticmethod
+    def fromFileSystem(path):
+        return _FakeImage(file=path)
+
+
+_components_mod = types.ModuleType("astrbot.api.message_components")
+_components_mod.Plain = _FakePlain
+_components_mod.Image = _FakeImage
+sys.modules.setdefault("astrbot.api.message_components", _components_mod)
 
 
 event_mod.MessageChain = FakeMessageChain
@@ -232,11 +254,34 @@ def test_distance_and_arrival():
 
 
 def test_countdown_ticks():
-    assert eq.countdown_ticks(5.2, 30) == 5
-    assert eq.countdown_ticks(0.4, 30) == 0
-    assert eq.countdown_ticks(None, 30) == 0
-    assert eq.countdown_ticks(120, 30) == 30
-    assert eq.countdown_ticks(5, 3) == 3
+    # 兼容包装：条数 = 计划长度
+    assert eq.countdown_ticks(5.2, 60) == 5
+    assert eq.countdown_ticks(0.4, 60) == 0
+    assert eq.countdown_ticks(None, 60) == 0
+
+
+def test_countdown_schedule():
+    # ≤ 末段：每秒一条，从真实剩余秒数开始
+    assert eq.countdown_schedule(5.2, 60) == [5, 4, 3, 2, 1]
+    assert eq.countdown_schedule(30, 60) == list(range(30, 0, -1))
+    assert eq.countdown_schedule(60, 60) == list(range(60, 0, -1))
+    # > 末段：稀疏段（步长≥5）+ 末段每秒
+    assert eq.countdown_schedule(61, 60) == [61] + list(range(60, 0, -1))
+    assert eq.countdown_schedule(76, 60) == [76, 71, 66, 61] + list(
+        range(60, 0, -1)
+    )
+    # 远事件：稀疏步长自动放大（300s → 每 20s 一条 + 末段 60s）
+    schedule = eq.countdown_schedule(300, 60)
+    assert schedule[:12] == [300, 280, 260, 240, 220, 200, 180, 160, 140, 120, 100, 80]
+    assert schedule[12:] == list(range(60, 0, -1))
+    assert len(schedule) == 72
+    # interval>1：末段按步长递减
+    assert eq.countdown_schedule(76, 60, 2.0)[:6] == [76, 71, 66, 61, 60, 58]
+    # 严格递减且首条 = 剩余整秒数
+    for sec in (4.2, 30, 61, 76, 90, 300):
+        values = eq.countdown_schedule(sec, 60)
+        assert all(a > b for a, b in zip(values, values[1:]))
+        assert values[0] == int(sec)
 
 
 def test_whitelist_helpers():
@@ -312,6 +357,337 @@ def test_event_clustering():
         event,
         dict(base, latitude=20.0, longitude=100.0),
     )
+    # 同源同 EventID：震级/震中修订也必须合并
+    same_id_record = {
+        "source": "jma_eew",
+        "event_id": "JMA-1",
+        "origin_ts": now,
+        "latitude": 27.9,
+        "longitude": 140.3,
+        "magnitude": 6.5,
+    }
+    revised = eq.QuakeEvent(
+        source="jma_eew",
+        source_label="JMA",
+        event_id="JMA-1",
+        origin_ts=now + 2,
+        report_ts=now + 2,
+        place="小笠原",
+        latitude=27.6,
+        longitude=140.1,
+        magnitude=7.5,
+        depth_km=490,
+    )
+    assert eq.events_match(revised, same_id_record)
+
+
+def test_update_logic_guard():
+    now = time.time()
+    record = {
+        "source": "jma_eew",
+        "event_id": "upd-1",
+        "origin_ts": now,
+        "latitude": 27.9,
+        "longitude": 140.3,
+        "magnitude": 6.5,
+        "max_intensity": 2.0,
+        "priority": 80,
+        "report_num": 13,
+        "final": False,
+        "alerted": True,
+        "last_alert_ts": now - 120,
+        "last_update_ts": now - 120,
+        "update_count": 0,
+    }
+    low_final = eq.QuakeEvent(
+        source="cenc_eqlist",
+        source_label="CENC",
+        event_id="cenc-1",
+        origin_ts=now,
+        report_ts=now,
+        place="小笠原",
+        latitude=27.9,
+        longitude=140.3,
+        magnitude=6.5,
+        depth_km=480,
+        max_intensity=5.0,
+        final=True,
+    )
+    assert eq.EarthquakeService._record_improved(record, low_final, now)
+    eq.EarthquakeService._update_record(record, low_final, now)
+    # 低优先级源不能覆盖主震级/烈度，但必须合并最终报标志
+    assert record["magnitude"] == 6.5
+    assert record["max_intensity"] == 2.0
+    assert record["final"] is True
+    assert not eq.EarthquakeService._record_improved(record, low_final, now + 120)
+    # 每个事件最多补发一条更新
+    record["update_count"] = 1
+    high_revision = eq.QuakeEvent(
+        source="cenc_eew",
+        source_label="CENC EEW",
+        event_id="eew-2",
+        origin_ts=now,
+        report_ts=now,
+        place="小笠原",
+        latitude=27.9,
+        longitude=140.3,
+        magnitude=7.0,
+        depth_km=480,
+    )
+    assert not eq.EarthquakeService._record_improved(
+        record, high_revision, now + 300
+    )
+
+
+def test_state_dedup_same_event_id():
+    now = time.time()
+    raw = {
+        "events": [
+            {
+                "source": "jma_eew",
+                "event_id": "dup-1",
+                "origin_ts": now,
+                "latitude": 27.9,
+                "longitude": 140.3,
+                "magnitude": 6.5,
+                "report_num": 13,
+                "final": False,
+                "alerted": True,
+                "last_alert_ts": now - 120,
+                "last_update_ts": now - 120,
+                "update_count": 0,
+                "last_seen_ts": now - 60,
+            },
+            {
+                "source": "jma_eew",
+                "event_id": "dup-1",
+                "origin_ts": now + 2,
+                "latitude": 27.6,
+                "longitude": 140.1,
+                "magnitude": 7.5,
+                "report_num": 19,
+                "final": True,
+                "alerted": True,
+                "last_alert_ts": now - 60,
+                "last_update_ts": now,
+                "update_count": 1,
+                "last_seen_ts": now,
+            },
+        ]
+    }
+    state = eq._normalize_state(raw)
+    assert len(state["events"]) == 1
+    record = state["events"][0]
+    assert record["magnitude"] == 7.5 and record["final"] is True
+    assert record["report_num"] == 19 and record["update_count"] == 1
+    assert record["last_alert_ts"] == now - 120
+
+
+def test_map_geometry_helpers():
+    # 经纬度 <-> 瓦片坐标往返
+    lat, lon = 39.9042, 116.4074
+    for zoom in (3, 5, 8):
+        x, y = eq._deg2num(lat, lon, zoom)
+        back_lat, back_lon = eq._num2deg(x, y, zoom)
+        assert abs(back_lat - lat) < 1.0 and abs(back_lon - lon) < 1.0
+
+    # 缩放选择：近点用大 zoom，远点自动缩小
+    assert eq._pick_map_zoom((39.6, 118.2), [(39.9, 116.4)], 3) >= 6
+    assert eq._pick_map_zoom((27.9, 140.3), [(39.9, 116.4)], 3) <= 5
+
+    if eq._PILImage is None:
+        return
+    event = eq.QuakeEvent(
+        source="cenc_eew",
+        source_label="测试",
+        event_id="map-1",
+        origin_ts=time.time(),
+        report_ts=time.time(),
+        place="测试震中",
+        latitude=39.6,
+        longitude=118.2,
+        magnitude=5.0,
+        depth_km=10,
+    )
+    # 注入假瓦片，验证拼装与标注绘制
+    tile = eq._PILImage.new("RGB", (256, 256), (240, 240, 240))
+    for key in list(eq._TILE_CACHE):
+        eq._TILE_CACHE.pop(key)
+    zoom = eq._pick_map_zoom((39.6, 118.2), [(39.9042, 116.4074)], 3)
+    cx, cy = eq._deg2num(39.6, 118.2, zoom)
+    for tx in range(int(cx) - 3, int(cx) + 4):
+        for ty in range(int(cy) - 3, int(cy) + 4):
+            eq._TILE_CACHE[(zoom, tx, ty)] = tile
+    img = eq.assemble_epicenter_map(
+        event,
+        [
+            {
+                "place": "北京",
+                "latitude": 39.9042,
+                "longitude": 116.4074,
+            }
+        ],
+        3,
+        zoom,
+    )
+    assert img is not None and img.size == (768, 768)
+    px = img.load()
+    red = sum(
+        1
+        for y in range(0, 768, 2)
+        for x in range(0, 768, 2)
+        if px[x, y][0] > 190 and px[x, y][1] < 90 and px[x, y][2] < 90
+    )
+    assert red > 10, "震中星标缺失"
+
+
+def test_map_config_gates():
+    with tempfile.TemporaryDirectory() as tmp:
+        plugin = FakePlugin(
+            {
+                "earthquake_enable": True,
+                "earthquake_map_enable": False,
+                "earthquake_group_whitelist": [
+                    {
+                        "umo": "aiocqhttp:GroupMessage:70001",
+                        "locations": [
+                            {"place": "北京", "latitude": 39.9042, "longitude": 116.4074}
+                        ],
+                    }
+                ],
+            }
+        )
+        service = eq.EarthquakeService(plugin, data_dir=tmp)
+        assert service._map_enabled() is False
+        # 关闭示意图时播报不生成图片（极端演练也遵守开关）
+        now = time.time()
+        event = eq.QuakeEvent(
+            source="cenc_eew",
+            source_label="中国地震台网·预警",
+            event_id="gate-1",
+            origin_ts=now,
+            report_ts=now,
+            place="测试",
+            latitude=39.6,
+            longitude=118.2,
+            magnitude=5.0,
+            depth_km=10,
+        )
+        target = service._targets(event)[0]
+        import unittest.mock as _mock
+
+        with _mock.patch.object(service, "_render_map_for") as render:
+            render.return_value = None
+            service._render_map_for(target, event)
+            render.assert_called_once()
+
+
+def test_aftershock_suppression():
+    now = time.time()
+    main = {
+        "alerted": True,
+        "magnitude": 6.5,
+        "origin_ts": now - 3600,
+        "latitude": 27.9,
+        "longitude": 140.3,
+    }
+    state = {"events": [main]}
+
+    def event(mag, lat=27.8, lon=140.2, age=60):
+        return eq.QuakeEvent(
+            source="usgs",
+            source_label="USGS",
+            event_id=f"aft-{mag}",
+            origin_ts=now - age,
+            report_ts=now - age,
+            place="余震",
+            latitude=lat,
+            longitude=lon,
+            magnitude=mag,
+            depth_km=10,
+        )
+
+    assert eq.EarthquakeService._is_aftershock(state, event(4.8))
+    assert not eq.EarthquakeService._is_aftershock(state, event(5.5))
+    assert not eq.EarthquakeService._is_aftershock(state, event(4.8, lat=32.0, lon=145.0))
+    assert not eq.EarthquakeService._is_aftershock(state, event(4.8, age=12000))
+
+
+async def test_late_report_no_update():
+    """迟到的速报（发震已超过时效）不能触发新预警或更新。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        config = {
+            "earthquake_enable": True,
+            "earthquake_max_age_sec": 300,
+            "earthquake_update_window_sec": 600,
+            "earthquake_group_whitelist": [
+                {
+                    "umo": "aiocqhttp:GroupMessage:60001",
+                    "locations": [
+                        {"place": "北京", "latitude": 39.9042, "longitude": 116.4074}
+                    ],
+                }
+            ],
+        }
+        plugin = FakePlugin(config)
+        service = eq.EarthquakeService(plugin, data_dir=tmp)
+        now = time.time()
+        state = service.store.snapshot()
+        state["events"] = [
+            {
+                "source": "cenc_eqlist",
+                "event_id": "late-1",
+                "origin_ts": now - 1800,
+                "latitude": 39.6,
+                "longitude": 118.2,
+                "magnitude": 6.5,
+                "max_intensity": 5.0,
+                "priority": 60,
+                "report_num": 1,
+                "final": False,
+                "alerted": True,
+                "last_alert_ts": now - 1700,
+                "last_update_ts": now - 1700,
+                "update_count": 0,
+            }
+        ]
+        service.store.save(state)
+        late_event = eq.QuakeEvent(
+            source="cenc_eqlist",
+            source_label="CENC",
+            event_id="late-1",
+            origin_ts=now - 1800,
+            report_ts=now,
+            place="唐山",
+            latitude=39.6,
+            longitude=118.2,
+            magnitude=6.5,
+            depth_km=10,
+            max_intensity=5.0,
+            final=True,
+        )
+        calls = {"n": 0}
+
+        async def _no_session():
+            return None
+
+        async def _fake_fetch(session, source, timeout=10.0):
+            calls["n"] += 1
+            return [late_event] if source == "cenc_eqlist" else []
+
+        service._ensure_session = _no_session
+        original = eq.fetch_source
+        eq.fetch_source = _fake_fetch
+        try:
+            result = await service.poll_once()
+            await asyncio.sleep(0.2)
+            assert result["fresh"] == 0, result
+            assert result["alerts"] == 0, result
+            assert not plugin.sent, plugin.sent
+            assert service.store.snapshot()["events"][0]["update_count"] == 0
+        finally:
+            eq.fetch_source = original
+            await service.stop()
 
 
 def test_formatting():
@@ -394,7 +770,16 @@ class FakeContext:
         self.sent = []
 
     async def send_message(self, umo, chain):
-        self.sent.append((umo, getattr(chain, "text", str(chain))))
+        self.sent.append(
+            (
+                umo,
+                getattr(chain, "text", "")
+                or "".join(
+                    getattr(c, "text", "") for c in getattr(chain, "chain", [])
+                )
+                or str(chain),
+            )
+        )
         return True
 
 
@@ -767,8 +1152,15 @@ TESTS = [
     ("时间/数值容错", test_time_and_float_fallbacks),
     ("距离与到达估算", test_distance_and_arrival),
     ("倒计时条数", test_countdown_ticks),
+    ("倒计时计划（稀疏+末段）", test_countdown_schedule),
     ("白名单增删与合并", test_whitelist_helpers),
     ("跨源事件聚类", test_event_clustering),
+    ("更新去重与主数据保护", test_update_logic_guard),
+    ("历史重复记录清理", test_state_dedup_same_event_id),
+    ("震中示意图几何与标注", test_map_geometry_helpers),
+    ("示意图开关", test_map_config_gates),
+    ("余震抑制", test_aftershock_suppression),
+    ("迟到速报不更新", lambda: asyncio.run(test_late_report_no_update())),
     ("播报文案", test_formatting),
     ("模拟表单校验", test_validate_simulation),
     ("模拟播报顺序", lambda: asyncio.run(test_simulation_broadcast_order())),

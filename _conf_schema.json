@@ -246,10 +246,32 @@
     "hint": "建议 3.5~4.5；预警源对近场小震也可能有价值，可按群需求调整"
   },
   "earthquake_max_age_sec": {
-    "description": "【地震预警】事件最大时效（秒）。只播报发震/发布在此时间窗口内的事件，避免插件启动或上游延迟时补发旧闻；默认 300 秒",
+    "description": "【地震预警】事件最大时效（秒）。只播报发震时间在此窗口内的事件，迟到的速报/目录更新不再当成新预警补发；默认 300 秒",
     "type": "int",
     "default": 300,
     "slider": {"min": 60, "max": 1800, "step": 30}
+  },
+  "earthquake_update_window_sec": {
+    "description": "【地震预警】已播报事件允许补发「预警更新」的最大发震后秒数；默认 600 秒，0 = 完全不补发更新。每个事件最多只补发一条更新",
+    "type": "int",
+    "default": 600,
+    "slider": {"min": 0, "max": 3600, "step": 30}
+  },
+  "earthquake_aftershock_suppress": {
+    "description": "【地震预警】余震抑制。主震（≥6.0）后 2 小时内、300 km 内低于 5.0 的后续事件不单独广播，避免余震刷屏；需要逐条播报余震可关闭",
+    "type": "bool",
+    "default": true
+  },
+  "earthquake_map_enable": {
+    "description": "【地震预警】发送震中示意图。与预警基本信息合并为同一条消息（图在上、文字在下）：OpenStreetMap 底图（震中星标 + 本群接收城市圆点）。需要服务器可访问 tile.openstreetmap.org 且安装 Pillow；生成失败自动降级为纯文字。模拟演练不发图，极限演练发图",
+    "type": "bool",
+    "default": true
+  },
+  "earthquake_map_tiles": {
+    "description": "【地震预警】示意图边长（瓦片数，每张 256px）。3 = 768×768；范围 1~4",
+    "type": "int",
+    "default": 3,
+    "slider": {"min": 1, "max": 4, "step": 1}
   },
   "earthquake_max_distance_km": {
     "description": "【地震预警】最大震中距过滤（km）。白名单群接收位置超过该距离则不播报；默认 1000，0 = 不过滤（会收到全球源较远处的小震）",
@@ -273,10 +295,10 @@
     "default": ""
   },
   "earthquake_countdown_max_ticks": {
-    "description": "【地震预警】倒计时最多发送多少条。剩余时间超过该值时只播报基本信息，抵达前最后 N 秒开始逐条倒计时；默认 30 条",
+    "description": "【地震预警】倒计时末段每秒播报的秒数。倒计时从真实剩余秒数开始：超出末段的部分自动稀疏播报（步长随距离放大，如 76s → 76s/71s/66s/61s），进入末段（默认 60 秒）后恢复每秒一条直到 0s。默认 60",
     "type": "int",
-    "default": 30,
-    "slider": {"min": 1, "max": 60, "step": 1}
+    "default": 60,
+    "slider": {"min": 10, "max": 120, "step": 5}
   },
   "earthquake_countdown_max_wait_sec": {
     "description": "【地震预警】倒计时最长等待（秒）。估算到达时间超过该值时只发基本信息、不启动长倒计时任务（避免远距离事件的任务长时间挂起）；默认 300 秒",
@@ -339,6 +361,66 @@
         }
       },
       "countdown_enabled": {"type": "bool", "description": "是否逐条发送倒计时数字", "default": true},
+      "enabled": {"type": "bool", "description": "是否启用", "default": true},
+      "enabled_by": {"type": "string", "description": "启用/修改人", "default": ""},
+      "enabled_at": {"type": "string", "description": "启用/修改时间", "default": ""}
+    }
+  },
+  "weather_enable": {
+    "description": "【气象预警】总开关。开启且至少一个群聊在白名单中时，插件轮询中央气象台预警（www.nmc.cn）并向命中城市的白名单群播报；关闭后不请求上游。群聊需由群主/群管理员发送 /气象预警 开启 <城市> 加入白名单",
+    "type": "bool",
+    "default": true
+  },
+  "weather_poll_interval": {
+    "description": "【气象预警】轮询间隔（秒）。预警变化缓慢，默认 120 秒；最小 60",
+    "type": "int",
+    "default": 120,
+    "slider": {"min": 60, "max": 900, "step": 30}
+  },
+  "weather_min_level": {
+    "description": "【气象预警】最低播报级别。低于该级别的预警不播报；默认黄色及以上（蓝色多为指导性提示）",
+    "type": "string",
+    "default": "黄色及以上",
+    "options": ["全部级别", "黄色及以上", "橙色及以上", "仅红色"]
+  },
+  "weather_detail_enable": {
+    "description": "【气象预警】播报时附带预警正文与防御指南（需抓取中央气象台详情页，每条新预警多一次请求）；关闭后只播报标题摘要",
+    "type": "bool",
+    "default": true
+  },
+  "weather_broadcast_interval": {
+    "description": "【气象预警】向多个白名单群逐条发送时的间隔（秒），降低平台频控风险；默认 0.6",
+    "type": "float",
+    "default": 0.6
+  },
+  "weather_http_timeout": {
+    "description": "【气象预警】上游请求超时（秒）",
+    "type": "int",
+    "default": 10,
+    "slider": {"min": 3, "max": 30, "step": 1}
+  },
+  "weather_group_whitelist": {
+    "description": "【气象预警】群聊白名单。每项包含会话标识、群号与关注城市列表；一般由群主/群管理员在群内发送 /气象预警 开启 <城市> 自动写入，也可在此查看或删除",
+    "type": "list",
+    "default": [],
+    "items": {
+      "umo": {"type": "string", "description": "会话标识（平台:GroupMessage:群号）", "default": ""},
+      "platform_id": {"type": "string", "description": "平台实例 ID", "default": ""},
+      "group_id": {"type": "string", "description": "群号", "default": ""},
+      "place": {"type": "string", "description": "主关注城市名称（兼容字段）", "default": ""},
+      "latitude": {"type": "float", "description": "主关注城市纬度（兼容字段）", "default": 0.0},
+      "longitude": {"type": "float", "description": "主关注城市经度（兼容字段）", "default": 0.0},
+      "locations": {
+        "type": "list",
+        "description": "关注城市列表（place/latitude/longitude）",
+        "default": [],
+        "items": {
+          "place": {"type": "string", "description": "城市名称", "default": ""},
+          "latitude": {"type": "float", "description": "纬度", "default": 0.0},
+          "longitude": {"type": "float", "description": "经度", "default": 0.0}
+        }
+      },
+      "countdown_enabled": {"type": "bool", "description": "兼容字段（气象预警无倒计时）", "default": true},
       "enabled": {"type": "bool", "description": "是否启用", "default": true},
       "enabled_by": {"type": "string", "description": "启用/修改人", "default": ""},
       "enabled_at": {"type": "string", "description": "启用/修改时间", "default": ""}

@@ -41,6 +41,13 @@ try:  # pragma: no cover - 测试环境可能未安装 aiohttp
 except ImportError:  # pragma: no cover
     aiohttp = None  # type: ignore[assignment]
 
+try:  # 震中示意图拼装（OSM 瓦片 + Pillow 标注）；缺库时自动降级为不发图
+    from PIL import Image as _PILImage
+    from PIL import ImageDraw as _PILDraw
+    from PIL import ImageFont as _PILFont
+except ImportError:  # pragma: no cover
+    _PILImage = None  # type: ignore[assignment]
+
 from astrbot.api import logger
 
 try:  # 包内导入 / 测试脚本顶层导入
@@ -53,6 +60,12 @@ _GEO_UA = (
     "CurrentCortex-Earthquake/1.0 "
     "(AstrBot plugin; +https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)"
 )
+# 震中示意图：OSM 瓦片（© OpenStreetMap contributors）+ 本地拼装标注
+_MAP_TILE_URLS = (
+    "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+)
+_MAP_CACHE_DIR_NAME = "quake_maps"
 _CITY_CACHE: Dict[str, Optional[Tuple[float, float, str]]] = {}
 _GEO_LOCK = asyncio.Lock()
 _GEO_LAST_TS = 0.0
@@ -258,16 +271,44 @@ def estimate_arrival(
 
 
 def countdown_ticks(arrival_sec: Optional[float], max_ticks: int) -> int:
-    """倒计时条数：不超过剩余整秒数，也不超过配置上限。"""
+    """倒计时条数（兼容旧调用）：完整计划的长度。"""
+    return len(countdown_schedule(arrival_sec, max_ticks))
+
+
+def countdown_schedule(
+    arrival_sec: Optional[float],
+    per_second_span: int = 60,
+    interval: float = 1.0,
+) -> List[int]:
+    """生成倒计时播报时刻表（单位：秒，按剩余秒数递减）。
+
+    - 剩余 ≤ per_second_span：每 interval 秒一条（默认每秒），如 60,59,…,1；
+    - 剩余 > per_second_span：先按稀疏步长每条递减（如 76s → 76,71,66,61），
+      步长随总时长放大（至少 5 秒、稀疏段至多约 12 条），末段恢复每秒一条；
+    - 0s 由调用方在到达时刻单独发送。
+    """
     if arrival_sec is None:
-        return 0
+        return []
     try:
         seconds = float(arrival_sec)
     except (TypeError, ValueError):
-        return 0
+        return []
     if seconds <= 0:
-        return 0
-    return max(0, min(int(math.floor(seconds)), max(1, int(max_ticks))))
+        return []
+    span = max(1, int(per_second_span or 60))
+    step = max(1, int(round(max(1.0, float(interval or 1.0)))))
+    start = int(seconds)
+    schedule: List[int] = []
+    if start <= span:
+        return list(range(start, 0, -step))
+    sparse_step = max(5, math.ceil((start - span) / 12))
+    remaining = start
+    while remaining > span:
+        schedule.append(remaining)
+        remaining -= sparse_step
+    # 末段（span..1）恢复每 step 秒一条
+    schedule.extend(range(span, 0, -step))
+    return schedule
 
 
 def _make_event(
@@ -625,6 +666,12 @@ def parse_umo(umo: str) -> Tuple[str, str, str]:
 
 MAX_GROUP_LOCATIONS = 20
 
+# 余震抑制阈值（主震后 2 小时内、300 km 内、低于 5.0 的后续事件不单独广播）
+AFTERSHOCK_WINDOW_SEC = 7200.0
+AFTERSHOCK_RADIUS_KM = 300.0
+MAINSHOCK_MIN_MAGNITUDE = 6.0
+AFTERSHOCK_MAX_MAGNITUDE = 5.0
+
 
 def normalize_location_entry(entry: Any) -> Optional[Dict[str, Any]]:
     """规范化一个接收城市：支持城市名、字符串或 {place,latitude,longitude}。
@@ -933,6 +980,13 @@ def set_group_enabled(
 
 def events_match(event: QuakeEvent, record: Dict[str, Any]) -> bool:
     """判断新事件与已记录事件是否为同一次地震（跨源聚类）。"""
+    # 同一数据源的同一条事件，即使震级/震中后续修订，也必须视为同一事件
+    if (
+        event.source == record.get("source")
+        and event.event_id
+        and event.event_id == record.get("event_id")
+    ):
+        return True
     try:
         origin = float(record.get("origin_ts", 0))
         if abs(event.origin_ts - origin) > 180.0:
@@ -1163,6 +1217,245 @@ def validate_simulation(payload: Any) -> Dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
+# 震中示意图（OSM 瓦片 + Pillow 拼装标注）
+# --------------------------------------------------------------------------- #
+
+
+def _deg2num(lat: float, lon: float, zoom: int) -> Tuple[float, float]:
+    """经纬度 -> 瓦片坐标（浮点，便于计算像素位置）。"""
+    lat_rad = math.radians(lat)
+    n = 2.0 ** zoom
+    x = (lon + 180.0) / 360.0 * n
+    y = (1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n
+    return x, y
+
+
+def _num2deg(x: float, y: float, zoom: int) -> Tuple[float, float]:
+    """瓦片坐标 -> 经纬度（左上角）。"""
+    n = 2.0 ** zoom
+    lon = x / n * 360.0 - 180.0
+    lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * y / n))))
+    return lat, lon
+
+
+def _pick_map_zoom(
+    epicenter: Tuple[float, float],
+    points: Sequence[Tuple[float, float]],
+    tiles: int,
+) -> int:
+    """选择让所有点都落在地图内的最大缩放级别（3~8）。"""
+    for zoom in range(8, 2, -1):
+        x0, y0 = _deg2num(epicenter[0], epicenter[1], zoom)
+        ok = True
+        for lat, lon in points:
+            x, y = _deg2num(lat, lon, zoom)
+            if abs(x - x0) * 256 >= tiles * 256 / 2 or abs(y - y0) * 256 >= tiles * 256 / 2:
+                ok = False
+                break
+        if ok:
+            return zoom
+    return 3
+
+
+def _quake_marker(
+    draw: Any, xy: Tuple[int, int], color: Tuple[int, int, int], size: int = 10
+) -> None:
+    """画星形震中标记（多边形近似）。"""
+    import math as _math
+
+    x, y = xy
+    pts = []
+    for i in range(10):
+        angle = _math.pi / 2 + i * _math.pi / 5
+        r = size if i % 2 == 0 else size * 0.45
+        pts.append((x + r * _math.cos(angle), y - r * _math.sin(angle)))
+    draw.polygon(pts, fill=color, outline=(255, 255, 255))
+
+
+def _city_dot(
+    draw: Any, xy: Tuple[int, int], color: Tuple[int, int, int]
+) -> None:
+    x, y = xy
+    r = 4
+    draw.ellipse((x - r, y - r, x + r, y + r), fill=color, outline=(255, 255, 255), width=1)
+
+
+def _load_map_font(size: int) -> Any:
+    candidates = [
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+        "NotoSansCJK-Bold.ttc",
+        "NotoSansCJK-Regular.ttc",
+        "wqy-zenhei.ttc",
+        "DejaVuSans-Bold.ttf",
+    ]
+    for name in candidates:
+        try:
+            return _PILFont.truetype(name, size)
+        except Exception:
+            continue
+    try:
+        return _PILFont.load_default()
+    except Exception:
+        return None
+
+
+def _map_cache_path(data_dir: str, event: "QuakeEvent") -> str:
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", event.event_id)[:60]
+    return os.path.join(
+        data_dir, _MAP_CACHE_DIR_NAME, f"{safe}_z.png"
+    )
+
+
+def assemble_epicenter_map(
+    event: "QuakeEvent",
+    city_points: Sequence[Dict[str, Any]],
+    tiles: int = 3,
+    zoom: Optional[int] = None,
+) -> Optional["_PILImage.Image"]:
+    """拼装震中示意图：OSM 瓦片底图 + 震中星标 + 接收城市点。
+
+    返回 PIL Image；无 Pillow / 瓦片缺失时返回 None（调用方降级为纯文本）。
+    city_points: [{"place", "latitude", "longitude"}]
+    """
+    if _PILImage is None:
+        return None
+    tiles = max(1, min(4, int(tiles or 3)))
+    points = [
+        (float(p["latitude"]), float(p["longitude"]))
+        for p in city_points
+        if p.get("latitude") is not None and p.get("longitude") is not None
+    ]
+    if zoom is None:
+        zoom = _pick_map_zoom(
+            (event.latitude, event.longitude), points, tiles
+        )
+    size = tiles * 256
+    img = _PILImage.new("RGB", (size, size), (238, 240, 244))
+    draw = _PILDraw.Draw(img)
+    cx, cy = _deg2num(event.latitude, event.longitude, zoom)
+    origin_x = cx - tiles / 2.0
+    origin_y = cy - tiles / 2.0
+    wrap = 2 ** zoom
+    for tx in range(int(math.floor(origin_x)), int(math.ceil(origin_x + tiles)) + 1):
+        for ty in range(int(math.floor(origin_y)), int(math.ceil(origin_y + tiles)) + 1):
+            px = int(round((tx - origin_x) * 256))
+            py = int(round((ty - origin_y) * 256))
+            if px + 256 <= 0 or py + 256 <= 0 or px >= size or py >= size:
+                continue
+            key = (zoom, (tx % wrap + wrap) % wrap, (ty % wrap + wrap) % wrap)
+            img.paste(
+                _TILE_CACHE.get(key)
+                or _PILImage.new("RGB", (256, 256), (226, 228, 233)),
+                (px, py),
+            )
+    font_small = _load_map_font(14)
+    # 震中星标 + 标签
+    ex = int(round((cx - origin_x) * 256))
+    ey = int(round((cy - origin_y) * 256))
+    _quake_marker(draw, (ex, ey), (217, 45, 32), 12)
+    label = f"M{event.magnitude:g} {event.place}"
+    if font_small:
+        tw = draw.textlength(label, font=font_small)
+        draw.rectangle(
+            (ex + 14, ey - 11, ex + 18 + tw, ey + 11), fill=(255, 255, 255)
+        )
+        draw.text((ex + 16, ey - 8), label, fill=(217, 45, 32), font=font_small)
+    # 接收城市
+    for point in city_points:
+        if point.get("latitude") is None:
+            continue
+        px_, py_ = _deg2num(
+            float(point["latitude"]), float(point["longitude"]), zoom
+        )
+        x = int(round((px_ - origin_x) * 256))
+        y = int(round((py_ - origin_y) * 256))
+        if not (0 <= x < size and 0 <= y < size):
+            continue
+        _city_dot(draw, (x, y), (26, 115, 232))
+        name = str(point.get("place") or "")
+        if name and font_small:
+            draw.text(
+                (x + 7, y - 8), name[:12], fill=(13, 27, 42), font=font_small
+            )
+    # 地图右下角版权
+    if font_small:
+        credit = "© OpenStreetMap contributors"
+        tw = draw.textlength(credit, font=font_small)
+        draw.rectangle(
+            (size - tw - 16, size - 26, size, size), fill=(255, 255, 255)
+        )
+        draw.text(
+            (size - tw - 8, size - 22), credit, fill=(90, 98, 108), font=font_small
+        )
+    return img
+
+
+_TILE_CACHE: Dict[Tuple[int, int, int], Any] = {}
+
+
+async def fetch_map_tiles(
+    session: Any, zoom: int, center: Tuple[float, float], tiles: int = 3
+) -> bool:
+    """预取底图瓦片到 _TILE_CACHE。全部失败返回 False。"""
+    if aiohttp is None or _PILImage is None:
+        return False
+    cx, cy = _deg2num(center[0], center[1], zoom)
+    origin_x = cx - tiles / 2.0
+    origin_y = cy - tiles / 2.0
+    needed = []
+    for tx in range(int(math.floor(origin_x)), int(math.ceil(origin_x + tiles)) + 1):
+        for ty in range(int(math.floor(origin_y)), int(math.ceil(origin_y + tiles)) + 1):
+            px = int(round((tx - origin_x) * 256))
+            py = int(round((ty - origin_y) * 256))
+            if px + 256 <= 0 or py + 256 <= 0 or px >= tiles * 256 or py >= tiles * 256:
+                continue
+            wrapped = (
+                ((tx % 2 ** zoom) + 2 ** zoom) % 2 ** zoom,
+                ((ty % 2 ** zoom) + 2 ** zoom) % 2 ** zoom,
+            )
+            if (zoom, wrapped[0], wrapped[1]) in _TILE_CACHE:
+                continue
+            needed.append((zoom, wrapped[0], wrapped[1]))
+    if not needed:
+        return True
+    ok_any = False
+    for template in _MAP_TILE_URLS:
+        try:
+            results = await asyncio.gather(
+                *[
+                    session.get(
+                        template.format(z=key[0], x=key[1], y=key[2]),
+                        timeout=aiohttp.ClientTimeout(total=8),
+                    )
+                    for key in needed
+                ],
+                return_exceptions=True,
+            )
+            fetched = 0
+            for key, resp in zip(needed, results):
+                if isinstance(resp, Exception) or resp.status != 200:
+                    continue
+                data = await resp.read()
+                resp.release()
+                try:
+                    tile = _PILImage.open(__import__("io").BytesIO(data))
+                    tile.load()
+                except Exception:
+                    continue
+                _TILE_CACHE[key] = tile
+                fetched += 1
+            if fetched:
+                ok_any = True
+            if fetched == len(needed):
+                return True
+        except Exception:
+            continue
+    return ok_any
+
+
+# --------------------------------------------------------------------------- #
 # 持久化状态
 # --------------------------------------------------------------------------- #
 
@@ -1235,7 +1528,60 @@ def _normalize_state(data: Any) -> Dict[str, Any]:
     for record in state.get("events") or []:
         if isinstance(record, dict) and record.get("origin_ts") and record.get("latitude") is not None:
             events.append(record)
-    state["events"] = events[-200:]
+    # 清理历史状态里同源同 EventID 的重复记录（例如 JMA 震级修订产生的两条）
+    deduped: Dict[Any, Dict[str, Any]] = {}
+    for idx, record in enumerate(events):
+        event_id = record.get("event_id")
+        key = (
+            record.get("source"),
+            event_id if event_id else f"__no_id_{idx}",
+        )
+        existing = deduped.get(key)
+        if existing is None:
+            deduped[key] = dict(record)
+            continue
+        try:
+            existing_report = int(existing.get("report_num", 1) or 1)
+            record_report = int(record.get("report_num", 1) or 1)
+            base, other = (
+                (record, existing)
+                if record_report > existing_report
+                else (existing, record)
+            )
+            merged = dict(base)
+            merged["report_num"] = max(existing_report, record_report)
+            merged["alerted"] = bool(
+                existing.get("alerted") or record.get("alerted")
+            )
+            merged["final"] = bool(
+                existing.get("final") or record.get("final")
+            )
+            alert_times = [
+                float(value)
+                for value in (
+                    existing.get("last_alert_ts"),
+                    record.get("last_alert_ts"),
+                )
+                if value
+            ]
+            if alert_times:
+                merged["last_alert_ts"] = min(alert_times)
+            merged["last_update_ts"] = max(
+                float(existing.get("last_update_ts") or 0),
+                float(record.get("last_update_ts") or 0),
+            )
+            merged["update_count"] = max(
+                int(existing.get("update_count", 0) or 0),
+                int(record.get("update_count", 0) or 0),
+            )
+            merged["last_seen_ts"] = max(
+                float(existing.get("last_seen_ts") or 0),
+                float(record.get("last_seen_ts") or 0),
+            )
+            deduped[key] = merged
+        except (TypeError, ValueError):
+            deduped[key] = dict(record)
+    state["events"] = list(deduped.values())[-200:]
     for key in ("last_event", "last_simulation"):
         if state.get(key) is not None and not isinstance(state[key], dict):
             state[key] = None
@@ -1279,6 +1625,15 @@ class EarthquakeService:
         except Exception:
             return default
 
+    def _map_enabled(self) -> bool:
+        return bool(self._cfg("earthquake_map_enable", True))
+
+    def _map_tiles(self) -> int:
+        try:
+            return max(1, min(4, int(self._cfg("earthquake_map_tiles", 3) or 3)))
+        except (TypeError, ValueError):
+            return 3
+
     def _enabled(self) -> bool:
         return bool(self._cfg("earthquake_enable", True))
 
@@ -1300,6 +1655,19 @@ class EarthquakeService:
         except (TypeError, ValueError):
             return 300
 
+    def _update_window(self) -> float:
+        """已播报事件允许补发「预警更新」的最大发震后秒数。"""
+        try:
+            return max(
+                0.0,
+                float(self._cfg("earthquake_update_window_sec", 600) or 0),
+            )
+        except (TypeError, ValueError):
+            return 600.0
+
+    def _aftershock_suppress(self) -> bool:
+        return bool(self._cfg("earthquake_aftershock_suppress", True))
+
     def _max_distance(self) -> float:
         try:
             return max(0.0, float(self._cfg("earthquake_max_distance_km", 1000) or 0))
@@ -1319,10 +1687,14 @@ class EarthquakeService:
             return 3.5
 
     def _countdown_max_ticks(self) -> int:
+        """末段每秒倒计时的秒数（之前的「条数上限」语义，v2.9.1 起为末段跨度）。"""
         try:
-            return max(1, min(60, int(self._cfg("earthquake_countdown_max_ticks", 30) or 30)))
+            return max(
+                10,
+                min(120, int(self._cfg("earthquake_countdown_max_ticks", 60) or 60)),
+            )
         except (TypeError, ValueError):
-            return 30
+            return 60
 
     def _countdown_max_wait(self) -> float:
         """剩余时间超过该值时只发基本信息，不启动长倒计时任务。"""
@@ -1527,16 +1899,20 @@ class EarthquakeService:
         for event in candidates:
             if event.magnitude < min_mag:
                 continue
-            age = now - max(event.origin_ts, event.report_ts)
+            # 时效按发震时间计算：迟到的速报/目录更新不再当成新预警
+            age = now - event.origin_ts
             if age > max_age or age < -120:
                 continue
             fresh.append(event)
         fresh.sort(key=lambda e: (-e.priority, -e.origin_ts))
 
         alerted = 0
+        update_window = self._update_window()
         for event in fresh:
             existing = self._find_record(state, event)
             if existing is None:
+                if self._aftershock_suppress() and self._is_aftershock(state, event):
+                    continue
                 targets = self._targets(event)
                 if not targets:
                     continue
@@ -1548,11 +1924,18 @@ class EarthquakeService:
                 continue
             improved = self._record_improved(existing, event, now)
             self._update_record(existing, event, now)
-            if improved:
+            if (
+                improved
+                and update_window > 0
+                and now - event.origin_ts <= update_window
+            ):
                 targets = self._targets(event)
                 if targets:
                     self._spawn_alert(event, targets, update=True)
                     existing["last_update_ts"] = now
+                    existing["update_count"] = (
+                        int(existing.get("update_count", 0) or 0) + 1
+                    )
 
         state["stats"]["polls"] = int(state["stats"].get("polls", 0)) + 1
         state["stats"]["last_poll_ts"] = now
@@ -1578,6 +1961,35 @@ class EarthquakeService:
         return None
 
     @staticmethod
+    def _is_aftershock(state: Dict[str, Any], event: QuakeEvent) -> bool:
+        """主震后短时间/近距离内低于阈值的后续事件视为余震，不单独广播。"""
+        if event.magnitude >= AFTERSHOCK_MAX_MAGNITUDE:
+            return False
+        for record in state.get("events") or []:
+            try:
+                if not record.get("alerted"):
+                    continue
+                main_mag = float(record.get("magnitude") or 0)
+                if main_mag < MAINSHOCK_MIN_MAGNITUDE:
+                    continue
+                main_origin = float(record.get("origin_ts") or 0)
+                if abs(event.origin_ts - main_origin) > AFTERSHOCK_WINDOW_SEC:
+                    continue
+                if (
+                    haversine_km(
+                        event.latitude,
+                        event.longitude,
+                        float(record.get("latitude")),
+                        float(record.get("longitude")),
+                    )
+                    <= AFTERSHOCK_RADIUS_KM
+                ):
+                    return True
+            except (TypeError, ValueError):
+                continue
+        return False
+
+    @staticmethod
     def _remember(
         state: Dict[str, Any], event: QuakeEvent, now: float, *, alerted: bool
     ) -> None:
@@ -1588,6 +2000,7 @@ class EarthquakeService:
                 "last_seen_ts": now,
                 "last_alert_ts": now if alerted else 0.0,
                 "last_update_ts": now if alerted else 0.0,
+                "update_count": 0,
                 "alerted": bool(alerted),
             }
         )
@@ -1600,13 +2013,33 @@ class EarthquakeService:
         record: Dict[str, Any], event: QuakeEvent, now: float
     ) -> bool:
         if not record.get("alerted"):
-            return True
+            return False
+        try:
+            updates = int(record.get("update_count", 0) or 0)
+        except (TypeError, ValueError):
+            updates = 0
+        if updates <= 0:
+            # 旧状态没有 update_count：已存在晚于首报的 last_update_ts 视为已更新过
+            try:
+                if float(record.get("last_update_ts") or 0) > float(
+                    record.get("last_alert_ts") or 0
+                ) + 1.0:
+                    updates = 1
+            except (TypeError, ValueError):
+                updates = 0
+        if updates >= 1:
+            # 每个事件最多补发一条「预警更新」，避免多源/report 反复触发
+            return False
         try:
             last_update = float(record.get("last_update_ts", 0) or 0)
         except (TypeError, ValueError):
             last_update = 0.0
         if now - last_update < 60.0:
             return False
+        old_priority = int(record.get("priority", 0) or 0)
+        if event.priority < old_priority:
+            # 低优先级源只允许把「最终报」状态补上，不能因为震级/烈度变化重播
+            return bool(event.final and not record.get("final"))
         try:
             old_mag = float(record.get("magnitude", event.magnitude))
         except (TypeError, ValueError):
@@ -1616,7 +2049,6 @@ class EarthquakeService:
         except (TypeError, ValueError):
             old_intensity = 0.0
         new_intensity = float(event.max_intensity or 0)
-        old_priority = int(record.get("priority", 0) or 0)
         old_report = int(record.get("report_num", 1) or 1)
         return bool(
             event.priority > old_priority
@@ -1632,13 +2064,15 @@ class EarthquakeService:
     ) -> None:
         old_report = int(record.get("report_num", 1) or 1)
         old_priority = int(record.get("priority", 0) or 0)
+        new_final = bool(record.get("final") or event.final)
+        new_report = max(old_report, event.report_num)
         record["last_seen_ts"] = now
-        record["magnitude"] = event.magnitude
-        record["max_intensity"] = event.max_intensity
         if event.priority >= old_priority:
+            # 只用同级/更高优先级源覆盖震级、震中、烈度等主数据
             record.update(event.to_dict())
             record["priority"] = event.priority
-        record["report_num"] = max(old_report, event.report_num)
+        record["final"] = new_final
+        record["report_num"] = new_report
 
     # ---------------- 目标群与播报 ----------------
     def _targets(self, event: QuakeEvent) -> List[Dict[str, Any]]:
@@ -1852,7 +2286,11 @@ class EarthquakeService:
                         target.get("countdown_enabled", True)
                     ),
                 )
-                await self._send(target["umo"], text, gap=True)
+                map_path = None
+                if self._map_enabled() and event.source != "simulation":
+                    map_path = await self._render_map_for(target, event)
+                # 图文同一条消息：图在上、文字在下；示意图生成失败降级为纯文本
+                await self._send(target["umo"], text, image_path=map_path, gap=True)
             if update:
                 return
             countdown_tasks = []
@@ -1886,10 +2324,14 @@ class EarthquakeService:
                     if arrival > self._countdown_max_wait():
                         continue
                     seconds = float(arrival)
-                    ticks = (
-                        countdown_ticks(seconds, self._countdown_max_ticks())
+                    ticks = len(
+                        countdown_schedule(
+                            seconds,
+                            per_second_span=self._countdown_max_ticks(),
+                            interval=self._countdown_interval(),
+                        )
                         if countdown_enabled
-                        else 0
+                        else []
                     )
                 if countdown_enabled and ticks <= 0:
                     continue
@@ -1920,13 +2362,19 @@ class EarthquakeService:
         simulation: bool,
         magnitude: Optional[float] = None,
     ) -> None:
-        interval = self._countdown_interval()
-        step = max(1, int(round(interval)))
         deadline = time.monotonic() + max(0.0, arrival_sec)
         # ticks=0 表示只发送到达提示（群内关闭了逐条倒计时）
-        start = max(0, int(ticks))
+        schedule = (
+            countdown_schedule(
+                arrival_sec,
+                per_second_span=self._countdown_max_ticks(),
+                interval=self._countdown_interval(),
+            )
+            if ticks > 0
+            else []
+        )
         umo = target["umo"]
-        for remaining in range(start, 0, -step):
+        for remaining in schedule:
             due = deadline - remaining
             delay = due - time.monotonic()
             if delay > 0:
@@ -1939,12 +2387,69 @@ class EarthquakeService:
             await asyncio.sleep(delay)
         if self._stop.is_set() or not self._is_active_group(umo) or self._is_muted(umo):
             return
-        if start > 0:
+        if schedule:
             # 倒计时数字收尾：0s；随后单独发送到达提示与规避指引
             await self._send(umo, "0s")
         await self._send(umo, format_final(simulation, magnitude))
 
-    async def _send(self, umo: str, text: str, *, gap: bool = False) -> bool:
+    async def _render_map_for(
+        self, target: Dict[str, Any], event: QuakeEvent
+    ) -> Optional[str]:
+        """为单个群渲染震中示意图（含该群接收城市标注），返回本地文件路径。
+
+        任何失败（无 Pillow/瓦片拉取失败/画布异常）都静默降级为不发图。
+        """
+        if _PILImage is None or aiohttp is None:
+            return None
+        try:
+            cities = [
+                {
+                    "place": loc.get("place") or "",
+                    "latitude": loc.get("latitude"),
+                    "longitude": loc.get("longitude"),
+                }
+                for loc in (target.get("locations") or [])
+            ]
+            tiles = self._map_tiles()
+            zoom = _pick_map_zoom(
+                (event.latitude, event.longitude),
+                [
+                    (float(c["latitude"]), float(c["longitude"]))
+                    for c in cities
+                    if c["latitude"] is not None
+                ],
+                tiles,
+            )
+            async with aiohttp.ClientSession(
+                headers={"User-Agent": _GEO_UA}
+            ) as session:
+                ok = await fetch_map_tiles(
+                    session, zoom, (event.latitude, event.longitude), tiles
+                )
+            if not ok:
+                return None
+            img = assemble_epicenter_map(event, cities, tiles, zoom)
+            if img is None:
+                return None
+            state_dir = os.path.dirname(os.path.abspath(self.store.path))
+            cache_path = _map_cache_path(state_dir, event)
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+            img.save(cache_path, "PNG")
+            return cache_path
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[Earthquake] 震中示意图生成失败（不发图）: {e}")
+            return None
+
+    async def _send(
+        self,
+        umo: str,
+        text: str,
+        *,
+        image_path: Optional[str] = None,
+        gap: bool = False,
+    ) -> bool:
         if not umo or self._is_muted(umo) or not self._is_active_group(umo):
             return False
         ok = False
@@ -1952,7 +2457,23 @@ class EarthquakeService:
             # 延迟导入，测试环境无需完整 astrbot
             from astrbot.api.event import MessageChain
 
-            chain = MessageChain().message(text)
+            if image_path and os.path.exists(image_path):
+                try:
+                    import astrbot.api.message_components as _Components
+
+                    # 图文同一条消息：图片在上、文字在下（消息链顺序即渲染顺序）
+                    chain = MessageChain(
+                        chain=[
+                            _Components.Image.fromFileSystem(image_path),
+                            _Components.Plain(text),
+                        ]
+                    )
+                except Exception as e:  # noqa: BLE001
+                    # 组件不可用时降级为纯文字，消息本身不能丢
+                    logger.warning(f"[Earthquake] 图文消息构建失败，降级纯文本: {e}")
+                    chain = MessageChain().message(text)
+            else:
+                chain = MessageChain().message(text)
             ok = await asyncio.wait_for(
                 self.plugin.context.send_message(umo, chain), timeout=15.0
             )
