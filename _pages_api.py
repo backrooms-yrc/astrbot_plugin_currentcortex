@@ -72,6 +72,7 @@ _CONFIG_GROUPS: List[Dict[str, Any]] = [
         "title": "Pixiv 图片",
         "icon": "image",
         "items": [
+            "pixiv_source",
             "default_r18",
             "default_num",
             "default_size",
@@ -1251,7 +1252,7 @@ _HELP_DOCS: List[Dict[str, Any]] = [
         "items": [
             {
                 "q": "如何获取 Pixiv 图片？",
-                "a": "发送 /pixiv（默认配置），或 /pixiv tag=风景 r18=0 num=3。也可 /femboy 获取随机男娘图。",
+                "a": "发送 /pixiv 随机，或 /pixiv 搜索 风景 数量 3；支持 /pixiv 标签 星空、/pixiv 作者 123456，发送 /pixiv 帮助 查看参数。也可 /femboy 获取随机男娘图。",
             },
             {
                 "q": "如何点歌？",

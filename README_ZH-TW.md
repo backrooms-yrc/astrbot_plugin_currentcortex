@@ -149,13 +149,13 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 
 ### 3. 設定 API Key (可選)
 
-> 🔐 **LeiZ API Key 非必填**：未填寫時，與 LeiZ 無關的功能（B站／抖音／小紅書／微博解析、DG-LAB、跨群記憶等）正常使用；**點歌自動路由到自建網易雲SVIP音源**（不依賴此 Key，最高可達超清母帶）；Pixiv／每日一言／天氣／男娘／網易雲／酷狗 等基於 LeiZ 的功能觸發時會提示填寫。
+> 🔐 **LeiZ API Key 非必填**：未填寫時，與 LeiZ 無關的功能（B站／抖音／小紅書／微博解析、DG-LAB、跨群記憶等）正常使用；**點歌自動路由到自建網易雲SVIP音源**（不依賴此 Key，最高可達超清母帶）；Pixiv（僅 LeiZ 圖源）／每日一言／天氣／男娘／網易雲／酷狗 等基於 LeiZ 的功能觸發時會提示填寫。
 
 #### 第一步：取得 API Key
 
 前往 **LeiZ API 官網** 👉 [https://api.bileizhen.top](https://api.bileizhen.top)
 
-在官網註冊／登入後，進入「控制台 / API Keys」頁面建立並複製你的 API Key（即 `x-api-key` 的值）。該 Key 適用於所有 LeiZ API（Pixiv / 一言 / 天氣 / 男娘 / 網易雲），只需一組。
+在官網註冊／登入後，進入「控制台 / API Keys」頁面建立並複製你的 API Key（即 `x-api-key` 的值）。該 Key 適用於所有 LeiZ API（Pixiv（僅 LeiZ 圖源） / 一言 / 天氣 / 男娘 / 網易雲），只需一組。
 
 > 💡 實際申請位置以官網頁面為準（如「控制台 → API Keys / 權杖管理」）。若官網流程有變動，以官網說明為準。
 
@@ -221,7 +221,23 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 
 ### 1. Pixiv 隨機圖片 (`/pixiv`，別名 `/图片`)
 
-透過 LeiZ API 取得隨機 Pixiv 圖片，支援豐富的篩選與搜尋。
+預設 **`pixiv_web`** 免 Token、Cookie 及 LeiZ Key，直接搜尋 Pixiv 匿名可見的全年齡作品，減少第三方固定圖庫的收錄限制。
+
+在 **插件設定 → `pixiv_source`** 或 **總 Pages → 設定 → Pixiv 圖片** 選擇 `leiz` 並儲存，即可切回原 LeiZ 圖源（需要 `leiz_api_key`）。匿名源僅支援全年齡；R18／混合模式會明確提示切換 LeiZ，不會靜默改為全年齡。
+
+支援關鍵詞、標籤 AND/OR、作者 UID、排除 AI、長寬比及時間篩選。每種標籤組合最多抽樣3個搜尋結果頁，每次最多核對60件作品並返回最多20張圖片；無搜尋詞時從日榜抽取，不是全站均勻隨機。伺服器須能存取 `www.pixiv.net` 與 `i.pximg.net`。圖片由伺服器帶 Referer 下載後以本機檔案傳送（單張上限32 MB，超過1小時的暫存檔在後續下載時清理）。`image_proxy` 僅作用於 LeiZ。
+
+中文子指令採 **`/pixiv 中文指令名 參數名 參數值`** 格式，參數以空格分隔：
+
+```text
+/pixiv 随机 数量 3
+/pixiv 搜索 风景 数量 3
+/pixiv 标签 星空 排除AI 是 尺寸 原图
+/pixiv 作者 123456 数量 2
+/pixiv 帮助
+```
+
+指令及參數請按上述簡體字輸入；`标签` 後的空格／逗號表示 AND，`|` 表示 OR。支援 `数量`、`尺寸`、`分级`、`排除AI`、`长宽比`、`起始时间`／`结束时间`（Unix毫秒）。尺寸可填 `原图`、`常规`、`小图`、`缩略图`、`迷你图`。保留原 `/图片` 別名及冒號參數相容性。匿名可見範圍不等於全站所有作品，網站介面或網路不可用時可手動切換 LeiZ。
 
 #### 基本指令
 
@@ -230,47 +246,47 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 | `/pixiv` | 取得一張隨機圖片（按預設參數） |
 | `/pixiv help` | 顯示說明 |
 
-#### 參數說明（`key:value` 格式，空格分隔，可自由組合）
+#### 參數說明（`key value` 格式，空格分隔，可自由組合）
 
 | 參數 | 類型 | 預設值 | 說明 |
 | --- | --- | --- | --- |
-| `r18:` | int | 0 | R18 模式：`0`=全年齡、`1`=僅 R18、`2`=混合 |
-| `num:` | int | 1 | 取得數量（1-20） |
-| `size:` | string | regular | 圖片尺寸：`original`/`regular`/`small`/`thumb`/`mini` |
-| `tag:` | string | — | 標籤篩選；單一 tag 內用 `\|` 為 **OR**，多個 tag 參數為 **AND** |
-| `keyword:` | string | — | 標題／作者／標籤模糊搜尋 |
-| `uid:` | int | — | 指定作者 UID |
-| `ratio:` | string | — | 長寬比篩選，如 `gt1.2lt1.8` |
-| `excludeAI:` | bool | false | 排除 AI 生成作品 |
+| `r18` | int | 0 | R18 模式：`0`=全年齡、`1`=僅 R18、`2`=混合 |
+| `num` | int | 1 | 取得數量（1-20） |
+| `size` | string | regular | 圖片尺寸：`original`/`regular`/`small`/`thumb`/`mini` |
+| `tag` | string | — | 標籤篩選；單一 tag 內用 `\|` 為 **OR**，多個 tag 參數為 **AND** |
+| `keyword` | string | — | 標題／作者／標籤模糊搜尋 |
+| `uid` | int | — | 指定作者 UID |
+| `ratio` | string | — | 長寬比篩選，如 `gt1.2lt1.8` |
+| `excludeAI` | bool | false | 排除 AI 生成作品 |
 
 #### 快捷語法
 
 | 快捷詞 | 等同於 |
 | --- | --- |
-| `r18` | `r18:1` |
-| `mixed` | `r18:2` |
-| `safe` / `sfw` | `r18:0` |
+| `r18` | `r18 1` |
+| `mixed` | `r18 2` |
+| `safe` / `sfw` | `r18 0` |
 
 #### 使用範例
 
 ```text
 # 基礎隨機
 /pixiv                          # 隨機全年齡圖片
-/pixiv r18:1                    # 隨機 R18 圖片
-/pixiv num:5                    # 一次取得 5 張
+/pixiv r18 1                    # 隨機 R18 圖片
+/pixiv num 5                    # 一次取得 5 張
 
 # 標籤與關鍵字搜尋
-/pixiv tag:白丝 num:3           # 取得 3 張白丝圖
-/pixiv keyword:初音ミク num:5   # 搜尋初音未來相關
-/pixiv tag:萝莉 excludeAI:true  # 排除 AI 的萝莉標籤
-/pixiv uid:123456 num:3         # 指定作者作品
+/pixiv tag 白丝 num 3           # 取得 3 張白丝圖
+/pixiv keyword 初音ミク num 5   # 搜尋初音未來相關
+/pixiv tag 萝莉 excludeAI true  # 排除 AI 的萝莉標籤
+/pixiv uid 123456 num 3         # 指定作者作品
 
 # 組合篩選
-/pixiv r18:2 tag:白丝 keyword:初音ミク num:3 size:original
+/pixiv r18 2 tag 白丝 keyword 初音ミク num 3 size original
 
 # 快捷語法
-/pixiv r18                      # 等同 r18:1
-/pixiv mixed                    # 等同 r18:2
+/pixiv r18                      # 等同 r18 1
+/pixiv mixed                    # 等同 r18 2
 ```
 
 #### 回傳範例
@@ -837,17 +853,18 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 
 | 設定項 | 類型 | 預設值 | 說明 |
 | --- | --- | --- | --- |
+| `pixiv_source` | string | pixiv_web | 匿名全年齡搜尋；可切回 leiz（需要 LeiZ Key） |
 | `default_r18` | int | 0 | 預設 R18 模式（0=全年齡, 1=僅R18, 2=混合） |
 | `default_num` | int | 1 | 預設每次取得的圖片數量（1-20） |
 | `default_size` | string | regular | 預設圖片尺寸（original/regular/small/thumb/mini） |
-| `image_proxy` | string | pixiv.bileizhen.top | 圖片反向代理網域 |
+| `image_proxy` | string | pixiv.bileizhen.top | LeiZ 圖源的反向代理網域；匿名源不使用 |
 | `exclude_ai` | bool | false | 預設是否排除 AI 生成作品 |
 
 ### 通用／驗證
 
 | 設定項 | 類型 | 預設值 | 說明 |
 | --- | --- | --- | --- |
-| `leiz_api_key` | string | （空） | **LeiZ API 統一金鑰**（請求頭 `x-api-key`），**非必填**。在 [LeiZ API 官網](https://api.bileizhen.top) 註冊後取得；Pixiv／一言／天氣／男娘／網易雲／酷狗等 LeiZ API 需要。未填寫時這些功能會提示設定，點歌自動路由到自建網易雲SVIP音源，其餘功能不受影響 |
+| `leiz_api_key` | string | （空） | **LeiZ API 統一金鑰**（請求頭 `x-api-key`），**非必填**。在 [LeiZ API 官網](https://api.bileizhen.top) 註冊後取得；Pixiv（僅 LeiZ 圖源）／一言／天氣／男娘／網易雲／酷狗等 LeiZ API 需要。未填寫時這些功能會提示設定，點歌自動路由到自建網易雲SVIP音源，其餘功能不受影響 |
 | `request_timeout` | int | 15 | API 請求逾時時間（秒），影響所有功能 |
 
 ### 檢驗碼（必填）
@@ -958,12 +975,14 @@ v1.2.0 及更早版本使用 JSON 字串設定（已棄用）：
 <details>
 <summary><b>呼叫指令提示「功能未啟用 / 未設定 API Key」？</b></summary>
 
-需先在 [LeiZ API 官網](https://api.bileizhen.top) 取得 API Key（見[設定 API Key](#3-設定-api-key-可選)），再填入設定面板的 `leiz_api_key` 欄位，儲存後重新啟動插件。可用 `/apitest` 驗證各 API 連通性。Pixiv / 一言 / 天氣 / 男娘 / 點歌 均依賴此 Key。
+需先在 [LeiZ API 官網](https://api.bileizhen.top) 取得 API Key（見[設定 API Key](#3-設定-api-key-可選)），再填入設定面板的 `leiz_api_key` 欄位，儲存後重新啟動插件。可用 `/apitest` 驗證各 API 連通性。Pixiv（僅 LeiZ 圖源） / 一言 / 天氣 / 男娘 / 點歌 均依賴此 Key。
 
 </details>
 
 <details>
 <summary><b>Pixiv 圖片無法顯示？</b></summary>
+
+預設 `pixiv_web` 源請確認伺服器能存取 `www.pixiv.net` 和 `i.pximg.net`；失敗時可切換 `leiz`。以下反向代理設定僅作用於 LeiZ。
 
 1. 反向代理網域不可用：嘗試更換 `image_proxy` 設定項
 2. 網路連線問題：檢查伺服器能否存取外網
@@ -975,7 +994,7 @@ v1.2.0 及更早版本使用 JSON 字串設定（已棄用）：
 <summary><b>如何排除 AI 生成的 Pixiv 作品？</b></summary>
 
 1. **全域排除**：設定 `exclude_ai` 為 `true`
-2. **單次排除**：指令中使用 `excludeAI:true`，如 `/pixiv tag:萝莉 excludeAI:true`
+2. **單次排除**：指令中使用 `excludeAI true`，如 `/pixiv tag 萝莉 excludeAI true`
 
 </details>
 
@@ -1127,7 +1146,7 @@ astrbot_plugin_currentcortex/
 
 ---
 
-**版本**：v2.10.0（各版本變更詳見 [CHANGELOG.md](CHANGELOG.md)）
+**版本**：v2.11.0（各版本變更詳見 [CHANGELOG.md](CHANGELOG.md)）
 **儲存庫**：[GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
 
 

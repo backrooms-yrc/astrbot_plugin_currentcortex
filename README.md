@@ -168,7 +168,7 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 
 ### 3. 配置 API Key（可选）
 
-> 🔐 **LeiZ API Key 非必填**：未填写时，与 LeiZ 无关的功能（B站/抖音/小红书/微博解析、DG-LAB、Wikidot、跨群记忆等）正常使用；**点歌自动路由到自建网易云SVIP音源**（不依赖本 Key，最高可到超清母带）；Pixiv / 每日一言 / 天气 / 男娘 / 网易云 / 酷狗 等基于 LeiZ 的功能触发时会提示填写。
+> 🔐 **LeiZ API Key 非必填**：未填写时，与 LeiZ 无关的功能（B站/抖音/小红书/微博解析、DG-LAB、Wikidot、跨群记忆等）正常使用；**点歌自动路由到自建网易云SVIP音源**（不依赖本 Key，最高可到超清母带）；Pixiv（仅 LeiZ 源） / 每日一言 / 天气 / 男娘 / 网易云 / 酷狗 等基于 LeiZ 的功能触发时会提示填写。
 
 #### 第一步：获取 API Key
 
@@ -182,7 +182,7 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 
 打开 AstrBot 管理面板 → 插件管理 → 本插件 → 配置，把上一步获取的 Key 填入 **`leiz_api_key`** 字段，保存后重启插件。
 
-未配置时，Pixiv / 一言 / 天气 / 男娘 / 网易云 / 酷狗 等 LeiZ 相关命令会给出配置引导提示；点歌不受影响（自动路由到自建网易云SVIP音源）。
+未配置时，Pixiv 的 LeiZ 源 / 一言 / 天气 / 男娘 / 网易云 / 酷狗 等 LeiZ 相关命令会给出配置引导提示；点歌不受影响（自动路由到自建网易云SVIP音源）。
 
 > ⚠️ **本插件是基于 LeiZ API 的社区（第三方）插件，与 LeiZ API 官方相互独立**。API Key 的注册/获取、接口计费、额度、上游故障等问题请到 [LeiZ API 官网](https://api.bileizhen.top) 及其官方渠道咨询；本插件的交流群仅处理插件本身的使用问题。
 
@@ -241,7 +241,13 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 
 ### 1. Pixiv 随机图片 (`/pixiv`，别名 `/图片`)
 
-通过 LeiZ API 获取随机 Pixiv 图片，支持丰富的筛选与搜索。
+默认使用 **Pixiv 匿名网页接口**（`pixiv_source=pixiv_web`），无需 Token、Cookie 或 LeiZ Key，直接搜索 Pixiv 匿名可见的全年龄作品，避免第三方固定图库的收录限制。
+
+在 **插件配置 → `pixiv_source`** 或 **总 Pages → 设置 → Pixiv 图片 → Pixiv 图片源** 中选择 `leiz` 并保存，可切回原 LeiZ 源（需要 `leiz_api_key`）。
+
+匿名源支持关键词、标签 AND/OR、作者 UID、排除 AI、长宽比和时间筛选；每种标签组合抽样最多 3 个搜索结果页（含最新页与随机深页），每次最多校验 60 件作品后返回最多 20 张。无搜索词时从日榜随机抽取，并非全站均匀随机。**R18/混合模式需切换 LeiZ**，不会静默改为全年龄。服务器需能访问 `www.pixiv.net` 和 `i.pximg.net`；图片由服务器带 Referer 下载后发送，临时文件保留约一小时并在后续下载时清理。`image_proxy` 仅作用于 LeiZ 源。
+
+Pixiv 匿名可见范围不等于全站所有作品；接口变动、访问限制或网络故障时，可手动切换 LeiZ。
 
 #### 基本指令
 
@@ -250,47 +256,61 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 | `/pixiv` | 获取一张随机图片（按默认参数） |
 | `/pixiv help` | 显示帮助 |
 
-#### 参数说明（`key:value` 格式，空格分隔，可自由组合）
+中文子指令采用 **`/pixiv 中文指令名 参数`** 格式，共用全部筛选参数及图片功能域开关：
+
+```text
+/pixiv 搜索 风景 数量 3
+/pixiv 标签 星空 排除AI 是 尺寸 原图
+/pixiv 作者 123456 数量 2
+/pixiv 随机 数量 2
+/pixiv 帮助
+```
+
+`搜索` 后填写关键词，`标签` 后可填写多个标签（空格或逗号分隔为 AND，`|` 分隔为 OR），`作者` 后填写数字 UID；`随机` 无需搜索词，`帮助` 显示用法。原有英文参数写法及 `/图片` 别名继续可用。
+
+中文参数：`标签`、`关键词`/`关键字`、`作者`/`作者ID`、`数量`、`尺寸`、`分级`、`排除AI`、`比例`/`长宽比`、`起始时间`、`结束时间`（时间戳单位为毫秒）。参数名与值使用空格分隔，与英文参数可混用。尺寸可填 `原图`、`常规`、`小图`、`缩略图`、`迷你图`；分级可填 `全年龄`、`成人`、`混合`（成人/混合需使用 LeiZ 源）。`排除AI 是` 或单独 `排除AI` 表示开启，`排除AI 否` 表示关闭。
+
+#### 参数说明（`key value` 格式，空格分隔，可自由组合）
 
 | 参数 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `r18:` | int | 0 | R18 模式：`0`=全年龄、`1`=仅 R18、`2`=混合 |
-| `num:` | int | 1 | 获取数量（1-20） |
-| `size:` | string | regular | 图片尺寸：`original`/`regular`/`small`/`thumb`/`mini` |
-| `tag:` | string | — | 标签筛选；单个 tag 内用 `\|` 为 **OR**，多个 tag 参数为 **AND** |
-| `keyword:` | string | — | 标题 / 作者 / 标签模糊搜索 |
-| `uid:` | int | — | 指定作者 UID |
-| `ratio:` | string | — | 长宽比筛选，如 `gt1.2lt1.8` |
-| `excludeAI:` | bool | false | 排除 AI 生成作品 |
+| `r18` | int | 0 | R18 模式：`0`=全年龄、`1`=仅 R18、`2`=混合 |
+| `num` | int | 1 | 获取数量（1-20） |
+| `size` | string | regular | 图片尺寸：`original`/`regular`/`small`/`thumb`/`mini` |
+| `tag` | string | — | 标签筛选；单个 tag 内用 `\|` 为 **OR**，多个 tag 参数为 **AND** |
+| `keyword` | string | — | 标题 / 作者 / 标签模糊搜索 |
+| `uid` | int | — | 指定作者 UID |
+| `ratio` | string | — | 长宽比筛选，如 `gt1.2lt1.8` |
+| `excludeAI` | bool | false | 排除 AI 生成作品 |
 
 #### 快捷语法
 
 | 快捷词 | 等同于 |
 | --- | --- |
-| `r18` | `r18:1` |
-| `mixed` | `r18:2` |
-| `safe` / `sfw` | `r18:0` |
+| `r18` | `r18 1` |
+| `mixed` | `r18 2` |
+| `safe` / `sfw` | `r18 0` |
 
 #### 使用示例
 
 ```text
 # 基础随机
 /pixiv                          # 随机全年龄图片
-/pixiv r18:1                    # 随机 R18 图片
-/pixiv num:5                    # 一次获取 5 张
+/pixiv r18 1                    # 随机 R18 图片
+/pixiv num 5                    # 一次获取 5 张
 
 # 标签与关键词搜索
-/pixiv tag:白丝 num:3           # 获取 3 张白丝图
-/pixiv keyword:初音ミク num:5   # 搜索初音未来相关
-/pixiv tag:萝莉 excludeAI:true  # 排除 AI 的萝莉标签
-/pixiv uid:123456 num:3         # 指定作者作品
+/pixiv tag 白丝 num 3           # 获取 3 张白丝图
+/pixiv keyword 初音ミク num 5   # 搜索初音未来相关
+/pixiv tag 萝莉 excludeAI true  # 排除 AI 的萝莉标签
+/pixiv uid 123456 num 3         # 指定作者作品
 
 # 组合筛选
-/pixiv r18:2 tag:白丝 keyword:初音ミク num:3 size:original
+/pixiv r18 2 tag 白丝 keyword 初音ミク num 3 size original
 
 # 快捷语法
-/pixiv r18                      # 等同 r18:1
-/pixiv mixed                    # 等同 r18:2
+/pixiv r18                      # 等同 r18 1
+/pixiv mixed                    # 等同 r18 2
 ```
 
 #### 返回示例
@@ -301,7 +321,7 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 👤 作者：SampleArtist
 🔗 https://www.pixiv.net/artworks/12345678
 🏷️ 标签：オリジナル / 女の子 / 冬 / 雪
-📐 尺寸：1920×1080
+📐 尺寸 1920×1080
 [图片]
 ```
 
@@ -1045,17 +1065,18 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 
 | 配置项 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
+| `pixiv_source` | string | pixiv_web | 默认免 Token 的 Pixiv 匿名搜索；可选 leiz（需要 LeiZ Key） |
 | `default_r18` | int | 0 | 默认 R18 模式（0=全年龄, 1=仅R18, 2=混合） |
 | `default_num` | int | 1 | 默认每次获取的图片数量（1-20） |
 | `default_size` | string | regular | 默认图片尺寸（original/regular/small/thumb/mini） |
-| `image_proxy` | string | pixiv.bileizhen.top | 图片反代域名 |
+| `image_proxy` | string | pixiv.bileizhen.top | LeiZ 图片源的反代域名；匿名源不使用 |
 | `exclude_ai` | bool | false | 默认是否排除 AI 生成作品 |
 
 ### 通用 / 鉴权
 
 | 配置项 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `leiz_api_key` | string | （空） | **LeiZ API 统一密钥**（请求头 `x-api-key`），**非必填**。在 [LeiZ API 官网](https://api.bileizhen.top) 注册后获取；Pixiv/一言/天气/男娘/网易云/酷狗等 LeiZ 接口需要。未填写时这些功能会提示配置，点歌自动路由到自建网易云SVIP音源，其余功能不受影响 |
+| `leiz_api_key` | string | （空） | **LeiZ API 统一密钥**（请求头 `x-api-key`），**非必填**。在 [LeiZ API 官网](https://api.bileizhen.top) 注册后获取；Pixiv 的 LeiZ 源/一言/天气/男娘/网易云/酷狗等 LeiZ 接口需要。未填写时这些功能会提示配置，点歌自动路由到自建网易云SVIP音源，其余功能不受影响 |
 | `request_timeout` | int | 15 | API 请求超时时间（秒），影响所有功能 |
 
 ### 音乐点歌
@@ -1210,12 +1231,14 @@ v1.2.0 及更早版本使用 JSON 字符串配置（已弃用）：
 <details>
 <summary><b>调用命令提示「功能未启用 / 未配置 API Key」？</b></summary>
 
-需先在 [LeiZ API 官网](https://api.bileizhen.top) 获取 API Key（见 [配置 API Key](#3-配置-api-key可选)），再填入配置面板的 `leiz_api_key` 字段，保存后重启插件。可用 `/apitest` 验证各接口连通性。Pixiv / 一言 / 天气 / 男娘 / 点歌 均依赖此 Key。
+需先在 [LeiZ API 官网](https://api.bileizhen.top) 获取 API Key（见 [配置 API Key](#3-配置-api-key可选)），再填入配置面板的 `leiz_api_key` 字段，保存后重启插件。可用 `/apitest` 验证各接口连通性。Pixiv 的 LeiZ 源 / 一言 / 天气 / 男娘依赖此 Key；默认 Pixiv 匿名源与自建点歌源无需此 Key。
 
 </details>
 
 <details>
 <summary><b>Pixiv 图片无法显示？</b></summary>
+
+默认 `pixiv_web` 源请检查服务器能否访问 `www.pixiv.net` 和 `i.pximg.net`；失败时可切换 `leiz`。以下反代设置仅适用于 LeiZ 源。
 
 1. 反代域名不可用：尝试更换 `image_proxy` 配置项
 2. 网络连接问题：检查服务器能否访问外网
@@ -1227,7 +1250,7 @@ v1.2.0 及更早版本使用 JSON 字符串配置（已弃用）：
 <summary><b>如何排除 AI 生成的 Pixiv 作品？</b></summary>
 
 1. **全局排除**：配置 `exclude_ai` 为 `true`
-2. **单次排除**：命令中使用 `excludeAI:true`，如 `/pixiv tag:萝莉 excludeAI:true`
+2. **单次排除**：命令中使用 `excludeAI true`，如 `/pixiv tag 萝莉 excludeAI true`
 
 </details>
 
@@ -1329,7 +1352,8 @@ astrbot_plugin_currentcortex/
 ### 核心模块
 
 **内容获取与解析：**
-- **PixivAPIClient** ([main.py](main.py))：Pixiv API 客户端，按过滤参数自动路由 GET 随机 / POST 筛选接口
+- **PixivWebAPIClient** ([pixiv_web.py](pixiv_web.py))：默认匿名 Pixiv 搜索、筛选和带 Referer 的图片下载。
+- **PixivAPIClient** ([main.py](main.py))：可切换的 LeiZ 图源，保留 GET 随机 / POST 筛选接口
 - **HitokotoAPIClient** / **WeatherAPIClient** / **FemboyAPIClient**：一言 / 天气 / 男娘 API 客户端
 - **NeteaseAPIClient**：网易云客户端，点歌带指数退避重试
 - **KugouAPIClient**：酷狗音乐客户端（搜索 / 播放链接）
@@ -1389,7 +1413,7 @@ astrbot_plugin_currentcortex/
 
 <div align="center">
 
-**CurrentCortex** · v2.10.0 · [更新日志](CHANGELOG.md) · [问题反馈](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/issues) · [MIT License](LICENSE)
+**CurrentCortex** · v2.11.0 · [更新日志](CHANGELOG.md) · [问题反馈](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/issues) · [MIT License](LICENSE)
 
 如果这个插件对你有帮助，欢迎点一个 ⭐ Star 支持作者！
 

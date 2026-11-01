@@ -149,13 +149,13 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 
 ### 3. API キー設定 (任意)
 
-> 🔐 **LeiZ API キーは任意です**：未設定でも、LeiZ に関係ない機能（Bilibili／Douyin／小紅書／Weibo 解析、DG-LAB、Wikidot、グループ横断メモリなど）は正常に動作します。**楽曲リクエストは自前の網易雲SVIP音源へ自動ルーティング**されます（本キー不要、最高でウルトラクリアマスターまで）。Pixiv / Hitokoto / 天気 / 男の娘 / 網易雲 / 酷狗 など LeiZ 系機能は、トリガー時に設定を促す表示が出ます。
+> 🔐 **LeiZ API キーは任意です**：未設定でも、LeiZ に関係ない機能（Bilibili／Douyin／小紅書／Weibo 解析、DG-LAB、Wikidot、グループ横断メモリなど）は正常に動作します。**楽曲リクエストは自前の網易雲SVIP音源へ自動ルーティング**されます（本キー不要、最高でウルトラクリアマスターまで）。Pixiv（LeiZ ソースのみ） / Hitokoto / 天気 / 男の娘 / 網易雲 / 酷狗 など LeiZ 系機能は、トリガー時に設定を促す表示が出ます。
 
 #### ステップ1：API キーを取得
 
 **LeiZ API 公式サイト**へ 👉 [https://api.bileizhen.top](https://api.bileizhen.top)
 
-登録／ログイン後、「コンソール / API Keys」ページでキーを作成・コピーしてください（これが `x-api-key` の値になります）。キーは LeiZ の全エンドポイント（Pixiv / Hitokoto / 天気 / 男の娘 / 網易雲）で共通で、1つあれば十分です。
+登録／ログイン後、「コンソール / API Keys」ページでキーを作成・コピーしてください（これが `x-api-key` の値になります）。キーは LeiZ の全エンドポイント（Pixiv（LeiZ ソースのみ） / Hitokoto / 天気 / 男の娘 / 網易雲）で共通で、1つあれば十分です。
 
 > 💡 具体的な取得場所はサイトのレイアウトに依存します（例：「コンソール → API Keys / トークン管理」）。公式サイトの手順が優先されます。
 
@@ -163,7 +163,7 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 
 AstrBot 管理パネル → プラグイン管理 → 本プラグイン → 設定 を開き、取得したキーを **`leiz_api_key`** フィールドに貼り付けて保存し、プラグインを再読み込みしてください。
 
-キー未設定の場合、Pixiv / Hitokoto / 天気 / 男の娘 / 網易雲 / 酷狗 など LeiZ 系コマンドには設定を案内する表示が出ます。楽曲リクエストは影響を受けません（自前の網易雲SVIP音源へ自動ルーティングされます）。
+キー未設定の場合、Pixiv（LeiZ ソースのみ） / Hitokoto / 天気 / 男の娘 / 網易雲 / 酷狗 など LeiZ 系コマンドには設定を案内する表示が出ます。楽曲リクエストは影響を受けません（自前の網易雲SVIP音源へ自動ルーティングされます）。
 
 > ⚠️ **本プラグインは LeiZ API を利用したコミュニティ（サードパーティ）プラグインであり、LeiZ API 公式とは独立しています**。API キーの登録・取得、課金、クォータ、上流障害については [LeiZ API 公式サイト](https://api.bileizhen.top) と公式チャンネルにお問い合わせください。本プラグインのグループはプラグイン自体の問題のみ扱います。
 
@@ -221,7 +221,23 @@ pip install websockets>=10.0   # DG-LAB 機能のみ必要
 
 ### 1. Pixiv ランダム画像 (`/pixiv`)
 
-LeiZ API 経由でランダムな Pixiv 作品を取得します。多彩な絞り込み・検索に対応。
+デフォルトの **`pixiv_web`** は Token・Cookie・LeiZ キー不要で、Pixiv の匿名閲覧可能な全年齢作品を直接検索します。第三者の収録済み画像だけに依存しません。
+
+**プラグイン設定 → `pixiv_source`** または **総合 Pages → 設定 → Pixiv** で `leiz` を選択して保存すると、従来の LeiZ ソースに戻せます。`leiz_api_key` が必要です。匿名ソースは全年齢のみ対応し、R18／混合モードでは LeiZ への切り替えを案内します。
+
+キーワード、タグ AND/OR、作者 UID、AI 除外、縦横比、投稿日時による絞り込みに対応。タグの組み合わせごとに最大3ページを抽出し、1回につき最大60作品を確認して最大20枚を返します。検索語のない取得はデイリーランキングからの抽出で、全サイトの均等ランダムではありません。サーバーから `www.pixiv.net` と `i.pximg.net` への接続が必要です。Referer を付けて画像をダウンロードし、ローカルファイルとして送信します（1枚32 MB上限、1時間を超えた一時ファイルは次回以降のダウンロード時に削除）。`image_proxy` は LeiZ 専用です。
+
+中国語サブコマンドは `/pixiv` の後に置き、オプション名と値はスペースで区切ります。
+
+```text
+/pixiv 随机 数量 3
+/pixiv 搜索 风景 数量 3
+/pixiv 标签 星空 排除AI 是 尺寸 原图
+/pixiv 作者 123456 数量 2
+/pixiv 帮助
+```
+
+`随机`＝ランダム、`搜索`＝検索、`标签`＝タグ、`作者`＝作者 UID、`帮助`＝ヘルプ。タグの空白／カンマ区切りは AND、`|` は OR です。`数量`＝枚数、`尺寸`＝サイズ、`分级`＝年齢区分、`排除AI`＝AI 除外、`长宽比`＝縦横比、`起始时间`／`结束时间`＝日時範囲（Unixミリ秒）。中国語サイズ値は `原图`／`常规`／`小图`／`缩略图`／`迷你图`。従来の `/图片` とコロン区切りのパラメータも使用できます。匿名閲覧範囲は Pixiv 全作品とは異なります。API やネットワークの障害時には LeiZ に切り替えてください。
 
 #### 基本コマンド
 
@@ -230,47 +246,47 @@ LeiZ API 経由でランダムな Pixiv 作品を取得します。多彩な絞�
 | `/pixiv` | ランダム画像を1枚取得（デフォルトパラメータ） |
 | `/pixiv help` | ヘルプ表示 |
 
-#### パラメータ（`key:value` 形式、スペース区切り、自由に組み合わせ可能）
+#### パラメータ（`key value` 形式、スペース区切り、自由に組み合わせ可能）
 
 | パラメータ | 型 | デフォルト | 説明 |
 | --- | --- | --- | --- |
-| `r18:` | int | 0 | R18 モード：`0`=全年齢、`1`=R18 のみ、`2`=ミックス |
-| `num:` | int | 1 | 取得枚数（1-20） |
-| `size:` | string | regular | 画像サイズ：`original`/`regular`/`small`/`thumb`/`mini` |
-| `tag:` | string | — | タグ絞り込み。タグ内の `\|` は **OR**、複数 `tag:` の指定は **AND** |
-| `keyword:` | string | — | タイトル／作者／タグのあいまい検索 |
-| `uid:` | int | — | 作者 UID の指定 |
-| `ratio:` | string | — | アスペクト比フィルタ（例：`gt1.2lt1.8`） |
-| `excludeAI:` | bool | false | AI 生成作品を除外 |
+| `r18` | int | 0 | R18 モード：`0`=全年齢、`1`=R18 のみ、`2`=ミックス |
+| `num` | int | 1 | 取得枚数（1-20） |
+| `size` | string | regular | 画像サイズ：`original`/`regular`/`small`/`thumb`/`mini` |
+| `tag` | string | — | タグ絞り込み。タグ内の `\|` は **OR**、複数 `tag` の指定は **AND** |
+| `keyword` | string | — | タイトル／作者／タグのあいまい検索 |
+| `uid` | int | — | 作者 UID の指定 |
+| `ratio` | string | — | アスペクト比フィルタ（例：`gt1.2lt1.8`） |
+| `excludeAI` | bool | false | AI 生成作品を除外 |
 
 #### 省略記法
 
 | 省略形 | 同義 |
 | --- | --- |
-| `r18` | `r18:1` |
-| `mixed` | `r18:2` |
-| `safe` / `sfw` | `r18:0` |
+| `r18` | `r18 1` |
+| `mixed` | `r18 2` |
+| `safe` / `sfw` | `r18 0` |
 
 #### 使用例
 
 ```text
 # 基本系
 /pixiv                          # ランダムな全年齢画像
-/pixiv r18:1                    # ランダムな R18 画像
-/pixiv num:5                    # 一度に5枚取得
+/pixiv r18 1                    # ランダムな R18 画像
+/pixiv num 5                    # 一度に5枚取得
 
 # タグ・キーワード検索
-/pixiv tag:白丝 num:3           # 白絹タグの画像を3枚
-/pixiv keyword:初音ミク num:5   # 初音ミク関連を検索
-/pixiv tag:萝莉 excludeAI:true  # AI 作品を除外した萝莉タグ
-/pixiv uid:123456 num:3         # 指定作者の作品
+/pixiv tag 白丝 num 3           # 白絹タグの画像を3枚
+/pixiv keyword 初音ミク num 5   # 初音ミク関連を検索
+/pixiv tag 萝莉 excludeAI true  # AI 作品を除外した萝莉タグ
+/pixiv uid 123456 num 3         # 指定作者の作品
 
 # 組み合わせ絞り込み
-/pixiv r18:2 tag:白丝 keyword:初音ミク num:3 size:original
+/pixiv r18 2 tag 白丝 keyword 初音ミク num 3 size original
 
 # 省略記法
-/pixiv r18                      # r18:1 と同義
-/pixiv mixed                    # r18:2 と同義
+/pixiv r18                      # r18 1 と同義
+/pixiv mixed                    # r18 2 と同義
 ```
 
 #### 返信例
@@ -837,17 +853,18 @@ LeiZ 上流エンドポイント全部の認証・接続状態を一括診断し
 
 | 設定項目 | 型 | デフォルト | 説明 |
 | --- | --- | --- | --- |
+| `pixiv_source` | string | pixiv_web | 匿名の全年齢検索。従来のソースは leiz（LeiZ キーが必要） |
 | `default_r18` | int | 0 | デフォルトの R18 モード（0=全年齢、1=R18のみ、2=ミックス） |
 | `default_num` | int | 1 | デフォルトの1回あたり取得枚数（1-20） |
 | `default_size` | string | regular | デフォルトの画像サイズ（original/regular/small/thumb/mini） |
-| `image_proxy` | string | pixiv.bileizhen.top | 画像リバースプロキシドメイン |
+| `image_proxy` | string | pixiv.bileizhen.top | LeiZ 用の画像プロキシドメイン。匿名ソースでは不使用 |
 | `exclude_ai` | bool | false | AI 生成作品をデフォルトで除外するか |
 
 ### 共通／認証
 
 | 設定項目 | 型 | デフォルト | 説明 |
 | --- | --- | --- | --- |
-| `leiz_api_key` | string | （空） | **LeiZ API 統一キー**（リクエストヘッダー `x-api-key`）。**必須ではありません**。[LeiZ API 公式サイト](https://api.bileizhen.top) で登録後に取得。Pixiv／Hitokoto／天気／男の娘／網易雲／酷狗など LeiZ エンドポイントで必要。未設定時はこれらの機能が設定を促しますが、楽曲リクエストは自前の網易雲SVIP音源へ自動ルーティングされ、その他の機能には影響しません |
+| `leiz_api_key` | string | （空） | **LeiZ API 統一キー**（リクエストヘッダー `x-api-key`）。**必須ではありません**。[LeiZ API 公式サイト](https://api.bileizhen.top) で登録後に取得。Pixiv（LeiZ ソースのみ）／Hitokoto／天気／男の娘／網易雲／酷狗など LeiZ エンドポイントで必要。未設定時はこれらの機能が設定を促しますが、楽曲リクエストは自前の網易雲SVIP音源へ自動ルーティングされ、その他の機能には影響しません |
 | `request_timeout` | int | 15 | API リクエストのタイムアウト（秒）。全機能に影響 |
 
 ### 楽曲リクエスト
@@ -952,12 +969,14 @@ v1.2.0 以前は JSON 文字列の設定を使っていました（非推奨）�
 <details>
 <summary><b>コマンドを実行すると「機能が無効／API キー未設定」と出る？</b></summary>
 
-まず [LeiZ API 公式サイト](https://api.bileizhen.top)で API キーを取得し（[API キー設定](#3-api-キー設定-任意) 参照）、設定パネルの `leiz_api_key` フィールドに入力して保存、プラグインを再読み込みしてください。`/apitest` で各エンドポイントの接続を検証できます。Pixiv／Hitokoto／天気／男の娘／リクエストはすべてこのキーに依存します。
+まず [LeiZ API 公式サイト](https://api.bileizhen.top)で API キーを取得し（[API キー設定](#3-api-キー設定-任意) 参照）、設定パネルの `leiz_api_key` フィールドに入力して保存、プラグインを再読み込みしてください。`/apitest` で各エンドポイントの接続を検証できます。Pixiv（LeiZ ソースのみ）／Hitokoto／天気／男の娘／リクエストはすべてこのキーに依存します。
 
 </details>
 
 <details>
 <summary><b>Pixiv の画像が表示されない？</b></summary>
+
+デフォルトの `pixiv_web` はサーバーから `www.pixiv.net` と `i.pximg.net` への接続を確認してください。接続できない場合は `leiz` に切り替えます。以下のプロキシ設定は LeiZ 専用です。
 
 1. リバースプロキシのドメインが利用不可：`image_proxy` 設定を変更してみる
 2. ネットワークの問題：サーバーが外部ネットワークへアクセスできるか確認
@@ -969,7 +988,7 @@ v1.2.0 以前は JSON 文字列の設定を使っていました（非推奨）�
 <summary><b>AI 生成された Pixiv 作品を除外するには？</b></summary>
 
 1. **全体で除外**：`exclude_ai` を `true` に設定
-2. **その場だけ除外**：コマンドに `excludeAI:true` を付ける（例：`/pixiv tag:萝莉 excludeAI:true`）
+2. **その場だけ除外**：コマンドに `excludeAI true` を付ける（例：`/pixiv tag 萝莉 excludeAI true`）
 
 </details>
 
@@ -1121,7 +1140,7 @@ Issue と PR を歓迎します！バグ報告・機能提案には Issue テン
 
 ---
 
-**バージョン**：v2.10.0（バージョンごとの変更は [CHANGELOG.md](CHANGELOG.md) を参照）
+**バージョン**：v2.11.0（バージョンごとの変更は [CHANGELOG.md](CHANGELOG.md) を参照）
 **リポジトリ**：[GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
 
 

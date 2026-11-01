@@ -9,6 +9,15 @@
     "type": "bool",
     "default": true
   },
+  "pixiv_source": {
+    "description": "Pixiv 图片源：pixiv_web（默认，免 Token，直接搜索 Pixiv 匿名可见全年龄作品；无关键词时从日榜抽取，搜索每种标签组合最多抽样 3 页）；leiz（原 LeiZ 图库，需要 leiz_api_key，支持原有 R18/混合模式）。切换后命令与 AI 图片工具一起生效。服务器须能访问 www.pixiv.net 和 i.pximg.net。",
+    "type": "string",
+    "default": "pixiv_web",
+    "options": [
+      "pixiv_web",
+      "leiz"
+    ]
+  },
   "default_r18": {
     "description": "默认 R18 等级（0=全年龄, 1=R18, 2=混合）",
     "type": "int",
@@ -25,7 +34,7 @@
     "default": "regular"
   },
   "image_proxy": {
-    "description": "图片代理域名",
+    "description": "LeiZ 图片源使用的图片代理域名；pixiv_web 源由服务器带 Referer 下载原站图片，不使用此项",
     "type": "string",
     "default": "pixiv.bileizhen.top"
   },
@@ -67,7 +76,7 @@
     "options": ["auto", "ncm", "netease", "kugou"]
   },
   "leiz_api_key": {
-    "description": "LeiZ API 统一密钥（请求头 x-api-key），非必填。未填写时：与 LeiZ 无关的功能（B站/抖音/小红书解析、DG-Lab、Wikidot 等）正常使用；点歌自动路由到自建网易云SVIP音源（不依赖本密钥）；Pixiv/一言/天气/男娘等基于 LeiZ 的命令会提示填写后再使用。已配置旧版 femboy_api_key 的会自动沿用",
+    "description": "LeiZ API 统一密钥（请求头 x-api-key），非必填。未填写时：与 LeiZ 无关的功能（B站/抖音/小红书解析、DG-Lab、Wikidot 等）正常使用；点歌自动路由到自建网易云SVIP音源（不依赖本密钥）；LeiZ 图源/一言/天气/男娘等基于 LeiZ 的命令会提示填写后再使用。已配置旧版 femboy_api_key 的会自动沿用。默认 pixiv_web 图片源无需本密钥",
     "type": "string",
     "default": ""
   },

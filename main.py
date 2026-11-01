@@ -48,6 +48,7 @@ from .earthquake import (
     upsert_group,
 )
 from .weather import WeatherService
+from .pixiv_web import PixivWebAPIClient, PixivAPIError
 from astrbot.api.provider import ProviderRequest, LLMResponse
 from astrbot.core.agent.message import TextPart
 from astrbot.api.platform import MessageType
@@ -160,6 +161,7 @@ def _parse_music_progress_mode(config: Dict[str, Any]) -> str:
         "详细": "detail", "detail": "detail",
     }.get(raw, "brief")
 PIXIV_ARTWORK_URL = "https://www.pixiv.net/artworks/{}"
+PIXIV_COMMAND_ALIASES = ("图片",)
 
 # 插件校验码（自 2026-09-20 起强制）：因插件滥用行为导致的一系列问题，
 # 部署者须加入官方 QQ 群 PLUGIN_OFFICIAL_GROUP 获取校验码填入配置项
@@ -192,7 +194,7 @@ COMMAND_CATEGORIES = [
         "icon": "image",
         "title": "图片获取",
         "commands": [
-            {"cmd": "/pixiv", "alias": "图片", "desc": "获取或按条件筛选 Pixiv 随机图片"},
+            {"cmd": "/pixiv", "alias": "图片", "desc": "随机 / 搜索 / 标签 / 作者 / 帮助"},
             {"cmd": "/femboy", "alias": "男娘", "desc": "获取一张随机男娘图片"},
         ],
     },
@@ -321,50 +323,67 @@ _COMMAND_LIST_TMPL = """\
 
 HELP_TEXT = """🎨 Pixiv 随机图片插件 使用说明
 
-📌 基本命令（别名：/图片）
+📌 图片源
+  默认 pixiv_web：免 Token，直接搜索 Pixiv 匿名可见全年龄作品。
+  无关键词时随机抽取日榜作品；每次搜索抽样最多 3 页。
+  R18/混合模式请在插件配置或总 Pages → 设置 → Pixiv 图片切换 leiz，并填写 LeiZ Key。
+
+📌 基本命令（保留原别名：/图片）
   /pixiv               获取一张随机全年龄图片（默认参数）
   /pixiv help          显示此帮助信息
 
 📌 内容分级选项
-  r18:0               全年龄内容（默认）
-  r18:1               仅 R18 成人内容 ⚠️
-  r18:2               混合模式（全年龄 + R18）🔞
+  r18 0               全年龄内容（默认）
+  r18 1               仅 R18 成人内容 ⚠️
+  r18 2               混合模式（全年龄 + R18）🔞
 
-📌 搜索与筛选参数（使用 key:value 格式，可组合使用）
-  tag:标签名           按标签筛选图片
-                       • OR 匹配：tag:萝莉|少女
-                       • AND 匹配：tag:萝莉 tag:少女（多个tag参数）
-  keyword:关键词       标题/作者/标签模糊搜索
-  uid:作者ID           指定特定作者的 UID
-  num:数量             获取图片数量（1-20，默认 1）
+📌 中文子指令（格式：/pixiv 中文指令名 参数）
+  /pixiv 随机 数量 3
+  /pixiv 搜索 风景 数量 3
+  /pixiv 标签 星空 排除AI 是 尺寸 原图
+  /pixiv 作者 123456 数量 2
+  /pixiv 帮助
+  子指令后的筛选参数用空格分隔，可与英文混用。
+  中文参数：标签、关键词/关键字、作者/作者ID、数量、尺寸、
+            分级、排除AI、比例/长宽比、起始时间、结束时间
+  中文尺寸：原图、常规、小图、缩略图、迷你图
+  中文分级：全年龄、成人、混合（成人/混合需要 LeiZ 源）
+
+📌 搜索与筛选参数（使用 key value 格式，可组合使用）
+  tag 标签名           按标签筛选图片
+                       • OR 匹配：tag 萝莉|少女
+                       • AND 匹配：tag 萝莉 tag 少女（多个tag参数）
+  keyword 关键词       标题/作者/标签模糊搜索
+  uid 作者ID           指定特定作者的 UID
+  num 数量             获取图片数量（1-20，默认 1）
 
 📌 图片设置
-  size:尺寸            图片大小选项：
-                       • original  - 原图（默认）
+  size 尺寸            图片大小选项：
+                       • original  - 原图
                        • regular   - 常规尺寸
                        • small     - 小图
                        • thumb     - 缩略图
                        • mini      - 迷你图
-  excludeAI:true      排除 AI 生成的作品
-  ratio:表达式         长宽比筛选
+  excludeAI true      排除 AI 生成的作品
+  ratio 表达式         长宽比筛选
                        • gt1.2 = 大于 1.2
                        • lt1.8 = 小于 1.8
-                       示例：ratio:gt1.2lt1.8
+                       示例：ratio gt1.2lt1.8
 
 📌 使用示例
   基础用法：
     /pixiv                          随机全年龄图片
-    /pixiv r18:1                    随机 R18 图片
+    /pixiv r18 1                    随机 R18 图片
     /pixiv help                     显示帮助
 
   高级搜索：
-    /pixiv r18:1 tag:白丝 num:3     获取3张白丝R18图
-    /pixiv keyword:初音ミク num:5   搜索初音未来相关图片
-    /pixiv tag:萝莉 excludeAI:true  排除AI的萝莉标签图片
-    /pixiv uid:123456 num:3         获取指定作者的作品
+    /pixiv r18 1 tag 白丝 num 3     获取3张白丝R18图
+    /pixiv keyword 初音ミク num 5   搜索初音未来相关图片
+    /pixiv tag 萝莉 excludeAI true  排除AI的萝莉标签图片
+    /pixiv uid 123456 num 3         获取指定作者的作品
 
   组合筛选：
-    /pixiv r18:2 tag:白丝 keyword:初音ミク num:3 size:original
+    /pixiv r18 2 tag 白丝 keyword 初音ミク num 3 size original
 
 ⚠️ 注意事项
   • R18 内容仅限成年用户使用
@@ -372,7 +391,7 @@ HELP_TEXT = """🎨 Pixiv 随机图片插件 使用说明
   • 如遇问题可发送 /pixiv help 查看帮助
 
 💡 提示：所有参数均可自由组合使用
-💡 中文别名：输入 /图片 等同于 /pixiv"""
+💡 中文子指令：/pixiv 随机、搜索、标签、作者、帮助"""
 
 HITOKOTO_HELP_TEXT = """✨ 每日一言 使用说明
 
@@ -747,6 +766,13 @@ class PixivAPIClient:
         return body
 
 
+def _select_pixiv_client(source, leiz_client, timeout):
+    """Keep anonymous search available even when no LeiZ key was configured."""
+    if source == "leiz":
+        return leiz_client
+    return PixivWebAPIClient(timeout=timeout)
+
+
 class CommandParser:
     PARAM_MAP = {
         "r18": "r18",
@@ -760,7 +786,25 @@ class CommandParser:
         "ratio": "aspectRatio",
         "date_after": "dateAfter",
         "date_before": "dateBefore",
+        "标签": "tag",
+        "关键词": "keyword",
+        "关键字": "keyword",
+        "作者": "uid",
+        "作者id": "uid",
+        "数量": "num",
+        "尺寸": "size",
+        "分级": "r18",
+        "排除ai": "excludeAI",
+        "比例": "aspectRatio",
+        "长宽比": "aspectRatio",
+        "起始时间": "dateAfter",
+        "结束时间": "dateBefore",
     }
+    SIZE_ALIASES = {
+        "原图": "original", "常规": "regular", "小图": "small",
+        "缩略图": "thumb", "迷你图": "mini",
+    }
+    LEVEL_ALIASES = {"全年龄": 0, "全年齡": 0, "成人": 1, "混合": 2}
 
     @classmethod
     def parse(cls, raw_text: str) -> Dict[str, Any]:
@@ -768,10 +812,29 @@ class CommandParser:
             return {}
 
         text = raw_text.strip()
+        tokens = text.split(maxsplit=1)
+        subcommand = tokens[0] if tokens[0] in ("随机", "搜索", "标签", "作者") else None
+        if subcommand:
+            text = tokens[1] if len(tokens) > 1 else ""
+        # Normalize only known parameter names, so ordinary multiword search
+        # terms remain intact. Bare 排除AI remains a flag before other options.
+        space_keys = "|".join(
+            re.escape(key) for key, value in cls.PARAM_MAP.items() if value != "excludeAI"
+        )
+        parameter_keys = "|".join(re.escape(key) for key in cls.PARAM_MAP)
+        text = re.sub(
+            rf"(?<!\S)({space_keys})\s+(?![:：=]|(?:{parameter_keys})(?=\s|[:：=]|$))(\S+)",
+            r"\1:\2", text, flags=re.IGNORECASE,
+        )
+        text = re.sub(
+            r"(?<!\S)(excludeai|exclude_ai|排除ai)\s+"
+            r"(true|false|1|0|yes|no|是|否|真|假|开|关|开启|关闭)(?=\s|$)",
+            r"\1:\2", text, flags=re.IGNORECASE,
+        )
         params: Dict[str, Any] = {}
 
         key_value_pattern = re.compile(
-            r"([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([^\s]+)",
+            r"([a-zA-Z_\u4e00-\u9fff][a-zA-Z0-9_\u4e00-\u9fff]*)\s*[:：=]\s*([^\s]+)",
         )
         consumed_positions = []
         for match in key_value_pattern.finditer(text):
@@ -785,11 +848,17 @@ class CommandParser:
                 params["tag"] = existing
             elif mapped_key in ("r18", "num"):
                 try:
-                    params[mapped_key] = int(value)
+                    params[mapped_key] = (
+                        cls.LEVEL_ALIASES[value]
+                        if mapped_key == "r18" and value in cls.LEVEL_ALIASES
+                        else int(value)
+                    )
                 except ValueError:
                     pass
             elif mapped_key == "excludeAI":
-                params[mapped_key] = value.lower() in ("true", "1", "yes")
+                params[mapped_key] = value.lower() in ("true", "1", "yes", "是", "真", "开", "开启")
+            elif mapped_key == "size":
+                params[mapped_key] = cls.SIZE_ALIASES.get(value, value)
             else:
                 params[mapped_key] = value
             consumed_positions.append((match.start(), match.end()))
@@ -799,14 +868,38 @@ class CommandParser:
             remaining = remaining[:start] + remaining[end:]
 
         remaining_tokens = remaining.strip().split()
+        keywords = []
         for token in remaining_tokens:
             token_lower = token.lower()
-            if token_lower == "r18":
+            if token_lower in ("r18", "成人"):
                 params.setdefault("r18", 1)
-            elif token_lower == "mixed":
+            elif token_lower in ("mixed", "混合"):
                 params.setdefault("r18", 2)
-            elif token_lower == "safe" or token_lower == "sfw":
+            elif token_lower in ("safe", "sfw", "全年龄", "全年齡"):
                 params.setdefault("r18", 0)
+            elif token_lower == "排除ai":
+                params.setdefault("excludeAI", True)
+            else:
+                keywords.append(token)
+        if subcommand == "标签":
+            for keyword in keywords:
+                params.setdefault("tag", []).extend(t for t in re.split(r"[,，]", keyword) if t)
+            if not params.get("tag"):
+                raise ValueError("请提供标签，例如 /pixiv 标签 星空 数量 3")
+        elif subcommand == "作者":
+            if keywords:
+                if len(keywords) != 1 or params.get("uid"):
+                    raise ValueError("请提供一个作者 UID，例如 /pixiv 作者 123456")
+                params["uid"] = keywords[0]
+            if not str(params.get("uid", "")).isdigit():
+                raise ValueError("作者 UID 必须为数字，例如 /pixiv 作者 123456")
+        elif subcommand == "随机":
+            if keywords:
+                raise ValueError("随机子指令无需搜索词；按关键词查图请使用 /pixiv 搜索 关键词")
+        elif keywords:
+            params.setdefault("keyword", " ".join(keywords))
+        if subcommand == "搜索" and not params.get("keyword"):
+            raise ValueError("请提供搜索关键词，例如 /pixiv 搜索 风景 数量 3")
 
         return params
 
@@ -1486,14 +1579,6 @@ class FemboyAPIError(Exception):
         self.status_code = status_code
 
 
-class PixivAPIError(Exception):
-    def __init__(self, message: str, status_code: int = 0):
-        super().__init__(message)
-        self.status_code = status_code
-
-
-
-
 def _format_api_key_not_configured(feature_name: str) -> str:
     """统一生成「LeiZ API Key 未配置」提示，供所有依赖 LeiZ 接口的命令复用。"""
     return (
@@ -1521,8 +1606,8 @@ def _remove_file_safe(file_path: str) -> None:
 @register(
     "astrbot_plugin_currentcortex",
     "Rcst20",
-    "多功能 AstrBot 插件（CurrentCortex）—— Pixiv 随机图片 ·网易云点歌 ·小红书/B站/抖音媒体解析 ·每日一言 ·天气 ·男娘 ·地震预警 ·气象预警 ·DG-LAB（郊狼） 设备管理 ·Wikidot 站点管理 ·跨群聊记忆 ·按群聊开关。基于 LeiZ API。",
-    "2.10.0",
+    "多功能 AstrBot 插件（CurrentCortex）—— Pixiv 随机图片 ·网易云点歌 ·小红书/B站/抖音媒体解析 ·每日一言 ·天气 ·男娘 ·地震预警 ·气象预警 ·DG-LAB（郊狼） 设备管理 ·Wikidot 站点管理 ·跨群聊记忆 ·按群聊开关。支持 Pixiv 匿名搜索及 LeiZ 等多源 API。",
+    "2.11.0",
 )
 class CurrentCortexPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -1565,6 +1650,10 @@ class CurrentCortexPlugin(Star):
         self._default_r18 = int(config.get("default_r18", 0))
         self._default_num = max(1, min(20, int(config.get("default_num", 1))))
         self._default_size = str(config.get("default_size", "regular"))
+        self._pixiv_source = str(config.get("pixiv_source", "pixiv_web")).strip().lower()
+        if self._pixiv_source not in ("pixiv_web", "leiz"):
+            logger.warning("未知 pixiv_source，使用默认 Pixiv 匿名网页源")
+            self._pixiv_source = "pixiv_web"
         self._image_proxy = str(config.get("image_proxy", "pixiv.bileizhen.top"))
         self._exclude_ai = bool(config.get("exclude_ai", False))
         self._request_timeout = int(config.get("request_timeout", 15))
@@ -1655,7 +1744,7 @@ class CurrentCortexPlugin(Star):
             # 相关命令调用时通过守卫提示用户配置；点歌自动路由到自建 ncm 源，
             # 其余非 LeiZ 功能不受影响。
             logger.warning(
-                "⚠️ 未配置 LeiZ API 统一密钥 (leiz_api_key)：Pixiv/一言/天气/男娘/"
+                "⚠️ 未配置 LeiZ API 统一密钥 (leiz_api_key)：LeiZ 图源/一言/天气/男娘/"
                 "网易云/酷狗等 LeiZ 相关命令将提示填写后可用；"
                 "其余功能不受影响，点歌将自动路由到自建网易云SVIP源（不依赖该密钥）"
             )
@@ -1685,6 +1774,12 @@ class CurrentCortexPlugin(Star):
                 api_key=leiz_api_key, timeout=self._request_timeout
             )
             logger.info("✅ LeiZ API 客户端初始化成功（统一 x-api-key 鉴权）")
+
+        self._leiz_pixiv_client = self._api_client
+        self._api_client = _select_pixiv_client(
+            self._pixiv_source, self._leiz_pixiv_client, self._request_timeout
+        )
+        logger.info(f"[Pixiv] 当前图片源：{self._pixiv_source}")
 
         # 读取 DG-LAB 新独立配置项（优先），兼容旧版 JSON 字符串配置
         server_url = str(config.get("dglab_server_url", "")).strip()
@@ -2026,7 +2121,7 @@ class CurrentCortexPlugin(Star):
         },
         "image": {
             "label": "图片获取",
-            "commands": ("pixiv", "图片", "femboy", "男娘"),
+            "commands": ("pixiv", *PIXIV_COMMAND_ALIASES, "femboy", "男娘"),
             "aliases": ("image", "图片"),
         },
         "music": {
@@ -4132,7 +4227,7 @@ class CurrentCortexPlugin(Star):
     ) -> str:
         """图片工具共用流程：构建参数 → 请求 API → 发送图片 → 返回说明。"""
         if not self._api_client:
-            return "图片功能未配置（缺少 Pixiv API Key）"
+            return "当前选择 LeiZ 图片源但未填写 leiz_api_key；可在插件配置或总 Pages 中切回免 Token 的 pixiv_web 源"
         try:
             api_params = self._prepare_api_params(params)
             result = await self._api_client.fetch_images(**api_params)
@@ -6461,7 +6556,7 @@ class CurrentCortexPlugin(Star):
         parts.append(f"\n💡 使用 /music id:<歌曲ID> 获取详细信息和播放链接")
         return "\n".join(parts)
 
-    @filter.command("pixiv", alias={"图片"})
+    @filter.command("pixiv", alias=set(PIXIV_COMMAND_ALIASES))
     async def pixiv_command(self, event: AstrMessageEvent):
         """获取或按条件筛选 Pixiv 随机图片。"""
         user_name = event.get_sender_name()
@@ -6476,7 +6571,10 @@ class CurrentCortexPlugin(Star):
 
         if not self._api_client:
             logger.warning(f"Pixiv API client not initialized for user {user_name}")
-            yield event.plain_result(self._with_promo(_format_api_key_not_configured("Pixiv 随机图片")))
+            yield event.plain_result(self._with_promo(
+                _format_api_key_not_configured("LeiZ 图片")
+                + "\n也可在插件配置或总 Pages → 设置 → Pixiv 图片中，将 pixiv_source 切回 pixiv_web（免 Token）"
+            ))
             return
 
         try:
@@ -6533,7 +6631,7 @@ class CurrentCortexPlugin(Star):
             "femboy",
             "music",
             "dglab",
-            "图片",
+            *PIXIV_COMMAND_ALIASES,
             "一言",
             "天气",
             "男娘",
@@ -6574,11 +6672,10 @@ class CurrentCortexPlugin(Star):
         return False
 
     def _build_request_params(self, message: str) -> Dict[str, Any]:
-        # 标准化消息：移除命令前缀和 "pixiv"/"图片" 关键字
-        cleaned = re.sub(
-            r"^[/!！]\s*(pixiv|图片)\s*", "", message.strip(), flags=re.IGNORECASE
-        )
-        cleaned = re.sub(r"^(pixiv|图片)\s*", "", cleaned.strip(), flags=re.IGNORECASE)
+        # 所有命令别名共用同一解析入口，避免中文命令名被当成搜索关键词。
+        cleaned = re.sub(r"^[/!！]\s*", "", message.strip())
+        names = "|".join(re.escape(name) for name in ("pixiv", *PIXIV_COMMAND_ALIASES))
+        cleaned = re.sub(rf"^(?:{names})(?=\s|$)\s*", "", cleaned, flags=re.IGNORECASE)
 
         logger.debug(
             f"[DEBUG] _build_request_params 输入: '{message}' → 清理后: '{cleaned}'"
@@ -6654,7 +6751,14 @@ class CurrentCortexPlugin(Star):
                 responses.append(event.plain_result(caption))
                 image_url = self._extract_image_url(item)
                 if image_url:
-                    responses.append(event.image_result(image_url))
+                    if item.get("source") == "pixiv_web":
+                        try:
+                            path = await self._api_client.download_image(image_url)
+                            responses.append(event.chain_result([Comp.Image.fromFileSystem(path)]))
+                        except PixivAPIError as exc:
+                            responses.append(event.plain_result(f"⚠️ {exc}"))
+                    else:
+                        responses.append(event.image_result(image_url))
                 else:
                     responses.append(event.plain_result("⚠️ 未能提取到图片链接"))
             return responses
@@ -7754,7 +7858,7 @@ class CurrentCortexPlugin(Star):
         targets = [
             (
                 "Pixiv",
-                self._api_client,
+                self._leiz_pixiv_client,
                 lambda c: c.fetch_images(num=1, size="regular"),
             ),
             ("一言", self._hitokoto_client, lambda c: c.fetch_hitokoto()),

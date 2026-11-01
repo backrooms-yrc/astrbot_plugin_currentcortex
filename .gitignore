@@ -135,6 +135,7 @@ test_*.py
 !test_wikidot.py
 !test_earthquake.py
 !test_weather.py
+!test_pixiv.py
 
 # ============================================
 # 工具目录（本地 IDE / CLI 配置）

@@ -628,10 +628,11 @@ const SETTINGS_META = {
   // —— 基础 ——
   llm_tools_enable: { name: "AI 自动操作开关", hint: "开启后，AI 可以直接帮你发图、点歌、电击等（比如你说“来张图”）。关闭则只能手动用斜杠命令。" },
   // —— Pixiv ——
-  default_r18: { name: "默认图片分级", hint: "0 = 全年龄，1 = 只出 R18，2 = 混合。群聊建议保持全年龄。" },
+  pixiv_source: { name: "Pixiv 图片源", hint: "pixiv_web（默认）= 免 Token，直接搜索 Pixiv 匿名可见全年龄作品；随机图来自日榜。leiz = 原 LeiZ 图库，需要填写 LeiZ 密钥，支持 R18/混合模式。切换后保存即生效。" },
+  default_r18: { name: "默认图片分级", hint: "0 = 全年龄，1 = 只出 R18，2 = 混合。pixiv_web 仅支持 0；其他等级请切换 leiz 并填写密钥。" },
   default_num: { name: "默认图片数量", hint: "一次发几张图，范围 1~20。" },
   default_size: { name: "默认图片尺寸", hint: "original = 原图（最大），regular = 中等，small = 小图，thumb = 缩略图。" },
-  image_proxy: { name: "图片加速域名", hint: "下载图片时用的代理域名，一般保持默认即可。" },
+  image_proxy: { name: "图片加速域名", hint: "仅 LeiZ 源使用；默认 pixiv_web 源由服务器直接下载图片，无需修改此项。" },
   exclude_ai: { name: "排除 AI 作品", hint: "开启后，AI 生成的图片不会出现在随机图里。" },
   request_timeout: { name: "请求超时（秒）", hint: "连不上图库时等多久算超时。网络差可以适当调大。" },
   // —— 音乐 ——
@@ -641,7 +642,7 @@ const SETTINGS_META = {
   music_cooldown: { name: "点歌冷却（秒）", hint: "同一会话连续点歌要间隔的秒数，防止刷屏把服务器拖垮。" },
   music_download_progress_mode: { name: "下载进度播报", hint: "简略（默认）= 下载前后各提示一条；详细 = 每完成 10% 播报一条；关闭 = 全程静默。秒下的小文件任何档位都不播报。" },
   // —— LeiZ ——
-  leiz_api_key: { name: "LeiZ API 密钥", hint: "图库、一言、天气、网易云/酷狗等 LeiZ 接口的密钥，非必填。留空 = 这些功能触发时提示填写，点歌自动改走自建网易云SVIP音源，其他功能不受影响。" },
+  leiz_api_key: { name: "LeiZ API 密钥", hint: "LeiZ 图源、一言、天气、网易云/酷狗等 LeiZ 接口的密钥，非必填。留空 = 这些功能触发时提示填写，点歌自动改走自建网易云SVIP音源，默认 pixiv_web 搜图等其他功能不受影响。" },
   // —— 媒体解析 ——
   media_auto_parse_enable: { name: "链接自动解析", hint: "群里有人发 小红书/B站/抖音/微博 的链接时，不用发命令、机器人自动解析并回复。" },
   media_auto_parse_dedup_min: { name: "自动解析去重（分钟）", hint: "同一条链接在同一个群里，多少分钟内只自动解析一次，防止反复转发刷屏。0 = 每次都解析。" },

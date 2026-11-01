@@ -149,13 +149,13 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 
 ### 3. Configure Your API Key (Optional)
 
-> 🔐 **LeiZ API Key is optional**: without it, non-LeiZ features work normally; **song requests automatically route to the self-hosted NetEase SVIP source** (which doesn't depend on this key — quality goes up to Ultra-Clear Master); LeiZ-based features (Pixiv / Hitokoto / weather / femboy / NetEase / Kugou) prompt the user to configure it when triggered.
+> 🔐 **LeiZ API Key is optional**: without it, non-LeiZ features work normally; **song requests automatically route to the self-hosted NetEase SVIP source** (which doesn't depend on this key — quality goes up to Ultra-Clear Master); LeiZ-based features (Pixiv (LeiZ source only) / Hitokoto / weather / femboy / NetEase / Kugou) prompt the user to configure it when triggered.
 
 #### Step 1: Get an API Key
 
 Head to the **LeiZ API website** 👉 [https://api.bileizhen.top](https://api.bileizhen.top)
 
-Register / log in, open the "Console / API Keys" page, create a key and copy it (this is the value for `x-api-key`). A single key covers all LeiZ endpoints (Pixiv / Hitokoto / weather / femboy / NetEase Cloud Music) — you only need one.
+Register / log in, open the "Console / API Keys" page, create a key and copy it (this is the value for `x-api-key`). A single key covers all LeiZ endpoints (Pixiv (LeiZ source only) / Hitokoto / weather / femboy / NetEase Cloud Music) — you only need one.
 
 > 💡 The exact location depends on the website's current layout (e.g. "Console → API Keys / Token management"). If the process changes, follow the site's own instructions.
 
@@ -163,7 +163,7 @@ Register / log in, open the "Console / API Keys" page, create a key and copy it 
 
 Open the AstrBot admin panel → Plugin Management → this plugin → Config, paste the key into the **`leiz_api_key`** field, save, and reload the plugin.
 
-Without a key, LeiZ-based commands (Pixiv / Hitokoto / weather / femboy / NetEase / Kugou) show a guided message about the missing key; song requests are unaffected (they automatically route to the self-hosted NetEase SVIP source).
+Without a key, LeiZ-based commands (Pixiv (LeiZ source only) / Hitokoto / weather / femboy / NetEase / Kugou) show a guided message about the missing key; song requests are unaffected (they automatically route to the self-hosted NetEase SVIP source).
 
 > ⚠️ **This plugin is a community (third-party) plugin built on LeiZ API and is independent of LeiZ API itself**. For API key registration, billing, quotas, and upstream outages, please consult the [LeiZ API website](https://api.bileizhen.top) and its official channels; this plugin's group only handles issues with the plugin itself.
 
@@ -221,7 +221,23 @@ Every command accepts both Chinese and English aliases:
 
 ### 1. Pixiv Random Images (`/pixiv`)
 
-Fetches random Pixiv artwork through LeiZ API, with rich filtering and search options.
+The default source, **`pixiv_web`**, searches all-age artworks visible anonymously on Pixiv, without a token, cookie, or LeiZ key. This avoids relying on a third-party curated image index.
+
+Choose `leiz` under **plugin configuration → `pixiv_source`** or **main Pages dashboard → Settings → Pixiv**, then save, to restore the original source. LeiZ requires `leiz_api_key`; R18 and mixed mode require this source. Anonymous mode explicitly reports unsupported ratings instead of silently changing the request.
+
+The anonymous source supports keywords, AND/OR tags, author UID, AI exclusion, aspect ratio and upload-time filters. Each tag combination samples up to three search-result pages; at most 60 artworks are checked per request, returning up to 20 images. Requests without search terms sample the daily ranking, rather than uniformly sampling the whole site. The server must reach `www.pixiv.net` and `i.pximg.net`. Images are downloaded with Pixiv's Referer and sent as local files (32 MB per-image limit; files older than one hour are cleaned on subsequent downloads). `image_proxy` applies only to LeiZ.
+
+Use Chinese subcommands after `/pixiv`, with **spaces between parameter names and values**:
+
+```text
+/pixiv 随机 数量 3
+/pixiv 搜索 风景 数量 3
+/pixiv 标签 星空 排除AI 是 尺寸 原图
+/pixiv 作者 123456 数量 2
+/pixiv 帮助
+```
+
+`随机` = random, `搜索` = search, `标签` = tags, `作者` = author, `帮助` = help. Tags separated by spaces or commas use AND; `|` uses OR. Chinese options include `数量` (count), `尺寸` (size), `分级` (rating), `排除AI` (exclude AI), `长宽比` (aspect ratio), `起始时间` and `结束时间` (Unix milliseconds). Sizes: `原图` / `常规` / `小图` / `缩略图` / `迷你图`. The existing `/图片` alias and colon-separated parameters remain compatible. Anonymous visibility is not the complete Pixiv catalog; switch sources manually if the website API or network becomes unavailable.
 
 #### Basic Commands
 
@@ -230,47 +246,47 @@ Fetches random Pixiv artwork through LeiZ API, with rich filtering and search op
 | `/pixiv` | Get one random image (default parameters) |
 | `/pixiv help` | Show help |
 
-#### Parameters (`key:value` pairs, space-separated, freely combinable)
+#### Parameters (`key value` pairs, space-separated, freely combinable)
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `r18:` | int | 0 | R18 mode: `0` = all-ages, `1` = R18 only, `2` = mixed |
-| `num:` | int | 1 | How many images to fetch (1-20) |
-| `size:` | string | regular | Image size: `original`/`regular`/`small`/`thumb`/`mini` |
-| `tag:` | string | — | Tag filter; `\|` inside one tag means **OR**, multiple `tag:` parameters mean **AND** |
-| `keyword:` | string | — | Fuzzy search over title / artist / tags |
-| `uid:` | int | — | A specific artist's UID |
-| `ratio:` | string | — | Aspect-ratio filter, e.g. `gt1.2lt1.8` |
-| `excludeAI:` | bool | false | Exclude AI-generated works |
+| `r18` | int | 0 | R18 mode: `0` = all-ages, `1` = R18 only, `2` = mixed |
+| `num` | int | 1 | How many images to fetch (1-20) |
+| `size` | string | regular | Image size  `original`/`regular`/`small`/`thumb`/`mini` |
+| `tag` | string | — | Tag filter; `\|` inside one tag means **OR**, multiple `tag` parameters mean **AND** |
+| `keyword` | string | — | Fuzzy search over title / artist / tags |
+| `uid` | int | — | A specific artist's UID |
+| `ratio` | string | — | Aspect-ratio filter, e.g. `gt1.2lt1.8` |
+| `excludeAI` | bool | false | Exclude AI-generated works |
 
 #### Shorthand Syntax
 
 | Shorthand | Equivalent to |
 | --- | --- |
-| `r18` | `r18:1` |
-| `mixed` | `r18:2` |
-| `safe` / `sfw` | `r18:0` |
+| `r18` | `r18 1` |
+| `mixed` | `r18 2` |
+| `safe` / `sfw` | `r18 0` |
 
 #### Examples
 
 ```text
 # Basics
 /pixiv                          # one random all-ages image
-/pixiv r18:1                    # one random R18 image
-/pixiv num:5                    # five images at once
+/pixiv r18 1                    # one random R18 image
+/pixiv num 5                    # five images at once
 
 # Tag & keyword search
-/pixiv tag:白丝 num:3           # 3 images tagged 白丝 (white stockings)
-/pixiv keyword:初音ミク num:5   # search for Hatsune Miku
-/pixiv tag:萝莉 excludeAI:true  # loli tag, excluding AI works
-/pixiv uid:123456 num:3         # works by a specific artist
+/pixiv tag 白丝 num 3           # 3 images tagged 白丝 (white stockings)
+/pixiv keyword 初音ミク num 5   # search for Hatsune Miku
+/pixiv tag 萝莉 excludeAI true  # loli tag, excluding AI works
+/pixiv uid 123456 num 3         # works by a specific artist
 
 # Combined filters
-/pixiv r18:2 tag:白丝 keyword:初音ミク num:3 size:original
+/pixiv r18 2 tag 白丝 keyword 初音ミク num 3 size original
 
 # Shorthand
-/pixiv r18                      # same as r18:1
-/pixiv mixed                    # same as r18:2
+/pixiv r18                      # same as r18 1
+/pixiv mixed                    # same as r18 2
 ```
 
 #### Sample Response
@@ -837,17 +853,18 @@ Path: AstrBot admin panel → Plugin Management → this plugin → Config.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
+| `pixiv_source` | string | pixiv_web | Anonymous all-age Pixiv search; choose leiz for the original source (requires LeiZ key) |
 | `default_r18` | int | 0 | Default R18 mode (0 = all-ages, 1 = R18 only, 2 = mixed) |
 | `default_num` | int | 1 | Default number of images per fetch (1-20) |
 | `default_size` | string | regular | Default image size (original/regular/small/thumb/mini) |
-| `image_proxy` | string | pixiv.bileizhen.top | Image reverse-proxy domain |
+| `image_proxy` | string | pixiv.bileizhen.top | Image proxy domain for LeiZ only; not used by the anonymous source |
 | `exclude_ai` | bool | false | Exclude AI-generated works by default |
 
 ### General / Auth
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `leiz_api_key` | string | (empty) | **Unified LeiZ API key** (`x-api-key` header), **optional — not required**. Obtain it after registering on the [LeiZ API website](https://api.bileizhen.top); needed by the LeiZ endpoints (Pixiv / Hitokoto / weather / femboy / NetEase / Kugou). Without it those features prompt for configuration, song requests automatically route to the self-hosted NetEase SVIP source, and everything else keeps working |
+| `leiz_api_key` | string | (empty) | **Unified LeiZ API key** (`x-api-key` header), **optional — not required**. Obtain it after registering on the [LeiZ API website](https://api.bileizhen.top); needed by the LeiZ endpoints (Pixiv (LeiZ source only) / Hitokoto / weather / femboy / NetEase / Kugou). Without it those features prompt for configuration, song requests automatically route to the self-hosted NetEase SVIP source, and everything else keeps working |
 | `request_timeout` | int | 15 | API request timeout (seconds); affects all features |
 
 ### Song Requests
@@ -952,12 +969,14 @@ The plugin ships with the official group number **1106353813** ([join now](https
 <details>
 <summary><b>Commands say "feature not enabled / API key not configured"?</b></summary>
 
-Get an API Key from the [LeiZ API website](https://api.bileizhen.top) first (see [Configure Your API Key](#3-configure-your-api-key-optional)), paste it into the `leiz_api_key` field in the config panel, save, and reload the plugin. `/apitest` verifies each endpoint's connectivity. Pixiv / Hitokoto / weather / femboy / songs all depend on this key.
+Get an API Key from the [LeiZ API website](https://api.bileizhen.top) first (see [Configure Your API Key](#3-configure-your-api-key-optional)), paste it into the `leiz_api_key` field in the config panel, save, and reload the plugin. `/apitest` verifies each endpoint's connectivity. Pixiv (LeiZ source only) / Hitokoto / weather / femboy / songs all depend on this key.
 
 </details>
 
 <details>
 <summary><b>Pixiv images won't display?</b></summary>
+
+For the default `pixiv_web` source, check server access to `www.pixiv.net` and `i.pximg.net`, or switch to `leiz`. The proxy settings below apply only to LeiZ.
 
 1. Broken reverse proxy: try changing the `image_proxy` option
 2. Network issues: check whether the server can reach the internet
@@ -969,7 +988,7 @@ Get an API Key from the [LeiZ API website](https://api.bileizhen.top) first (see
 <summary><b>How do I exclude AI-generated Pixiv works?</b></summary>
 
 1. **Globally**: set `exclude_ai` to `true`
-2. **One-off**: add `excludeAI:true` to a command, e.g. `/pixiv tag:萝莉 excludeAI:true`
+2. **One-off**: add `excludeAI true` to a command, e.g. `/pixiv tag 萝莉 excludeAI true`
 
 </details>
 
@@ -1121,7 +1140,7 @@ Acknowledgements:
 
 ---
 
-**Version**: v2.10.0 (per-version changes in [CHANGELOG.md](CHANGELOG.md))
+**Version**: v2.11.0 (per-version changes in [CHANGELOG.md](CHANGELOG.md))
 **Repository**: [GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
 
 
