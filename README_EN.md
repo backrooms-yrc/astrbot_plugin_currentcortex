@@ -81,6 +81,7 @@ Pixiv random images · Hitokoto quotes · Weather · Femboy images · NetEase Cl
   - [6. Femboy Images](#6-femboy-images-femboy)
   - [7. DG-LAB Device Management](#7-dg-lab-device-management-dglab)
   - [8. Earthquake Early Warning](#8-earthquake-early-warning-地震-alias-earthquake-eq-预警)
+  - [9. Yuri Images](#9-yuri-images)
 - [🖥️ Master Pages](#️-master-pages)
 - [🧩 Per-Group Toggle](#-per-group-toggle)
 - [✂️ Segmented Replies](#️-segmented-replies)
@@ -208,6 +209,7 @@ Every command accepts both Chinese and English aliases:
 | `/hitokoto` | `/一言` | Hitokoto quote |
 | `/weather` | `/天气` | Weather lookup |
 | `/femboy` | `/男娘` | Femboy image |
+| `/yuri` | `/百合` | Random all-ages yuri image from Pixiv |
 | `/dglab` | `/电击` | DG-LAB device management |
 | `/地震` | `/earthquake` `/eq` `/预警` | Group-whitelisted earthquake early warning (owner/admin enables; basic info then countdown) |
 | `/气象预警` | `/天气预警` | Group-whitelisted weather alerts from CMA (matched by city districts, severity filter) |
@@ -617,6 +619,14 @@ With `dglab_webui_enabled` turned on, the plugin serves a CCDG WebUI remote-cont
 **Extreme drill mode:** a switch inside the simulation card. After entering the confirmation word **“极限演练”**, it sends messages with **no simulation/notice wording at all** — title, source, countdown and arrival guidance are identical to a real warning, using the real S-wave estimate rather than the manual countdown seconds. It has a separate cooldown (`earthquake_extreme_cooldown`, default 300 s), is only reachable from the AstrBot WebUI (admin), and is recorded in the audit log. ⚠️ It can cause panic; use only for drills already announced to the whitelist groups.
 
 Key options: `earthquake_enable`, `earthquake_poll_interval` (30 s), `earthquake_min_magnitude` (4.0), `earthquake_max_age_sec` (300), `earthquake_default_lat` / `earthquake_default_lon`, `earthquake_countdown_max_ticks`, `earthquake_countdown_interval`, `earthquake_s_wave_km_s`, and `earthquake_group_whitelist` (view/remove in the plugin config). `/开关 off earthquake` mutes background alerts for a group.
+
+---
+
+### 9. Yuri Images
+
+Send `/yuri` or `/百合` to receive one random all-ages image from Pixiv's `百合` tag and its artwork link in the same message. Use `/yuri help` or `/百合 帮助` for help. The command respects `exclude_ai` and the per-group `/开关 off image` setting.
+
+The server connects directly to `www.pixiv.net` and `i.pximg.net`. Access is anonymous by default and requires no LeiZ key. If sign-in is needed, set the raw Cookie value in the AstrBot process environment as `CURRENTCORTEX_YURI_PIXIV_COOKIE` and restart AstrBot. The Cookie is sent only with this command's Pixiv search and artwork detail requests.
 
 ---
 
@@ -1140,7 +1150,7 @@ Acknowledgements:
 
 ---
 
-**Version**: v2.11.0 (per-version changes in [CHANGELOG.md](CHANGELOG.md))
+**Version**: v2.12.0 (per-version changes in [CHANGELOG.md](CHANGELOG.md))
 **Repository**: [GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
 
 

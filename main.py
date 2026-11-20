@@ -196,6 +196,7 @@ COMMAND_CATEGORIES = [
         "commands": [
             {"cmd": "/pixiv", "alias": "图片", "desc": "随机 / 搜索 / 标签 / 作者 / 帮助"},
             {"cmd": "/femboy", "alias": "男娘", "desc": "获取一张随机男娘图片"},
+            {"cmd": "/yuri", "alias": "百合", "desc": "获取一张 Pixiv 全年龄百合图片"},
         ],
     },
     {
@@ -550,6 +551,13 @@ FEMBOY_HELP_TEXT = """👗 男娘图片 使用说明
   • 每次调用都会实时获取随机图片
   • 需要有效的 API 密钥才能使用此功能
   • 如遇问题可发送 /femboy help 查看帮助"""
+
+YURI_HELP_TEXT = """🌸 百合图片使用说明
+
+  /yuri 或 /百合        获取一张 Pixiv 全年龄百合图片及作品链接
+  /yuri help 或 /百合 帮助  显示此帮助
+
+图片直接来自 Pixiv，默认匿名访问，无需 LeiZ Key。"""
 
 MEDIA_PARSER_HELP_TEXT = """🔍 媒体内容解析 使用说明
 
@@ -1607,7 +1615,7 @@ def _remove_file_safe(file_path: str) -> None:
     "astrbot_plugin_currentcortex",
     "Rcst20",
     "多功能 AstrBot 插件（CurrentCortex）—— Pixiv 随机图片 ·网易云点歌 ·小红书/B站/抖音媒体解析 ·每日一言 ·天气 ·男娘 ·地震预警 ·气象预警 ·DG-LAB（郊狼） 设备管理 ·Wikidot 站点管理 ·跨群聊记忆 ·按群聊开关。支持 Pixiv 匿名搜索及 LeiZ 等多源 API。",
-    "2.11.0",
+    "2.12.0",
 )
 class CurrentCortexPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -1778,6 +1786,10 @@ class CurrentCortexPlugin(Star):
         self._leiz_pixiv_client = self._api_client
         self._api_client = _select_pixiv_client(
             self._pixiv_source, self._leiz_pixiv_client, self._request_timeout
+        )
+        self._yuri_client = PixivWebAPIClient(
+            timeout=self._request_timeout,
+            cookie=os.getenv("CURRENTCORTEX_YURI_PIXIV_COOKIE", ""),
         )
         logger.info(f"[Pixiv] 当前图片源：{self._pixiv_source}")
 
@@ -2121,7 +2133,7 @@ class CurrentCortexPlugin(Star):
         },
         "image": {
             "label": "图片获取",
-            "commands": ("pixiv", *PIXIV_COMMAND_ALIASES, "femboy", "男娘"),
+            "commands": ("pixiv", *PIXIV_COMMAND_ALIASES, "femboy", "男娘", "yuri", "百合"),
             "aliases": ("image", "图片"),
         },
         "music": {
@@ -5347,6 +5359,55 @@ class CurrentCortexPlugin(Star):
         logger.warning(f"[Femboy] Unknown response type: {response_type}")
         return [event.plain_result("⚠️ API 返回了未知格式的数据，请联系管理员")]
 
+    @filter.command("yuri", alias={"百合"})
+    async def yuri_command(self, event: AstrMessageEvent):
+        """获取一张随机的 Pixiv 全年龄百合图片。"""
+        if self._is_help_command(event.message_str):
+            yield event.plain_result(self._with_promo(YURI_HELP_TEXT))
+            return
+
+        try:
+            result = await self._yuri_client.fetch_images(
+                tag=["百合"],
+                exact_tags=True,
+                r18=0,
+                num=1,
+                size="regular",
+                excludeAI=self._exclude_ai,
+            )
+        except Exception as exc:
+            # 上游错误可能包含认证信息，只记录异常类型和状态码。
+            status = exc.status_code if isinstance(exc, PixivAPIError) else 0
+            logger.warning(
+                f"[Yuri] Pixiv 搜索失败（{type(exc).__name__}，HTTP {status or '未知'}）"
+            )
+            yield event.plain_result("❌ Pixiv 请求失败，请稍后重试或联系管理员")
+            return
+
+        items = self._extract_items(result.get("data", {}))
+        if not items:
+            yield event.plain_result("😕 暂未找到符合条件的全年龄百合图片，请稍后重试")
+            return
+
+        item = items[0]
+        try:
+            path = await self._yuri_client.download_image(item["urls"]["regular"])
+        except Exception as exc:
+            status = exc.status_code if isinstance(exc, PixivAPIError) else 0
+            logger.warning(
+                f"[Yuri] Pixiv 图片下载失败（{type(exc).__name__}，HTTP {status or '未知'}）"
+            )
+            yield event.plain_result("❌ Pixiv 图片下载失败，请稍后重试")
+            return
+
+        caption = "🌸 随机百合图片"
+        pid = str(item.get("pid") or "")
+        if pid.isdigit():
+            caption += f"\n🔗 {PIXIV_ARTWORK_URL.format(pid)}"
+        yield event.chain_result(
+            [Comp.Plain(text=caption), Comp.Image.fromFileSystem(path)]
+        )
+
     @filter.command("music", alias={"音乐"})
     async def music_command(self, event: AstrMessageEvent):
         """搜索音乐（网易云SVIP/网易云/酷狗，auto 并行择优）并获取歌曲详情或音频。"""
@@ -6629,12 +6690,14 @@ class CurrentCortexPlugin(Star):
             "weather",
             "pixiv",
             "femboy",
+            "yuri",
             "music",
             "dglab",
             *PIXIV_COMMAND_ALIASES,
             "一言",
             "天气",
             "男娘",
+            "百合",
             "音乐",
             "点歌",
             "电击",

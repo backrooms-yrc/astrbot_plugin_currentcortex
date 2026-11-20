@@ -81,6 +81,7 @@ Pixiv ランダム画像 · Hitokoto · 天気照会 · 男の娘画像 · 網�
   - [6. 男の娘画像](#6-男の娘画像-femboy)
   - [7. DG-LAB デバイス管理](#7-dg-lab-デバイス管理-dglab)
   - [8. 地震早期警報](#8-地震早期警報-地震別名-earthquake-eq-预警)
+  - [9. 百合画像](#9-百合画像)
 - [🖥️ 総合 Pages](#️-総合-pages)
 - [🧩 グループ別スイッチ](#-グループ別スイッチ)
 - [✂️ 分割返信](#️-分割返信)
@@ -208,6 +209,7 @@ pip install websockets>=10.0   # DG-LAB 機能のみ必要
 | `/hitokoto` | `/一言` | Hitokoto（ひとこと） |
 | `/weather` | `/天气` | 天気照会 |
 | `/femboy` | `/男娘` | 男の娘画像 |
+| `/yuri` | `/百合` | Pixiv の全年齢向け百合画像をランダムに取得 |
 | `/dglab` | `/电击` | DG-LAB デバイス管理 |
 | `/地震` | `/earthquake` `/eq` `/预警` | グループホワイトリスト式の地震早期警報（群主／管理者が有効化。基本情報→カウントダウン） |
 | `/气象预警` | `/天气预警` | 中国気象台の気象警報（都市行政区で照合、レベルフィルター付き） |
@@ -617,6 +619,14 @@ DG-LAB Socket プロトコル経由で DG-LAB パルスコントローラーを�
 **極限演習モード：** 模擬警報カード内のスイッチです。確認語 **「极限演练」** を入力すると、**「模擬」「演習」の文言を一切含めず**、タイトル・情報源・カウントダウン・到達指引を実際の警報と同一に送信します。カウントダウンもフォームの秒数ではなく実際の S 波推定を使用します。専用クールダウン（`earthquake_extreme_cooldown`、既定 300 秒）があり、AstrBot WebUI（管理者）からのみ実行可能で、監査ログに記録されます。⚠️ パニックを招く可能性があるため、ホワイトリストグループへ事前告知済みの演習以外では使用しないでください。
 
 主な設定：`earthquake_enable`、`earthquake_poll_interval`（30 秒）、`earthquake_min_magnitude`（4.0）、`earthquake_max_age_sec`（300）、`earthquake_default_lat` / `lon`、`earthquake_countdown_max_ticks`、`earthquake_countdown_interval`、`earthquake_s_wave_km_s`、`earthquake_group_whitelist`（設定画面で確認／削除可）。`/开关 off earthquake` でそのグループへのバックグラウンド配信を停止できます。
+
+---
+
+### 9. 百合画像
+
+`/yuri` または `/百合` を送ると、Pixiv の「百合」タグから全年齢向け画像をランダムに 1 枚選び、作品リンクと同じメッセージで返します。`/yuri help` または `/百合 帮助` でヘルプを表示します。`exclude_ai` とグループ別の `/开关 off image` の設定が適用されます。
+
+サーバーから `www.pixiv.net` と `i.pximg.net` に直接接続します。既定は匿名アクセスで、LeiZ キーは不要です。ログインが必要な場合は、AstrBot プロセスの環境変数 `CURRENTCORTEX_YURI_PIXIV_COOKIE` に Cookie の値を設定し、AstrBot を再起動してください。Cookie は、このコマンドの Pixiv 検索と作品詳細の取得にのみ使われます。
 
 ---
 
@@ -1140,7 +1150,7 @@ Issue と PR を歓迎します！バグ報告・機能提案には Issue テン
 
 ---
 
-**バージョン**：v2.11.0（バージョンごとの変更は [CHANGELOG.md](CHANGELOG.md) を参照）
+**バージョン**：v2.12.0（バージョンごとの変更は [CHANGELOG.md](CHANGELOG.md) を参照）
 **リポジトリ**：[GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
 
 

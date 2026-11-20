@@ -81,6 +81,7 @@ Pixiv 隨機圖片 · 每日一言 · 天氣查詢 · 男娘圖片 · 網易雲�
   - [6. 男娘圖片](#6-男娘圖片-femboy別名-男娘)
   - [7. DG-LAB 裝置管理](#7-dg-lab-裝置管理-dglab別名-电击)
   - [8. 地震預警](#8-地震預警-地震別名-earthquake-eq-预警)
+  - [9. 百合圖片](#9-百合圖片)
 - [🖥️ 總覽 Pages](#️-總覽-pages)
 - [🧩 按群聊獨立開關](#-按群聊獨立開關)
 - [✂️ 分段回覆](#️-分段回覆)
@@ -208,6 +209,7 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 | `/hitokoto` | `/一言` | 每日一言 |
 | `/weather` | `/天气` | 天氣查詢 |
 | `/femboy` | `/男娘` | 男娘圖片 |
+| `/yuri` | `/百合` | 隨機 Pixiv 全年齡百合圖片 |
 | `/dglab` | `/电击` | DG-LAB 裝置管理 |
 | `/地震` | `/earthquake` `/eq` `/预警` | 群聊白名單地震預警（群主／管理員啟用，先基本資訊後倒數） |
 | `/气象预警` | `/天气预警` | 中央氣象台氣象預警（按城市行政區匹配、級別過濾） |
@@ -617,6 +619,14 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 **極限演練模式：** 模擬預警卡片內的開關。輸入確認詞 **「极限演练」** 後，**不發送任何「模擬／演練」字樣**，標題、來源、倒數與到達指引都與真實預警完全相同，倒數按真實 S 波估算（不使用表單秒數）。具獨立冷卻（`earthquake_extreme_cooldown`，預設 300 秒），僅能從 AstrBot WebUI（管理員）操作，並寫入審計日誌。⚠️ 可能造成恐慌，僅限已向白名單群成員明確告知的演練使用。
 
 主要設定：`earthquake_enable`、`earthquake_poll_interval`（30 秒）、`earthquake_min_magnitude`（4.0）、`earthquake_max_age_sec`（300）、`earthquake_default_lat` / `lon`、`earthquake_countdown_max_ticks`、`earthquake_countdown_interval`、`earthquake_s_wave_km_s`、`earthquake_group_whitelist`（可在設定頁查看／刪除）。`/开关 off earthquake` 會停止向本群發送背景預警。
+
+---
+
+### 9. 百合圖片
+
+傳送 `/yuri` 或 `/百合`，從 Pixiv 的「百合」標籤隨機抽取一張全年齡圖片，並在同一則訊息中附上作品連結。傳送 `/yuri help` 或 `/百合 帮助` 查看用法。指令會套用 `exclude_ai` 與 `/开关 off image` 的群聊設定。
+
+伺服器直接連線至 `www.pixiv.net` 和 `i.pximg.net`，預設匿名存取，免 LeiZ Key。如需登入，管理員可將原始 Cookie 值注入 AstrBot 程序的 `CURRENTCORTEX_YURI_PIXIV_COOKIE` 環境變數，重新啟動 AstrBot 後生效。Cookie 僅用於此指令的 Pixiv 搜尋和作品詳情請求。
 
 ---
 
@@ -1146,7 +1156,7 @@ astrbot_plugin_currentcortex/
 
 ---
 
-**版本**：v2.11.0（各版本變更詳見 [CHANGELOG.md](CHANGELOG.md)）
+**版本**：v2.12.0（各版本變更詳見 [CHANGELOG.md](CHANGELOG.md)）
 **儲存庫**：[GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
 
 

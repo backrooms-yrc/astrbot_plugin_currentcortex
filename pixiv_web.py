@@ -1,7 +1,7 @@
-"""Anonymous Pixiv website search; no account credentials or third-party index.
+"""All-age Pixiv website search with anonymous access by default.
 
-Only publicly visible, all-age works are supported. Random requests sample the
-daily ranking, while searches sample up to three result pages per query.
+Random requests sample the daily ranking, while searches sample up to three
+result pages per query.
 """
 
 import asyncio
@@ -33,11 +33,17 @@ class PixivWebAPIClient:
     MAX_IMAGE_BYTES = 32 * 1024 * 1024
     MAX_DETAILS = 60
 
-    def __init__(self, timeout: int = 15):
+    def __init__(self, timeout: int = 15, *, cookie: str = ""):
         self.timeout = max(1, timeout)
+        self._cookie = cookie.strip()
 
     async def _get(self, session, path, params=None):
-        async with session.get(self.BASE + path, params=params) as response:
+        async with session.get(
+            self.BASE + path,
+            params=params,
+            headers={"Cookie": self._cookie} if self._cookie else None,
+            allow_redirects=not self._cookie,
+        ) as response:
             if response.status != 200:
                 raise PixivAPIError(
                     f"Pixiv 网页接口 HTTP {response.status}；请稍后重试，或在配置中切换 leiz 源",
@@ -97,19 +103,25 @@ class PixivWebAPIClient:
             uids = uid if isinstance(uid, list) else str(uid).split(",")
             if str(item.get("userId")) not in {str(u) for u in uids}:
                 return False
-        tags = item.get("tags", [])
+        exact_tags = params.get("exact_tags", False)
+        tags = item.get("tags") or []
         if isinstance(tags, dict):
-            tags = tags.get("tags", [])
+            tags = tags.get("tags") or []
         names = []
         for tag in tags:
             if isinstance(tag, dict):
                 names.append(str(tag.get("tag", "")))
-                names.extend(str(v) for v in (tag.get("translation") or {}).values())
+                if not exact_tags:
+                    names.extend(str(v) for v in (tag.get("translation") or {}).values())
             else:
                 names.append(str(tag))
         if any(
             not any(
-                term.casefold() in name.casefold() for term in group for name in names
+                term.casefold() == name.casefold()
+                if exact_tags
+                else term.casefold() in name.casefold()
+                for term in group
+                for name in names
             )
             for group in cls._tag_groups(params)
             if group
@@ -185,13 +197,16 @@ class PixivWebAPIClient:
                 for item in data.get("contents", [])
             ]
 
+        search_mode = "s_tag_full" if params.get("exact_tags") else "s_tag"
+        if params.get("keyword"):
+            search_mode = "s_tc"
         candidates = []
         for query in queries:
             search_params = {
                 "word": query,
                 "mode": "safe",
                 "order": "date_d",
-                "s_mode": "s_tc" if params.get("keyword") else "s_tag",
+                "s_mode": search_mode,
                 "p": 1,
             }
             if params.get("excludeAI"):

@@ -6,9 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
-from aiohttp import web
+from aiohttp import ClientSession, web
 
 # Reuse the existing AstrBot stubs; no plugin lifecycle or external services run.
 from test_music_audio import main
@@ -207,6 +207,10 @@ class PixivTests(unittest.IsolatedAsyncioTestCase):
                 )
             if path == "/error":
                 return web.json_response({"error": True, "message": "login required"})
+            if path == "/redirect":
+                return web.Response(
+                    status=302, headers={"Location": f"http://localhost:{port}/image"}
+                )
             if path == "/image":
                 return web.Response(body=b"test-image", content_type="image/png")
             raise web.HTTPNotFound()
@@ -407,6 +411,140 @@ class PixivTests(unittest.IsolatedAsyncioTestCase):
             ):
                 await self.client.download_image(self.client.BASE + "/image")
             self.assertEqual(list((Path(temp) / "astrbot_pixiv").iterdir()), [])
+
+    def _yuri_plugin_and_event(self, message):
+        plugin = main.CurrentCortexPlugin.__new__(main.CurrentCortexPlugin)
+        plugin._yuri_client = self.client
+        plugin._api_client = None  # LeiZ source selected without a key.
+        plugin._exclude_ai = True
+        event = SimpleNamespace(
+            message_str=message,
+            plain_result=lambda text: text,
+            chain_result=lambda parts: parts,
+        )
+        return plugin, event
+
+    async def test_yuri_command_sends_only_one_all_age_exact_tag_work(self):
+        self.works = {
+            "123": work(tags=["百合"]),
+            "124": work("124", tags=["百合"], xRestrict=1),
+            "125": work("125", tags=["百合"], aiType=2),
+            "126": work("126", tags=["非百合"]),
+            "127": work("127", tags=["百合"], isMasked=True),
+        }
+        plugin, event = self._yuri_plugin_and_event("/yuri")
+        with (
+            patch.object(
+                self.client, "download_image", AsyncMock(return_value="/tmp/yuri.jpg")
+            ) as download,
+            patch.object(main.Comp, "Plain", lambda text: text, create=True),
+            patch.object(
+                main.Comp, "Image", SimpleNamespace(fromFileSystem=str), create=True
+            ),
+        ):
+            for command in ("/yuri", "/百合"):
+                event.message_str = command
+                replies = [reply async for reply in plugin.yuri_command(event)]
+                self.assertEqual(len(replies), 1)
+                caption, path = replies[0]
+                self.assertIn("https://www.pixiv.net/artworks/123", caption)
+                self.assertEqual(path, "/tmp/yuri.jpg")
+            self.assertEqual(download.await_count, 2)
+            download.assert_awaited_with("https://i.pximg.net/regular.jpg")
+
+        searches = [query for path, query, _ in self.calls if "/search/" in path]
+        self.assertTrue(searches)
+        for params in searches:
+            self.assertEqual(params["word"], "百合")
+            self.assertEqual(params["s_mode"], "s_tag_full")
+            self.assertEqual(params["mode"], "safe")
+            self.assertEqual(params["ai_type"], "1")
+        self.assertTrue(all("Cookie" not in headers for _, _, headers in self.calls))
+
+    async def test_yuri_help_and_group_switch(self):
+        plugin, event = self._yuri_plugin_and_event("/yuri help")
+        plugin._group_switch_enable = True
+        plugin._group_switch_store = SimpleNamespace(
+            is_enabled=lambda origin, scope=None: scope != "image"
+        )
+        plugin._notify_switch_disabled_once = AsyncMock()
+        event.get_message_type = lambda: "group"
+        event.unified_msg_origin = "platform:GroupMessage:1"
+        event.stop_event = Mock()
+        with patch.object(main, "MessageType", SimpleNamespace(GROUP_MESSAGE="group")):
+            for message in ("/yuri help", "/百合 帮助"):
+                event.message_str = message
+                replies = [reply async for reply in plugin.yuri_command(event)]
+                self.assertIn(main.YURI_HELP_TEXT, replies[0])
+                await plugin.on_message_group_switch_guard(event)
+                plugin._notify_switch_disabled_once.assert_awaited_with(
+                    event, event.unified_msg_origin, "image"
+                )
+        self.assertEqual(event.stop_event.call_count, 2)
+        self.assertEqual(self.calls, [])
+
+    async def test_yuri_distinguishes_empty_search_and_download_errors(self):
+        plugin, event = self._yuri_plugin_and_event("/yuri")
+        item = {"pid": "123", "urls": {"regular": "https://i.pximg.net/regular.jpg"}}
+        plugin._yuri_client = SimpleNamespace(
+            fetch_images=AsyncMock(return_value={"data": {"data": []}}),
+            download_image=AsyncMock(),
+        )
+        replies = [reply async for reply in plugin.yuri_command(event)]
+        self.assertIn("暂未找到", replies[0])
+        plugin._yuri_client.download_image.assert_not_awaited()
+
+        fake_cookie = "test_session=fixture"
+        failure = PixivAPIError(fake_cookie, status_code=403)
+        with patch.object(main.logger, "warning") as warning:
+            plugin._yuri_client.fetch_images.side_effect = failure
+            replies = [reply async for reply in plugin.yuri_command(event)]
+            self.assertIn("Pixiv 请求失败", replies[0])
+            plugin._yuri_client.fetch_images.side_effect = None
+            plugin._yuri_client.fetch_images.return_value = {"data": {"data": [item]}}
+            plugin._yuri_client.download_image.side_effect = failure
+            replies += [reply async for reply in plugin.yuri_command(event)]
+            self.assertIn("图片下载失败", replies[1])
+        for message in replies:
+            self.assertNotIn(fake_cookie, message)
+        self.assertEqual(warning.call_count, 2)
+        for call in warning.call_args_list:
+            self.assertNotIn(fake_cookie, call.args[0])
+            self.assertIn("HTTP 403", call.args[0])
+
+    async def test_yuri_server_cookie_is_scoped_to_search_and_details(self):
+        fake_cookie = "test_session=fixture"
+        authenticated = PixivWebAPIClient(timeout=5, cookie=fake_cookie)
+        authenticated.BASE = self.client.BASE
+        self.works = {"123": work(tags=["百合"])}
+        await authenticated.fetch_images(tag=["百合"], exact_tags=True)
+        self.assertTrue(any(path == "/ajax/illust/123" for path, _, _ in self.calls))
+        self.assertTrue(
+            all(headers.get("Cookie") == fake_cookie for _, _, headers in self.calls)
+        )
+
+        self.calls.clear()
+        async with ClientSession() as session:
+            with self.assertRaises(PixivAPIError) as caught:
+                await authenticated._get(session, "/redirect")
+        self.assertEqual(caught.exception.status_code, 302)
+        self.assertEqual([path for path, _, _ in self.calls], ["/redirect"])
+
+        self.calls.clear()
+        module = __import__(PixivWebAPIClient.__module__, fromlist=["urlsplit"])
+        with (
+            tempfile.TemporaryDirectory() as temp,
+            patch.object(
+                module,
+                "urlsplit",
+                return_value=SimpleNamespace(scheme="https", hostname="i.pximg.net"),
+            ),
+            patch.object(module.tempfile, "gettempdir", return_value=temp),
+        ):
+            await authenticated.download_image(authenticated.BASE + "/image")
+        await self.client.fetch_images(tag=["百合"])
+        self.assertEqual(self.calls[0][0], "/image")
+        self.assertTrue(all("Cookie" not in headers for _, _, headers in self.calls))
 
     async def test_command_llm_and_local_image_delivery(self):
         plugin = main.CurrentCortexPlugin.__new__(main.CurrentCortexPlugin)

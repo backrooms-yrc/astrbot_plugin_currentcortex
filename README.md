@@ -99,6 +99,7 @@ Pixiv 随机图片 · 每日一言 · 天气查询 · 男娘图片 · 网易云�
   - [8. Wikidot 站点管理](#8-wikidot-站点管理-wikidot别名-wd-维基)
   - [9. 地震预警](#9-地震预警-地震别名-earthquake-eq-预警)
   - [10. 气象预警](#10-气象预警-气象预警别名-天气预警)
+  - [11. 百合图片](#11-百合图片)
 - [🖥️ 总 Pages](#️-总-pages)
 - [🧩 按群聊开关](#-按群聊独立开关)
 - [✂️ 分段回复](#️-分段回复)
@@ -227,6 +228,7 @@ pip install websockets>=10.0   # 仅 DG-LAB 功能需要
 | `/hitokoto` | `/一言` | 每日一言 |
 | `/weather` | `/天气` | 天气查询 |
 | `/femboy` | `/男娘` | 男娘图片 |
+| `/yuri` | `/百合` | 随机 Pixiv 全年龄百合图片 |
 | `/dglab` | `/电击` | DG-LAB 设备管理 |
 | `/wikidot` | `/wd` `/维基` | Wikidot 页面编辑与站点管理 |
 | `/地震` | `/earthquake` `/eq` `/预警` | 群聊白名单地震预警（多城市/倒计时可关，先基本信息后纯数字倒计时） |
@@ -811,6 +813,14 @@ Pixiv 匿名可见范围不等于全站所有作品；接口变动、访问限�
 | `weather_broadcast_interval` | `0.6` | 多群发送间隔（秒） |
 | `weather_http_timeout` | `10` | 上游请求超时（秒） |
 | `weather_group_whitelist` | `[]` | 群聊白名单（由 `/气象预警 开启` 写入，可在配置页查看/删除） |
+
+---
+
+### 11. 百合图片
+
+发送 `/yuri` 或 `/百合`，从 Pixiv 的「百合」标签随机抽取一张全年龄图片，并在同一条消息中附上作品链接。发送 `/yuri help` 或 `/百合 帮助` 查看用法。命令遵循 `exclude_ai` 与 `/开关 off image` 的群聊设置。
+
+服务端直接访问 `www.pixiv.net` 和 `i.pximg.net`，默认匿名，免 LeiZ Key。如需登录，管理员可将原始 Cookie 值注入 AstrBot 进程的 `CURRENTCORTEX_YURI_PIXIV_COOKIE` 环境变量，重启 AstrBot 后生效。Cookie 仅用于此命令的 Pixiv 搜索和作品详情请求。
 
 ---
 
@@ -1413,7 +1423,7 @@ astrbot_plugin_currentcortex/
 
 <div align="center">
 
-**CurrentCortex** · v2.11.0 · [更新日志](CHANGELOG.md) · [问题反馈](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/issues) · [MIT License](LICENSE)
+**CurrentCortex** · v2.12.0 · [更新日志](CHANGELOG.md) · [问题反馈](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/issues) · [MIT License](LICENSE)
 
 如果这个插件对你有帮助，欢迎点一个 ⭐ Star 支持作者！
 
