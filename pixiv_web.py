@@ -1,7 +1,8 @@
-"""All-age Pixiv website search with anonymous access by default.
+"""Pixiv website search with anonymous all-age access by default.
 
 Random requests sample the daily ranking, while searches sample up to three
-result pages per query.
+result pages per query. R18/mixed works require a logged-in Cookie whose
+account has enabled R18 viewing; anonymous access remains all-age only.
 """
 
 import asyncio
@@ -12,7 +13,7 @@ import re
 import tempfile
 import time
 from datetime import datetime, timedelta, timezone
-from typing import ClassVar
+from typing import Any, ClassVar
 from urllib.parse import quote, urlsplit
 
 import aiohttp
@@ -24,6 +25,10 @@ class PixivAPIError(Exception):
         self.status_code = status_code
 
 
+class PixivUsageError(PixivAPIError):
+    """Invalid local input or configuration; safe to show to users."""
+
+
 class PixivWebAPIClient:
     BASE = "https://www.pixiv.net"
     HEADERS: ClassVar[dict[str, str]] = {
@@ -33,9 +38,12 @@ class PixivWebAPIClient:
     MAX_IMAGE_BYTES = 32 * 1024 * 1024
     MAX_DETAILS = 60
 
-    def __init__(self, timeout: int = 15, *, cookie: str = ""):
+    def __init__(
+        self, timeout: int = 15, *, cookie: str = "", max_pages: int = 20
+    ):
         self.timeout = max(1, timeout)
         self._cookie = cookie.strip()
+        self.max_pages_per_work = max(1, int(max_pages))
 
     async def _get(self, session, path, params=None):
         async with session.get(
@@ -79,7 +87,7 @@ class PixivWebAPIClient:
             list(itertools.islice(itertools.product(*groups), 9)) if groups else [()]
         )
         if len(variants) > 8:
-            raise PixivAPIError(
+            raise PixivUsageError(
                 "匿名源最多支持 8 种标签组合，请减少 OR 标签或切换 leiz 源"
             )
         keyword = str(params.get("keyword") or "").strip()
@@ -94,7 +102,17 @@ class PixivWebAPIClient:
     @classmethod
     def _matches(cls, item, params):
         # Fail closed for incomplete or masked records; details supply xRestrict.
-        if item.get("xRestrict") != 0 or item.get("isMasked") or item.get("is_masked"):
+        restrict = item.get("xRestrict")
+        if restrict is None or item.get("isMasked") or item.get("is_masked"):
+            return False
+        level = int(params.get("r18", 0) or 0)
+        if level == 0 and restrict != 0:
+            return False
+        if level == 1 and restrict not in (1, 2):
+            return False
+        if level == 2 and restrict not in (0, 1, 2):
+            return False
+        if level not in (0, 1, 2):
             return False
         if params.get("excludeAI") and item.get("aiType") != 1:
             return False
@@ -169,12 +187,82 @@ class PixivWebAPIClient:
                 return False
         return True
 
+    async def _account_status(self, session) -> dict[str, Any]:
+        """Best-effort login/R18 check for the configured Cookie.
+
+        Returns ``logged_in`` as True/False/None (None = could not verify) and
+        ``r18`` as the account's R18 viewing setting when Pixiv exposes it.
+        """
+        try:
+            data = await self._get(session, "/ajax/user/self")
+        except (PixivAPIError, aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            return {"logged_in": None, "r18": None, "error": type(exc).__name__}
+        user = data.get("userData")
+        if not isinstance(user, dict):
+            body = data.get("body")
+            if isinstance(body, dict):
+                user = body.get("userData")
+        if not isinstance(user, dict):
+            return {"logged_in": False, "r18": None}
+        logged_in = bool(
+            user.get("id") or user.get("userId") or user.get("user_id")
+        )
+        r18 = None
+        for key in (
+            "xRestrict", "x_restrict", "user_x_restrict", "r18", "r18Enabled",
+        ):
+            if key in user:
+                try:
+                    r18 = int(user[key])
+                except (TypeError, ValueError):
+                    pass
+                break
+        return {"logged_in": logged_in, "r18": r18}
+
+    @staticmethod
+    def _pick_page_url(urls: dict, size: str) -> str:
+        """Pick a page URL; the pages endpoint uses thumb_mini instead of thumb/mini."""
+        if size in urls:
+            return urls[size]
+        if size in ("thumb", "mini"):
+            return (
+                urls.get("thumb_mini")
+                or urls.get("small")
+                or urls.get("regular")
+                or ""
+            )
+        return (
+            urls.get("regular")
+            or urls.get("original")
+            or urls.get("small")
+            or urls.get("thumb_mini")
+            or ""
+        )
+
+    async def _page_urls(self, session, pid, size: str) -> list[str]:
+        """Fetch every page of a multi-page artwork, capped to avoid spam."""
+        data = await self._get(session, f"/ajax/illust/{pid}/pages")
+        body = data.get("body")
+        if not isinstance(body, list):
+            return []
+        urls = []
+        for page in body[: self.max_pages_per_work]:
+            if not isinstance(page, dict):
+                continue
+            page_urls = page.get("urls")
+            if not isinstance(page_urls, dict):
+                continue
+            url = self._pick_page_url(page_urls, size)
+            if url:
+                urls.append(url)
+        return urls
+
     async def _candidates(self, session, params):
         uid = params.get("uid")
         if uid:
             uids = uid if isinstance(uid, list) else str(uid).split(",")
             if len(uids) > 20 or any(not str(u).isdigit() for u in uids):
-                raise PixivAPIError("作者 UID 必须为数字，最多 20 个")
+                raise PixivUsageError("作者 UID 必须为数字，最多 20 个")
             candidates = []
             for user in uids:
                 body = (await self._get(session, f"/ajax/user/{user}/profile/all")).get(
@@ -200,11 +288,17 @@ class PixivWebAPIClient:
         search_mode = "s_tag_full" if params.get("exact_tags") else "s_tag"
         if params.get("keyword"):
             search_mode = "s_tc"
+        # Pixiv web search modes: safe = all-age, r18 = adult only,
+        # all = safe + adult (requires a logged-in R18-enabled Cookie).
+        content_mode = {0: "safe", 1: "r18", 2: "all"}.get(
+            int(params.get("r18", 0) or 0), "safe"
+        )
         candidates = []
         for query in queries:
             search_params = {
                 "word": query,
-                "mode": "safe",
+                "mode": content_mode,
+                "type": "all",
                 "order": "date_d",
                 "s_mode": search_mode,
                 "p": 1,
@@ -246,6 +340,9 @@ class PixivWebAPIClient:
             ids = list(unique)
             random.shuffle(ids)
             items = []
+            level = int(params.get("r18", 0) or 0)
+            saw_details = False
+            saw_adult = False
             limit = max(1, min(20, int(params.get("num", 1))))
             size = params.get("size", "regular")
             if isinstance(size, list):
@@ -266,8 +363,14 @@ class PixivWebAPIClient:
                     *(detail(pid) for pid in ids[offset : offset + 4])
                 )
                 for item in details:
+                    if item:
+                        saw_details = True
+                    if item.get("xRestrict") in (1, 2):
+                        saw_adult = True
                     if not self._matches(item, params) or item.get("illustType") == 2:
                         continue
+                    pid = item.get("id") or item.get("illustId")
+                    page_count = int(item.get("pageCount") or 1)
                     urls = item.get("urls") or {}
                     url = urls.get(
                         {"thumb": "thumb_mini", "mini": "mini"}.get(size, size)
@@ -276,35 +379,101 @@ class PixivWebAPIClient:
                         url = urls.get("regular") or urls.get("original")
                     if not url:
                         continue
+                    page_urls = []
+                    if page_count > 1 and pid:
+                        try:
+                            page_urls = await self._page_urls(session, pid, size)
+                        except (
+                            PixivAPIError,
+                            aiohttp.ClientError,
+                            asyncio.TimeoutError,
+                        ):
+                            # 组图页获取失败时退回详情首图，不影响其他作品。
+                            page_urls = []
                     tags = item.get("tags", {})
                     if isinstance(tags, dict):
                         tags = [t.get("tag", "") for t in tags.get("tags", [])]
                     items.append(
                         {
-                            "pid": item.get("id") or item.get("illustId"),
+                            "pid": pid,
                             "title": item.get("title"),
                             "author": item.get("userName"),
                             "tags": tags,
                             "width": item.get("width"),
                             "height": item.get("height"),
                             "urls": {size: url},
+                            "page_count": page_count,
+                            "page_urls": page_urls,
                             "source": "pixiv_web",
                         }
                     )
                     if len(items) == limit:
                         return {"type": "json", "data": {"data": items}}
+
+            if level == 1 and saw_details and not saw_adult:
+                # Pixiv silently returns all-age works for mode=r18 when the
+                # Cookie is not logged in or the account has R18 viewing off.
+                status = await self._account_status(session)
+                logged_in = status.get("logged_in")
+                if logged_in is False:
+                    raise PixivUsageError(
+                        "Pixiv 未返回成人作品：yuri_pixiv_cookie 未登录或已失效。"
+                        "请在浏览器登录 Pixiv 后复制完整 Cookie（至少包含 "
+                        "PHPSESSID，可直接粘贴整段 Cookie 头）并重新填写；"
+                        "若使用环境变量也请一并更新"
+                    )
+                if logged_in is True:
+                    if status.get("r18") == 0:
+                        raise PixivUsageError(
+                            "Pixiv 未返回成人作品：Cookie 已登录，但账号的 R18 "
+                            "显示设置为 0（未开启）。请在 Pixiv 设置 → 浏览限制 "
+                            "中开启 R-18/R-18G 后重试"
+                        )
+                    raise PixivUsageError(
+                        "Pixiv 未返回成人作品：Cookie 已登录，但未返回成人作品。"
+                        "请确认账号已在 Pixiv 设置中开启 R18 显示；若已开启，"
+                        "请调整标签/关键词或稍后重试"
+                    )
+                raise PixivUsageError(
+                    "Pixiv 未返回成人作品，且暂时无法验证 Cookie 登录状态。"
+                    "请检查网络后重试，并确认 yuri_pixiv_cookie 是完整且未过期的 Cookie"
+                )
             return {"type": "json", "data": {"data": items}}
 
     async def fetch_images(self, **params):
-        if int(params.get("r18", 0)) != 0:
-            raise PixivAPIError(
-                "Pixiv 匿名源仅支持全年龄作品；R18/混合模式请在插件配置或总 Pages → 设置 → Pixiv 图片中将 pixiv_source 切换为 leiz，并填写 LeiZ Key"
+        try:
+            level = int(params.get("r18", 0) or 0)
+        except (TypeError, ValueError) as exc:
+            raise PixivUsageError(
+                "分级仅支持 0（全年龄）/ 1（成人）/ 2（混合）"
+            ) from exc
+        if level not in (0, 1, 2):
+            raise PixivUsageError(
+                "分级仅支持 0（全年龄）/ 1（成人）/ 2（混合）"
+            )
+        if level != 0 and not self._cookie:
+            raise PixivUsageError(
+                "Pixiv 网页源默认仅支持全年龄作品。/yuri 请求成人/混合需在插件"
+                "配置的 yuri_pixiv_cookie 中填写已登录且已开启 R18 显示的 "
+                "Pixiv Cookie（或设置环境变量 CURRENTCORTEX_YURI_PIXIV_COOKIE）；"
+                "/pixiv 请将 pixiv_source 切换为 leiz 并填写 LeiZ Key"
             )
         ratio = params.get("aspectRatio")
         if ratio and not re.fullmatch(
             r"(?:(?:gte|lte|gt|lt|eq)\d+(?:\.\d+)?){1,2}", str(ratio)
         ):
-            raise PixivAPIError("长宽比格式错误，例如 gt1 或 gt1.7lt1.8")
+            raise PixivUsageError("长宽比格式错误，例如 gt1 或 gt1.7lt1.8")
+        uid = params.get("uid")
+        if uid:
+            uids = uid if isinstance(uid, list) else str(uid).split(",")
+            if len(uids) > 20 or any(not str(u).isdigit() for u in uids):
+                raise PixivUsageError("作者 UID 必须为数字，最多 20 个")
+        for key in ("dateAfter", "dateBefore"):
+            if params.get(key) is not None:
+                try:
+                    float(params[key])
+                except (TypeError, ValueError) as exc:
+                    raise PixivUsageError("时间筛选必须为毫秒时间戳") from exc
         try:
             return await asyncio.wait_for(self._fetch(params), timeout=self.timeout)
         except asyncio.TimeoutError as exc:

@@ -10,13 +10,23 @@
     "default": true
   },
   "pixiv_source": {
-    "description": "Pixiv 图片源：pixiv_web（默认，免 Token，直接搜索 Pixiv 匿名可见全年龄作品；无关键词时从日榜抽取，搜索每种标签组合最多抽样 3 页）；leiz（原 LeiZ 图库，需要 leiz_api_key，支持原有 R18/混合模式）。切换后命令与 AI 图片工具一起生效。服务器须能访问 www.pixiv.net 和 i.pximg.net。",
+    "description": "Pixiv 图片源：pixiv_web（默认，免 Token，直接搜索 Pixiv 匿名可见全年龄作品；无关键词时从日榜抽取，搜索每种标签组合最多抽样 3 页）；leiz（原 LeiZ 图库，需要 leiz_api_key，支持原有 R18/混合模式）。切换后 /pixiv 命令与 AI 图片工具一起生效；/yuri 始终使用 Pixiv 网页接口（R18/混合需配置 yuri_pixiv_cookie 或环境变量 CURRENTCORTEX_YURI_PIXIV_COOKIE），不受此项影响。服务器须能访问 www.pixiv.net 和 i.pximg.net。",
     "type": "string",
     "default": "pixiv_web",
     "options": [
       "pixiv_web",
       "leiz"
     ]
+  },
+  "yuri_pixiv_cookie": {
+    "description": "【/yuri 百合图片】Pixiv 登录 Cookie，用于成人/混合分级。填写已登录且已在 Pixiv 设置中开启 R18 显示的账号 Cookie；可直接粘贴整段 Cookie 头（自动去掉 Cookie: 前缀），也可只填 PHPSESSID 的值（自动补 PHPSESSID=）。留空时回退环境变量 CURRENTCORTEX_YURI_PIXIV_COOKIE，两者都为空则仅支持全年龄。Cookie 仅用于 /yuri 的搜索与作品详情请求，不写入日志；请勿泄露。",
+    "type": "string",
+    "default": ""
+  },
+  "pixiv_web_max_images": {
+    "description": "pixiv_web 源组图上限：每作品最多抓取/发送的页数，默认 20（范围 1-100）。/yuri 同时把该值作为单条消息的总图片上限；超出时只发送前 N 张并在消息中说明。",
+    "type": "int",
+    "default": 20
   },
   "default_r18": {
     "description": "默认 R18 等级（0=全年龄, 1=R18, 2=混合）",

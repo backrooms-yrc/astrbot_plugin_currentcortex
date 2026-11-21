@@ -48,7 +48,7 @@ from .earthquake import (
     upsert_group,
 )
 from .weather import WeatherService
-from .pixiv_web import PixivWebAPIClient, PixivAPIError
+from .pixiv_web import PixivWebAPIClient, PixivAPIError, PixivUsageError
 from astrbot.api.provider import ProviderRequest, LLMResponse
 from astrbot.core.agent.message import TextPart
 from astrbot.api.platform import MessageType
@@ -162,6 +162,9 @@ def _parse_music_progress_mode(config: Dict[str, Any]) -> str:
     }.get(raw, "brief")
 PIXIV_ARTWORK_URL = "https://www.pixiv.net/artworks/{}"
 PIXIV_COMMAND_ALIASES = ("图片",)
+YURI_TAG = "百合"
+YURI_COMMAND_ALIASES = ("yuri", "百合")
+YURI_SIZE_ALIASES = ("original", "regular", "small", "thumb", "mini")
 
 # 插件校验码（自 2026-09-20 起强制）：因插件滥用行为导致的一系列问题，
 # 部署者须加入官方 QQ 群 PLUGIN_OFFICIAL_GROUP 获取校验码填入配置项
@@ -196,7 +199,7 @@ COMMAND_CATEGORIES = [
         "commands": [
             {"cmd": "/pixiv", "alias": "图片", "desc": "随机 / 搜索 / 标签 / 作者 / 帮助"},
             {"cmd": "/femboy", "alias": "男娘", "desc": "获取一张随机男娘图片"},
-            {"cmd": "/yuri", "alias": "百合", "desc": "获取一张 Pixiv 全年龄百合图片"},
+            {"cmd": "/yuri", "alias": "百合", "desc": "百合图片：随机 / 搜索 / 标签 / 作者 / 分级"},
         ],
     },
     {
@@ -356,7 +359,7 @@ HELP_TEXT = """🎨 Pixiv 随机图片插件 使用说明
                        • AND 匹配：tag 萝莉 tag 少女（多个tag参数）
   keyword 关键词       标题/作者/标签模糊搜索
   uid 作者ID           指定特定作者的 UID
-  num 数量             获取图片数量（1-20，默认 1）
+  num 数量             获取作品数量（1-20，默认 1；pixiv_web 组图按页展开）
 
 📌 图片设置
   size 尺寸            图片大小选项：
@@ -389,6 +392,7 @@ HELP_TEXT = """🎨 Pixiv 随机图片插件 使用说明
 ⚠️ 注意事项
   • R18 内容仅限成年用户使用
   • 图片来源于 Pixiv，请遵守相关法律法规
+  • pixiv_web 源遇到组图时会发送全部页面；上限由 pixiv_web_max_images 控制（默认 20 页/作品）
   • 如遇问题可发送 /pixiv help 查看帮助
 
 💡 提示：所有参数均可自由组合使用
@@ -554,10 +558,56 @@ FEMBOY_HELP_TEXT = """👗 男娘图片 使用说明
 
 YURI_HELP_TEXT = """🌸 百合图片使用说明
 
-  /yuri 或 /百合        获取一张 Pixiv 全年龄百合图片及作品链接
-  /yuri help 或 /百合 帮助  显示此帮助
+📌 基本命令（别名：/百合）
+  /yuri                    随机获取一张 Pixiv 全年龄百合图片
+  /yuri help               显示此帮助
 
-图片直接来自 Pixiv，默认匿名访问，无需 LeiZ Key。"""
+📌 中文子指令（格式：/yuri 中文指令名 参数）
+  /yuri 随机 [筛选参数]
+  /yuri 搜索 <关键词> [筛选参数]
+  /yuri 标签 <标签...> [筛选参数]
+  /yuri 作者 <UID> [筛选参数]
+  /yuri 帮助
+
+📌 筛选参数（key value 格式，空格分隔，可组合）
+  数量 1-20             一次获取的作品数量（组图按页展开）
+  尺寸                 原图 / 常规 / 小图 / 缩略图 / 迷你图
+  分级                 全年龄 / 成人 / 混合
+  排除AI 是/否          排除 AI 生成作品
+  比例                 gt1.2lt1.8 等长宽比表达式
+  起始时间/结束时间      毫秒时间戳
+  标签                 多个标签为 AND，用 | 表示 OR
+  关键词               标题/作者/标签模糊搜索
+  作者                 Pixiv 作者 UID（纯数字）
+
+「百合」标签始终包含；额外标签和关键词只会进一步缩小范围。
+
+🖼️ 组图与发送方式
+  Pixiv 多页作品的全部页面会与说明文字合并为一条消息发送；
+  默认单次最多 20 张（配置项 pixiv_web_max_images，范围 1-100），
+  超出时在消息内说明「其余页面未发送」。
+
+📌 示例
+  /yuri
+  /yuri 搜索 校园 数量 3
+  /yuri 标签 原创 恋爱 尺寸 原图
+  /yuri 作者 123456 数量 2
+  /yuri 分级 成人 数量 1
+  /yuri r18 1 tag 白丝 num 3
+
+⚠️ 分级说明
+  • 全年龄（默认）：匿名访问，无需 Key。
+  • 成人/混合：需在插件配置中填写 yuri_pixiv_cookie
+    （总 Pages → 设置 → Pixiv 图片 也可填写），内容为已登录且
+    已在 Pixiv 设置中开启 R18 显示的 Cookie；可粘贴整段 Cookie 头，
+    也可只填 PHPSESSID 的值（会自动补 PHPSESSID=）。
+    也可用环境变量 CURRENTCORTEX_YURI_PIXIV_COOKIE（配置优先）。
+    两者都为空时会明确报错；Cookie 未登录/已过期或账号未开启
+    R18 显示时也会提示具体原因，不会静默降级。
+  • LeiZ API 没有独立的百合图片接口，/yuri 不使用 LeiZ，
+    也不受 pixiv_source 设置影响。
+
+💡 图片直接来自 Pixiv；Cookie 仅用于搜索与作品详情请求，不会写入日志。"""
 
 MEDIA_PARSER_HELP_TEXT = """🔍 媒体内容解析 使用说明
 
@@ -774,11 +824,36 @@ class PixivAPIClient:
         return body
 
 
-def _select_pixiv_client(source, leiz_client, timeout):
+def _select_pixiv_client(source, leiz_client, timeout, max_pages=20):
     """Keep anonymous search available even when no LeiZ key was configured."""
     if source == "leiz":
         return leiz_client
-    return PixivWebAPIClient(timeout=timeout)
+    return PixivWebAPIClient(timeout=timeout, max_pages=max_pages)
+
+
+def _normalize_cookie(raw) -> str:
+    """兼容用户粘贴整段 Cookie 头或只填 PHPSESSID 的值。"""
+    value = str(raw or "").strip()
+    if value.lower().startswith("cookie:"):
+        value = value.split(":", 1)[1].strip()
+    value = value.replace("\r", "").replace("\n", "").strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        value = value[1:-1].strip()
+    # Pixiv 的 PHPSESSID 形如 123456_xxxxxxxx；只填值时自动补名字。
+    if "=" not in value and re.fullmatch(r"\d+_[A-Za-z0-9]+", value):
+        value = "PHPSESSID=" + value
+    return value
+
+
+def _resolve_yuri_cookie(config) -> str:
+    """读取 /yuri 的 Pixiv Cookie：插件配置优先，留空时回退环境变量。"""
+    try:
+        configured = _normalize_cookie(config.get("yuri_pixiv_cookie", ""))
+    except Exception:  # noqa: BLE001
+        configured = ""
+    if configured:
+        return configured
+    return _normalize_cookie(os.getenv("CURRENTCORTEX_YURI_PIXIV_COOKIE", ""))
 
 
 class CommandParser:
@@ -815,7 +890,7 @@ class CommandParser:
     LEVEL_ALIASES = {"全年龄": 0, "全年齡": 0, "成人": 1, "混合": 2}
 
     @classmethod
-    def parse(cls, raw_text: str) -> Dict[str, Any]:
+    def parse(cls, raw_text: str, command_name: str = "pixiv") -> Dict[str, Any]:
         if not raw_text or not raw_text.strip():
             return {}
 
@@ -893,21 +968,32 @@ class CommandParser:
             for keyword in keywords:
                 params.setdefault("tag", []).extend(t for t in re.split(r"[,，]", keyword) if t)
             if not params.get("tag"):
-                raise ValueError("请提供标签，例如 /pixiv 标签 星空 数量 3")
+                raise ValueError(
+                    f"请提供标签，例如 /{command_name} 标签 星空 数量 3"
+                )
         elif subcommand == "作者":
             if keywords:
                 if len(keywords) != 1 or params.get("uid"):
-                    raise ValueError("请提供一个作者 UID，例如 /pixiv 作者 123456")
+                    raise ValueError(
+                        f"请提供一个作者 UID，例如 /{command_name} 作者 123456"
+                    )
                 params["uid"] = keywords[0]
             if not str(params.get("uid", "")).isdigit():
-                raise ValueError("作者 UID 必须为数字，例如 /pixiv 作者 123456")
+                raise ValueError(
+                    f"作者 UID 必须为数字，例如 /{command_name} 作者 123456"
+                )
         elif subcommand == "随机":
             if keywords:
-                raise ValueError("随机子指令无需搜索词；按关键词查图请使用 /pixiv 搜索 关键词")
+                raise ValueError(
+                    "随机子指令无需搜索词；按关键词查图请使用 "
+                    f"/{command_name} 搜索 关键词"
+                )
         elif keywords:
             params.setdefault("keyword", " ".join(keywords))
         if subcommand == "搜索" and not params.get("keyword"):
-            raise ValueError("请提供搜索关键词，例如 /pixiv 搜索 风景 数量 3")
+            raise ValueError(
+                f"请提供搜索关键词，例如 /{command_name} 搜索 风景 数量 3"
+            )
 
         return params
 
@@ -1614,8 +1700,9 @@ def _remove_file_safe(file_path: str) -> None:
 @register(
     "astrbot_plugin_currentcortex",
     "Rcst20",
-    "多功能 AstrBot 插件（CurrentCortex）—— Pixiv 随机图片 ·网易云点歌 ·小红书/B站/抖音媒体解析 ·每日一言 ·天气 ·男娘 ·地震预警 ·气象预警 ·DG-LAB（郊狼） 设备管理 ·Wikidot 站点管理 ·跨群聊记忆 ·按群聊开关。支持 Pixiv 匿名搜索及 LeiZ 等多源 API。",
-    "2.12.0",
+    "AstrBot 综合插件，支持 Pixiv 搜图与百合图片、网易云点歌、媒体链接解析、"
+    "地震与气象预警，以及 DG-LAB 和 Wikidot 管理。内置 Pages 面板，支持按群启停功能。",
+    "2.13.0",
 )
 class CurrentCortexPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -1665,6 +1752,11 @@ class CurrentCortexPlugin(Star):
         self._image_proxy = str(config.get("image_proxy", "pixiv.bileizhen.top"))
         self._exclude_ai = bool(config.get("exclude_ai", False))
         self._request_timeout = int(config.get("request_timeout", 15))
+        # pixiv_web 组图上限：每作品最多抓取/发送的页数；/yuri 同时作为
+        # 单条消息的总图片上限，避免一次发送过多图片被平台拒绝。
+        self._pixiv_web_max_images = max(
+            1, min(100, int(config.get("pixiv_web_max_images", 20)))
+        )
         # LLM 工具（function calling）总开关：装饰器在类加载时已注册工具，
         # 此开关控制工具执行时是否放行；关闭时工具返回提示而不执行。
         self._llm_tools_enable = bool(config.get("llm_tools_enable", True))
@@ -1785,11 +1877,17 @@ class CurrentCortexPlugin(Star):
 
         self._leiz_pixiv_client = self._api_client
         self._api_client = _select_pixiv_client(
-            self._pixiv_source, self._leiz_pixiv_client, self._request_timeout
+            self._pixiv_source,
+            self._leiz_pixiv_client,
+            self._request_timeout,
+            max_pages=self._pixiv_web_max_images,
         )
+        # /yuri 的登录 Cookie：配置项优先，留空回退旧版环境变量。
+        self._yuri_cookie = _resolve_yuri_cookie(config)
         self._yuri_client = PixivWebAPIClient(
             timeout=self._request_timeout,
-            cookie=os.getenv("CURRENTCORTEX_YURI_PIXIV_COOKIE", ""),
+            cookie=self._yuri_cookie,
+            max_pages=self._pixiv_web_max_images,
         )
         logger.info(f"[Pixiv] 当前图片源：{self._pixiv_source}")
 
@@ -4372,6 +4470,96 @@ class CurrentCortexPlugin(Star):
             logger.error(f"[LLMTool] 男娘工具异常: {e}", exc_info=True)
             return f"获取男娘图片时出错：{e}"
 
+    async def _llm_fetch_yuri(
+        self, event: AstrMessageEvent, params: Dict[str, Any]
+    ) -> str:
+        """百合图片工具共用流程：请求 → 渲染 → 发送 → 返回说明。"""
+        client = getattr(self, "_yuri_client", None)
+        if client is None:
+            return "百合图片客户端未初始化，请检查插件日志"
+        try:
+            result = await client.fetch_images(**params)
+            if not self._extract_items(result.get("data", {})):
+                return "未找到符合条件的百合图片"
+            stats = {"sent": 0, "failed": 0}
+            responses = await self._process_yuri_response(
+                result, params, event, stats=stats
+            )
+            for item in responses:
+                try:
+                    await event.send(item)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"[LLMTool] 发送百合图片段失败: {e}")
+            if not stats["sent"]:
+                return "百合图片下载失败，请稍后重试"
+            if stats["failed"]:
+                return (
+                    f"已发送 {stats['sent']} 张百合图片"
+                    f"（{stats['failed']} 张下载失败）"
+                )
+            return f"已发送 {stats['sent']} 张百合图片"
+        except PixivUsageError as e:
+            return f"获取百合图片失败：{e}"
+        except PixivAPIError as e:
+            status = e.status_code or "未知"
+            logger.warning(
+                f"[LLMTool] 百合图片请求失败"
+                f"（{type(e).__name__}，HTTP {status}）"
+            )
+            return "获取百合图片失败，请稍后重试"
+        except Exception as e:  # noqa: BLE001
+            # 上游异常可能包含认证信息，只记录异常类型。
+            logger.error(f"[LLMTool] 百合图片工具异常（{type(e).__name__}）")
+            return "获取百合图片时出错，请稍后重试"
+
+    @filter.llm_tool(name="get_yuri_image")
+    async def llm_tool_yuri(
+        self,
+        event: AstrMessageEvent,
+        keyword: str = "",
+        tags: str = "",
+        num: int = 1,
+        r18: int = -1,
+    ):
+        """获取并发送百合（yuri）主题的 Pixiv 图片。当用户要求看百合图、百合插画时调用。
+
+        Args:
+            keyword(string): 搜索关键词，可选，如「校园」「和风」。
+            tags(string): 额外标签，逗号分隔，如「原创,恋爱」；百合标签始终包含。多标签为 AND。
+            num(number): 获取数量，1-5，默认 1。
+            r18(number): 0=全年龄（默认），1=成人，2=混合。成人/混合需要服务端配置 Pixiv Cookie。
+        """
+        hint = self._llm_tool_guard()
+        if hint:
+            return hint
+        try:
+            level = 0 if int(r18) < 0 else int(r18)
+        except (TypeError, ValueError):
+            level = 0
+        if level not in (0, 1, 2):
+            return "分级仅支持 0（全年龄）/ 1（成人）/ 2（混合）"
+        try:
+            count = max(1, min(5, int(num)))
+        except (TypeError, ValueError):
+            count = 1
+        tag_list = [
+            t.strip()
+            for t in str(tags or "").split(",")
+            if t.strip() and t.strip().casefold() != YURI_TAG.casefold()
+        ]
+        params: Dict[str, Any] = {
+            "tag": [YURI_TAG, *tag_list],
+            "exact_tags": True,
+            "r18": level,
+            "num": count,
+            "size": "regular",
+        }
+        if keyword and str(keyword).strip():
+            params["keyword"] = str(keyword).strip()
+        if getattr(self, "_exclude_ai", False):
+            params["excludeAI"] = True
+        return await self._llm_fetch_yuri(event, params)
+
     @filter.llm_tool(name="play_song")
     async def llm_tool_play_song(self, event: AstrMessageEvent, song_name: str):
         """根据歌曲名搜索并点歌，发送语音条。当用户想听歌、来一首、播放音乐时调用。
@@ -5361,21 +5549,34 @@ class CurrentCortexPlugin(Star):
 
     @filter.command("yuri", alias={"百合"})
     async def yuri_command(self, event: AstrMessageEvent):
-        """获取一张随机的 Pixiv 全年龄百合图片。"""
-        if self._is_help_command(event.message_str):
+        """获取 Pixiv 百合图片，支持分级、标签、搜索、作者与数量筛选。"""
+        message_str = event.message_str.strip()
+        if self._is_help_command(message_str):
             yield event.plain_result(self._with_promo(YURI_HELP_TEXT))
             return
 
-        try:
-            result = await self._yuri_client.fetch_images(
-                tag=["百合"],
-                exact_tags=True,
-                r18=0,
-                num=1,
-                size="regular",
-                excludeAI=self._exclude_ai,
+        if not getattr(self, "_yuri_client", None):
+            yield event.plain_result(
+                "❌ 百合图片客户端未初始化，请检查插件日志或重新加载插件"
             )
-        except Exception as exc:
+            return
+
+        try:
+            params = self._build_yuri_request_params(message_str)
+        except ValueError as exc:
+            yield event.plain_result(
+                f"❌ 参数错误：{exc}\n💡 发送 /yuri 帮助 查看用法"
+            )
+            return
+
+        try:
+            result = await self._yuri_client.fetch_images(**params)
+        except PixivUsageError as exc:
+            # 本地参数/配置错误，消息由本插件生成，可安全展示。
+            logger.warning(f"[Yuri] {exc}")
+            yield event.plain_result(f"❌ {exc}\n💡 发送 /yuri 帮助 查看用法")
+            return
+        except Exception as exc:  # noqa: BLE001
             # 上游错误可能包含认证信息，只记录异常类型和状态码。
             status = exc.status_code if isinstance(exc, PixivAPIError) else 0
             logger.warning(
@@ -5384,29 +5585,8 @@ class CurrentCortexPlugin(Star):
             yield event.plain_result("❌ Pixiv 请求失败，请稍后重试或联系管理员")
             return
 
-        items = self._extract_items(result.get("data", {}))
-        if not items:
-            yield event.plain_result("😕 暂未找到符合条件的全年龄百合图片，请稍后重试")
-            return
-
-        item = items[0]
-        try:
-            path = await self._yuri_client.download_image(item["urls"]["regular"])
-        except Exception as exc:
-            status = exc.status_code if isinstance(exc, PixivAPIError) else 0
-            logger.warning(
-                f"[Yuri] Pixiv 图片下载失败（{type(exc).__name__}，HTTP {status or '未知'}）"
-            )
-            yield event.plain_result("❌ Pixiv 图片下载失败，请稍后重试")
-            return
-
-        caption = "🌸 随机百合图片"
-        pid = str(item.get("pid") or "")
-        if pid.isdigit():
-            caption += f"\n🔗 {PIXIV_ARTWORK_URL.format(pid)}"
-        yield event.chain_result(
-            [Comp.Plain(text=caption), Comp.Image.fromFileSystem(path)]
-        )
+        for item in await self._process_yuri_response(result, params, event):
+            yield item
 
     @filter.command("music", alias={"音乐"})
     async def music_command(self, event: AstrMessageEvent):
@@ -6774,6 +6954,62 @@ class CurrentCortexPlugin(Star):
         logger.info(f"Parsed params: {params}")
         return params
 
+    def _build_yuri_request_params(self, message: str) -> Dict[str, Any]:
+        """构建 /yuri 筛选参数；「百合」标签始终包含，其余标签/关键词为 AND。"""
+        cleaned = re.sub(r"^[/!！]\s*", "", (message or "").strip())
+        names = "|".join(re.escape(name) for name in YURI_COMMAND_ALIASES)
+        cleaned = re.sub(
+            rf"^(?:{names})(?=\s|$)\s*", "", cleaned, flags=re.IGNORECASE
+        )
+        parsed = CommandParser.parse(cleaned, command_name="yuri")
+
+        tags = []
+        for group in parsed.get("tag") or []:
+            group = str(group).strip()
+            if group and group.casefold() != YURI_TAG.casefold():
+                tags.append(group)
+
+        try:
+            num = int(parsed.get("num", 1))
+        except (TypeError, ValueError):
+            num = 1
+        size = str(parsed.get("size", "regular")).strip().lower() or "regular"
+        if size not in YURI_SIZE_ALIASES:
+            raise ValueError("尺寸仅支持 原图 / 常规 / 小图 / 缩略图 / 迷你图")
+        try:
+            level = int(parsed.get("r18", 0))
+        except (TypeError, ValueError):
+            level = 0
+        if level not in (0, 1, 2):
+            raise ValueError("分级仅支持 全年龄 / 成人 / 混合")
+
+        params: Dict[str, Any] = {
+            "tag": [YURI_TAG, *tags],
+            "exact_tags": True,
+            "r18": level,
+            "num": max(1, min(20, num)),
+            "size": size,
+        }
+        if parsed.get("keyword"):
+            params["keyword"] = parsed["keyword"]
+        if parsed.get("uid"):
+            params["uid"] = parsed["uid"]
+        if parsed.get("aspectRatio"):
+            params["aspectRatio"] = parsed["aspectRatio"]
+        if parsed.get("dateAfter") is not None:
+            params["dateAfter"] = parsed["dateAfter"]
+        if parsed.get("dateBefore") is not None:
+            params["dateBefore"] = parsed["dateBefore"]
+
+        exclude_ai = parsed.get("excludeAI")
+        if exclude_ai is None:
+            exclude_ai = self._exclude_ai
+        if exclude_ai:
+            params["excludeAI"] = True
+
+        logger.info(f"[Yuri] Parsed params: {params}")
+        return params
+
     def _prepare_api_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
         api_params = dict(params)
         api_params["proxy"] = self._image_proxy
@@ -6812,22 +7048,146 @@ class CurrentCortexPlugin(Star):
                     item, r18_label, idx=i + 1, total=len(items)
                 )
                 responses.append(event.plain_result(caption))
-                image_url = self._extract_image_url(item)
-                if image_url:
-                    if item.get("source") == "pixiv_web":
+                image_urls = self._extract_image_urls(item)
+                if not image_urls:
+                    responses.append(
+                        event.plain_result("⚠️ 未能提取到图片链接")
+                    )
+                    continue
+                if item.get("source") == "pixiv_web":
+                    for image_url in image_urls:
                         try:
                             path = await self._api_client.download_image(image_url)
-                            responses.append(event.chain_result([Comp.Image.fromFileSystem(path)]))
+                            responses.append(
+                                event.chain_result(
+                                    [Comp.Image.fromFileSystem(path)]
+                                )
+                            )
                         except PixivAPIError as exc:
                             responses.append(event.plain_result(f"⚠️ {exc}"))
-                    else:
-                        responses.append(event.image_result(image_url))
                 else:
-                    responses.append(event.plain_result("⚠️ 未能提取到图片链接"))
+                    for image_url in image_urls:
+                        responses.append(event.image_result(image_url))
             return responses
 
         logger.warning(f"Unknown response type: {response_type}")
         return [event.plain_result("⚠️ API 返回了未知格式的数据，请联系管理员")]
+
+    async def _process_yuri_response(
+        self,
+        result: Dict[str, Any],
+        params: Dict[str, Any],
+        event: AstrMessageEvent,
+        stats: Optional[Dict[str, int]] = None,
+    ) -> List[Any]:
+        """把 /yuri 搜索结果渲染为逐图消息；单张下载失败不影响其余图片。"""
+        items = self._extract_items(result.get("data", {}))
+        if not items:
+            return [
+                event.plain_result(
+                    "😕 暂未找到符合条件的百合图片，请稍后重试或调整筛选参数"
+                )
+            ]
+
+        simple = (
+            len(params.get("tag") or [YURI_TAG]) == 1
+            and not params.get("keyword")
+            and not params.get("uid")
+            and not params.get("aspectRatio")
+            and params.get("dateAfter") is None
+            and params.get("dateBefore") is None
+        )
+        prefix = "🌸 随机百合图片" if simple else "🌸 百合图片"
+        total = len(items)
+        r18_label = self._get_r18_label(params.get("r18", 0))
+        max_images = max(
+            1, int(getattr(self, "_pixiv_web_max_images", 20))
+        )
+        budget = max_images
+        image_paths: List[str] = []
+        collected = []
+        failed = 0
+        truncated = False
+
+        for item_idx, item in enumerate(items, 1):
+            page_urls = self._extract_image_urls(item)
+            if not page_urls:
+                continue
+            work_paths = []
+            page_failures = 0
+            limit_hit = False
+            for url in page_urls:
+                if budget <= 0:
+                    limit_hit = True
+                    truncated = True
+                    break
+                try:
+                    path = await self._yuri_client.download_image(url)
+                except Exception as exc:  # noqa: BLE001
+                    # 上游错误可能包含认证信息，只记录异常类型和状态码。
+                    status = exc.status_code if isinstance(exc, PixivAPIError) else 0
+                    logger.warning(
+                        f"[Yuri] Pixiv 图片下载失败"
+                        f"（{type(exc).__name__}，HTTP {status or '未知'}）"
+                    )
+                    failed += 1
+                    page_failures += 1
+                    continue
+                work_paths.append(path)
+                budget -= 1
+
+            if work_paths:
+                collected.append((item, work_paths, page_failures))
+                image_paths.extend(work_paths)
+
+            if limit_hit:
+                break
+            if budget <= 0 and item_idx < total:
+                # 还有后续作品，但预算已耗尽。
+                truncated = True
+                break
+
+        if not image_paths:
+            if stats is not None:
+                stats["sent"] = 0
+                stats["failed"] = failed
+            return [event.plain_result("❌ Pixiv 图片下载失败，请稍后重试")]
+
+        sent_total = len(collected)
+        blocks = []
+        for idx, (item, _paths, page_failures) in enumerate(collected, 1):
+            block = self._build_caption(
+                item, r18_label, idx=idx, total=sent_total
+            )
+            if block:
+                blocks.append(block)
+            if page_failures:
+                blocks.append(
+                    f"⚠️ 第 {idx} 个作品有 {page_failures} 页下载失败"
+                )
+
+        if sent_total <= 1:
+            caption = prefix + ("\n" + "\n\n".join(blocks) if blocks else "")
+        else:
+            caption = (
+                f"{prefix}（共 {len(image_paths)} 张 / {sent_total} 个作品）"
+                + ("\n\n" + "\n\n".join(blocks) if blocks else "")
+            )
+        if truncated:
+            caption += (
+                f"\n\n⚠️ 已达到单次发送上限 {max_images} 张，其余页面未发送"
+            )
+        if failed:
+            caption += f"\n⚠️ 共 {failed} 页下载失败"
+        if stats is not None:
+            stats["sent"] = len(image_paths)
+            stats["failed"] = failed
+
+        components = [Comp.Plain(text=caption)]
+        components.extend(
+            Comp.Image.fromFileSystem(path) for path in image_paths
+        )
+        return [event.chain_result(components)]
 
     def _extract_items(self, data: Any) -> List[Dict[str, Any]]:
         if isinstance(data, list):
@@ -6844,12 +7204,35 @@ class CurrentCortexPlugin(Star):
                         return [item for item in v if isinstance(item, dict)]
         return []
 
+    def _extract_image_urls(self, item: Dict[str, Any]) -> List[str]:
+        """返回作品的全部页面 URL；无组图信息时退回首图。"""
+        if not isinstance(item, dict):
+            return []
+        page_urls = item.get("page_urls")
+        if isinstance(page_urls, list):
+            urls = [
+                url
+                for url in page_urls
+                if isinstance(url, str) and url.startswith("http")
+            ]
+            if urls:
+                return urls
+        url = self._extract_image_url(item)
+        return [url] if url else []
+
     def _extract_image_url(self, item: Dict[str, Any]) -> Optional[str]:
         if not isinstance(item, dict):
             return None
         if isinstance(item.get("urls"), dict):
             urls = item["urls"]
-            preferred_order = ["regular", "original", "small", "thumb", "mini"]
+            preferred_order = [
+                "regular",
+                "original",
+                "small",
+                "thumb",
+                "thumb_mini",
+                "mini",
+            ]
             for size in preferred_order:
                 if urls.get(size):
                     return urls[size]
@@ -6895,6 +7278,20 @@ class CurrentCortexPlugin(Star):
                 else:
                     tag_names.append(str(t))
             parts.append(f"🏷️ 标签：{' / '.join(tag_names)}")
+
+        page_count = int(item.get("page_count") or 0)
+        page_urls = item.get("page_urls") or []
+        sent_pages = len(page_urls) if isinstance(page_urls, list) else 0
+        if page_count > 1:
+            if sent_pages > 1:
+                note = f"🖼️ 组图：共 {page_count} 页"
+                if sent_pages < page_count:
+                    note += f"（仅发送前 {sent_pages} 页）"
+                parts.append(note)
+            else:
+                parts.append(
+                    f"🖼️ 组图：共 {page_count} 页（本次仅发送首张）"
+                )
 
         if r18_label:
             parts.append(r18_label)

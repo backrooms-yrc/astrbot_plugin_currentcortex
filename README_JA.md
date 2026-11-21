@@ -1,5 +1,9 @@
 # AstrBot CurrentCortex 統合プラグイン
 
+AstrBot で Pixiv の画像検索、楽曲リクエスト、メディアリンク解析ができます。地震早期警報、気象警報、DG-LAB デバイス操作、Wikidot サイト管理にも対応しています。Pages でプラグインを管理し、チャットコマンドでグループごとに機能を切り替えられます。
+
+[はじめに](#-はじめに) · [コマンド一覧](#コマンド一覧) · [最新リリース](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/releases/latest) · [変更履歴](CHANGELOG.md)
+
 **[简体中文](README.md)** | **[English](README_EN.md)** | **[日本語](README_JA.md)** | **[繁體中文](README_ZH-TW.md)**
 
 ![アクセス数](https://count.getloli.com/get/@backrooms-yrc-currentcortex?theme=moebooru)
@@ -49,14 +53,6 @@
 
 </details>
 
-<div align="center">
-
-**オールインワン型 AstrBot プラグイン** — コンテンツ取得・メディア解析・デバイス制御・グループ横断メモリをひとつに。
-
-Pixiv ランダム画像 · Hitokoto · 天気照会 · 男の娘画像 · 網易雲音楽リクエスト · 小紅書/Bilibili/Douyin/Weibo 解析 · DG-LAB デバイス管理 · グループ横断メモリ · LLM ツール（AI 自律呼び出し）· 分割返信
-
-</div>
-
 ---
 
 > 💬 **プラグイン公式 QQ グループ**：**1106353813**（[クリックして参加](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFBR1hSV1djMSswSHI4MEpmQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)）
@@ -64,7 +60,7 @@ Pixiv ランダム画像 · Hitokoto · 天気照会 · 男の娘画像 · 網�
 > どなたでも歓迎です！グループではアップデート通知の発信、問題・提案のフィードバック、使い方の交流ができ、開発者も質問に回答しています。
 > バグを見つけたときや新機能のアイデアがあるときは、グループ内でメンテナーにメンションするか、[GitHub Issues](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/issues) までお寄せください。
 >
-> ⚠️ **本グループは CurrentCortex プラグインのコミュニティグループであり、[LeiZ API](https://api.bileizhen.top) 公式とは無関係です**。本プラグインは LeiZ API を利用して開発された**サードパーティ（コミュニティ）プラグイン**です。LeiZ API 自体の登録、キー取得、課金、障害などの問い合わせは LeiZ API 公式サイトと公式チャンネルにてお願いします。グループ内では受け付けていません。
+> CurrentCortex のグループではプラグインの使い方や不具合について相談できます。アカウント登録、API キー、課金、API 障害については LeiZ API の公式窓口へお問い合わせください。[LeiZ API 公式サイト](https://api.bileizhen.top)
 
 ---
 
@@ -81,7 +77,7 @@ Pixiv ランダム画像 · Hitokoto · 天気照会 · 男の娘画像 · 網�
   - [6. 男の娘画像](#6-男の娘画像-femboy)
   - [7. DG-LAB デバイス管理](#7-dg-lab-デバイス管理-dglab)
   - [8. 地震早期警報](#8-地震早期警報-地震別名-earthquake-eq-预警)
-  - [9. 百合画像](#9-百合画像)
+  - [9. 百合画像](#9-百合画像yuri別名-百合)
 - [🖥️ 総合 Pages](#️-総合-pages)
 - [🧩 グループ別スイッチ](#-グループ別スイッチ)
 - [✂️ 分割返信](#️-分割返信)
@@ -100,16 +96,17 @@ Pixiv ランダム画像 · Hitokoto · 天気照会 · 男の娘画像 · 網�
 
 | モジュール | 機能 |
 | --- | --- |
-| 🎨 **Pixiv ランダム画像** | ランダム取得 / R18 / タグ絞り込み / キーワード検索 / 作者指定 / アスペクト比フィルタ / AI 生成作品の除外 |
-| 🔍 **メディア解析** | 小紅書の投稿・動画 · Bilibili 動画情報 · Douyin の透かしなし動画 · Weibo の投稿・動画 |
-| 📚 **メディアリンク解析** | 小紅書 / Bilibili / Douyin / Weibo のリンク解析 |
+| 🎨 **Pixiv 画像** | 既定は全年齢作品の匿名検索です。キーワード、タグ、作者、アスペクト比で絞り込めるほか、AI 生成作品を除外できます。R18 と混合モードには LeiZ ソースとキーが必要です。 |
+| 🌸 **百合画像** | `/yuri` は年齢区分・タグ・キーワード検索・作者・枚数・サイズに対応。既定は全年齢、成人/混合は Pixiv ログイン Cookie が必要です。 |
+| 🔍 **メディアリンク解析** | 小紅書の投稿・動画、Bilibili の動画情報、Douyin の透かしなし動画、Weibo の投稿・動画に対応します。 |
 | 🎵 **楽曲リクエスト** | 3 音源並列最良選択（自前網易雲SVIP / 網易雲 / 酷狗）· ロスレス/ハイレゾ/パノラミックサウンド/イマーシブサラウンド/ウルトラクリアマスター · 数字ティア指定 · 音声クリップ/オリジナルファイル · ダウンロード進捗通知 |
 | ✨ **Hitokoto** | 12分類（アニメ／漫画／ゲーム／文学／詩詞／映画…） |
 | 🌤️ **天気照会** | 現在の天気＋3日間予報 |
 | 👗 **男の娘画像** | ランダムな男の娘テーマ画像（WebP） |
 | 🔌 **DG-LAB** | Socket V3/V4（旧 V2 互換）によるデバイスライフサイクル管理、プロトコル自動判定、マルチユーザー／マルチデバイス分離、CCDG WebUI コントロールパネル |
-| 📖 **Wikidot サイト管理** | v2.3.0 新機能：Wikidot フロントエンド JS インターフェースでページ編集（ソース／書き込み／追記／タグ／リネーム／削除）とサイト管理（メンバー／設定／フォーラム／招待）（`/wikidot`）。既定は無効 |
+| 📖 **Wikidot サイト管理** | 機能を有効にすると、`/wikidot` でページ編集やメンバー、設定、フォーラム、招待の管理ができます。 |
 | 🌏 **地震早期警報** | CENC／四川・雲南／福建／JMA の早期警報＋CENC 速報＋USGS を集約。グループ単位のホワイトリスト制。都市名・複数都市・カウントダウン開關に対応。Pages から模擬/極限演習も可能 |
+| ⛅ **気象警報** | 登録都市を対象とする中国気象台の警報と防災指針をグループに配信します。既定では黄色以上の警報が対象です。 |
 | 🖥️ **総合 Pages** | AstrBot WebUI 統合の総合パネル：ダッシュボード · ヘルプセンター · ビジュアル設定（保存でホットリロード）· DG-LAB 制御（中継サーバーのワンクリックデプロイ・公開トグル）· お問い合わせ |
 | 🧩 **グループ別スイッチ** | `/toggle` コマンドで特定グループだけ本プラグインの全コマンドをオン/オフ（時間指定オフ・自動復帰、機能ドメイン別のスコープ制御に対応）、他グループに影響しません |
 | 🧠 **グループ横断メモリ** | 同一プラットフォームの全グループで永続化コンテキストを共有し、LLM リクエストに自動注入（期間フィルタ、LLM 要約圧縮、キーワード削除に対応） |
@@ -136,6 +133,11 @@ cd AstrBot/data/plugins
 git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 ```
 
+**マーケットからのダウンロードで `Temporary failure in name resolution` が表示される場合**、AstrBot が ZIP を取得する際に DNS の名前解決に失敗しています。AstrBot を実行しているサーバーまたはコンテナ内で、ログに記載されたダウンロード先のホスト名を確認してください。例として `getent hosts astrbot-cloud-test-s3.astrbot.app` を実行できます。その環境の DNS が復旧したら、マーケットからの更新を再試行できます。
+
+- **インストール済みの場合**：AstrBot から GitHub にアクセスできる場合は、プラグインカードの「⋯」メニューで取得元をリポジトリ URL に切り替え、更新します。「再インストール」と表示される場合は「強制更新」で続行できます。先にアンインストールせずに、本プロジェクトの GitHub リポジトリのデフォルトブランチから取得できます。
+- **初めてインストールする場合**：GitHub にアクセスできる端末で [GitHub Releases](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/releases) から目的のバージョンの **Source code (zip)** をダウンロードし、AstrBot のファイルからのインストール画面で ZIP をアップロードします。
+
 ### 2. 検証コードの記入 (必須)
 
 > 🔒 **2026-09-20** 以降、プラグイン濫用に伴う一連の問題により、本プラグインは検証コード機構を有効化しています。
@@ -148,9 +150,11 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 > ユーザーの皆様へ：プラグイン濫用に伴う一連の問題により、2026 年 9 月 20 日より、CurrentCortex プラグイン公式 QQ グループ（1106353813）にご参加のうえ検証コードを取得し、プラグイン設定の「検証コード」（verify_code）項目にご記入いただく必要があります。
 > 💡 [👉 ここをクリックしてグループに参加](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)。検証コードの取得は完全に無料です。寄付は全くの任意で、寄付ユーザーと一般ユーザーの権益に一切違いはありません。
 
+インストールと検証コードの保存が済んだら、チャットで `/pixiv 搜索 风景 数量 1` または `/yuri` を試せます。`/cc` でコマンドの一覧を表示します。
+
 ### 3. API キー設定 (任意)
 
-> 🔐 **LeiZ API キーは任意です**：未設定でも、LeiZ に関係ない機能（Bilibili／Douyin／小紅書／Weibo 解析、DG-LAB、Wikidot、グループ横断メモリなど）は正常に動作します。**楽曲リクエストは自前の網易雲SVIP音源へ自動ルーティング**されます（本キー不要、最高でウルトラクリアマスターまで）。Pixiv（LeiZ ソースのみ） / Hitokoto / 天気 / 男の娘 / 網易雲 / 酷狗 など LeiZ 系機能は、トリガー時に設定を促す表示が出ます。
+既定の Pixiv ソースと `/yuri` は匿名で利用できます。`leiz_api_key` を設定すると、LeiZ の Pixiv ソース、Hitokoto、天気、男の娘画像、音楽ソースが利用できます。キーが未設定の場合、音楽の `auto` モードでは自前の網易雲 SVIP 音源を使います。
 
 #### ステップ1：API キーを取得
 
@@ -172,17 +176,16 @@ AstrBot 管理パネル → プラグイン管理 → 本プラグイン → 設
 
 ### 4. 依存関係のインストール
 
+手動でインストールする場合は、プラグインのディレクトリで AstrBot を実行する Python を使って次のコマンドを実行します。
+
 ```bash
-pip install aiohttp>=3.8.0
-pip install websockets>=10.0   # DG-LAB 機能のみ必要
+python -m pip install -r requirements.txt
 ```
 
 ### 動作環境
 
 - **AstrBot** >= 4.15（< 5。`EventMessageType`、ハンドラー `priority`、`ProviderRequest` など比較的新しい API を使用）
 - **Python** >= 3.10
-- **aiohttp** >= 3.8.0
-- **websockets** >= 10.0（DG-LAB 機能に必須）
 - **ffmpeg**（網易雲ボイス機能に必要。システム PATH 上にあること）
 
 ---
@@ -193,7 +196,7 @@ pip install websockets>=10.0   # DG-LAB 機能のみ必要
 
 ### コマンド一覧
 
-すべてのコマンドは中国語・英語のエイリアスに対応しています：
+表にあるコマンドまたはエイリアスをそのまま入力してください。
 
 | コマンド | エイリアス | 機能 |
 | --- | --- | --- |
@@ -209,7 +212,7 @@ pip install websockets>=10.0   # DG-LAB 機能のみ必要
 | `/hitokoto` | `/一言` | Hitokoto（ひとこと） |
 | `/weather` | `/天气` | 天気照会 |
 | `/femboy` | `/男娘` | 男の娘画像 |
-| `/yuri` | `/百合` | Pixiv の全年齢向け百合画像をランダムに取得 |
+| `/yuri` | `/百合` | 百合画像：ランダム / 検索 / タグ / 作者 / 等級 |
 | `/dglab` | `/电击` | DG-LAB デバイス管理 |
 | `/地震` | `/earthquake` `/eq` `/预警` | グループホワイトリスト式の地震早期警報（群主／管理者が有効化。基本情報→カウントダウン） |
 | `/气象预警` | `/天气预警` | 中国気象台の気象警報（都市行政区で照合、レベルフィルター付き） |
@@ -304,6 +307,8 @@ pip install websockets>=10.0   # DG-LAB 機能のみ必要
 ```
 
 > 💡 **ランダムと検索の切替**：`tag`/`keyword`/`uid`/`ratio`/`excludeAI` などのフィルタがない場合は GET ランダムエンドポイント（毎回結果が変わる）、いずれかのフィルタがあると自動で POST 検索エンドポイントに切り替わります。
+
+> 🖼️ **複数ページ作品**：`pixiv_web` ソースでは複数ページ作品の全ページを送信します。上限は `pixiv_web_max_images`（既定 20 ページ/作品）で、超過時はキャプションに注記します。`num` は作品数です。
 
 ---
 
@@ -622,11 +627,45 @@ DG-LAB Socket プロトコル経由で DG-LAB パルスコントローラーを�
 
 ---
 
-### 9. 百合画像
+### 9. 百合画像（`/yuri`、別名 `/百合`）
 
-`/yuri` または `/百合` を送ると、Pixiv の「百合」タグから全年齢向け画像をランダムに 1 枚選び、作品リンクと同じメッセージで返します。`/yuri help` または `/百合 帮助` でヘルプを表示します。`exclude_ai` とグループ別の `/开关 off image` の設定が適用されます。
+Pixiv の「百合」タグから画像を取得します。`/yuri` は既定で全年齢画像を 1 枚返し、中国語サブコマンドと絞り込みパラメータを付けると、キーワード検索・タグ追加・作者指定・枚数・サイズ・年齢区分を指定できます。`exclude_ai` とグループ別の `/开关 off image` 設定が適用されます。
 
-サーバーから `www.pixiv.net` と `i.pximg.net` に直接接続します。既定は匿名アクセスで、LeiZ キーは不要です。ログインが必要な場合は、AstrBot プロセスの環境変数 `CURRENTCORTEX_YURI_PIXIV_COOKIE` に Cookie の値を設定し、AstrBot を再起動してください。Cookie は、このコマンドの Pixiv 検索と作品詳細の取得にのみ使われます。
+#### コマンド
+
+| コマンド | 説明 |
+| --- | --- |
+| `/yuri`（`/百合`） | 全年齢の百合画像をランダムに 1 枚 |
+| `/yuri 随机 [条件]` | 同上（条件指定可） |
+| `/yuri 搜索 <キーワード> [条件]` | キーワード検索（「百合」タグは常に付加） |
+| `/yuri 标签 <タグ…> [条件]` | タグ追加（複数は AND、`\|` は OR） |
+| `/yuri 作者 <UID> [条件]` | 作者 UID 指定 |
+| `/yuri 帮助` | ヘルプ表示 |
+
+条件は `/pixiv` と同じ `key value` 形式（中国語・英語併用可）：`数量`/`num`（作品数、1-20、複数ページ作品はページごとに展開）、`尺寸`/`size`（`原图`/`常规`/`小图`/`缩略图`/`迷你图` = original/regular/small/thumb/mini）、`分级`/`r18`（`全年龄`/`成人`/`混合` = 0/1/2）、`排除AI`/`excludeAI`、`比例`/`ratio`、`起始时间`/`结束时间`（ミリ秒）、`标签`/`tag`、`关键词`/`keyword`、`作者`/`uid`。「百合」タグは常に含まれます。既定は全年齢・1 枚・regular サイズで、`/pixiv` の `default_*` 設定は適用されません。
+
+```text
+/yuri
+/yuri 搜索 校园 数量 3
+/yuri 标签 原创 恋爱 尺寸 原图
+/yuri 标签 校园|社会人 排除AI 是
+/yuri 作者 123456 数量 2
+/yuri 分级 成人 数量 1
+/yuri r18 1 tag 白丝 num 3
+```
+
+**年齢区分：** 匿名アクセスは全年齢のみです。成人（R-18/R-18G）と混合は Pixiv の `mode=r18` / `mode=all` を使い、「ログイン済みで R18 表示を有効にしたアカウント」の Cookie が必要です：
+
+- **推奨**：プラグイン設定の **`yuri_pixiv_cookie`** に記入するか、**総合 Pages → 設定 → Pixiv 画像** から記入。保存するとホットリロードで反映されます。Cookie ヘッダ全体でも、`PHPSESSID` の値だけでも可（`PHPSESSID=` は自動補完）。
+- **互換**：サーバー環境変数 `CURRENTCORTEX_YURI_PIXIV_COOKIE` も使用可（設定項目が優先され、空のときだけ環境変数を読みます）。
+
+両方とも空の場合は明確なエラーを返し、全年齢へ黙って降格しません。Cookie が未ログイン/期限切れ、またはアカウントで R18 表示が無効な場合も、それぞれ具体的な理由を案内します。Cookie は `/yuri` の検索と作品詳細にのみ使われ、ログには出ず、画像 CDN リクエストには付与されません。
+
+> **LeiZ について：** LeiZ には百合画像専用のエンドポイントがないため、`/yuri` は LeiZ を使わず、`pixiv_source` の影響も受けません。LeiZ 図庫を使う場合は `/pixiv 标签 百合`（成人は `pixiv_source=leiz` に切替）を利用してください。
+
+全画像を**1 通のメッセージ**にまとめて送信し、説明文にタイトル・作者・作品リンク・タグ・サイズを添えます。複数作品は `[i/n]` 付き。成人/混合には R-18 警告が付きます。ダウンロードに失敗した画像はスキップし、メッセージ内で通知します。サーバーは `www.pixiv.net` と `i.pximg.net` に接続できる必要があります。
+
+Pixiv の複数ページ作品は全ページを含めます。既定の上限は 1 回 20 枚（`pixiv_web_max_images`、1-100）。超過時は残りページを送信しなかった旨をメッセージ内に表示します。`数量` は作品数です。
 
 ---
 
@@ -640,8 +679,7 @@ DG-LAB Socket プロトコル経由で DG-LAB パルスコントローラーを�
 | --- | --- |
 | 📊 **ダッシュボード** | プラグインの稼働概要：稼働時間、バインド済みデバイス、アクティブ接続、登録ユーザー、プラグインのバージョン／作者／起動時刻、機能トグルの状態 |
 | 🌏 **地震早期警報** | ホワイトリストグループ管理／複数都市／情報源の状態／最近のイベント／今すぐ確認／**模擬警報**と**極限演習**（実警報と同一メッセージ・確認語必須） |
-| ⛅ **気象警報** | 中国気象台（nmc.cn）全国警報（台風・暴雨・濃霧・寒波など）；省市区パスでグループの关注都市を照合；レベルフィルター（既定は黄色以上）；本文と防災指針を添付 |
-| ⛅ **気象警報** | ホワイトリストと关注都市／中国気象台の状態／最近の配信／今すぐ確認 |
+| ⛅ **気象警報** | 対象グループと登録都市の管理／中国気象台の状態／最近の配信／今すぐ確認 |
 | 📖 **ヘルプセンター** | 内蔵ドキュメントと FAQ（はじめに／地震早期警報／気象警報／DG-LAB／分割返信／グループ横断メモリ／トラブルシューティング） |
 | ⚙️ **設定** | 全プラグイン設定をビジュアルに編集。各項目には分かりやすい名前と平易な説明付き。保存すると**自動でホットリロード**され、再起動不要 |
 | ⚡ **DG-LAB 制御** | 中継サーバーのワンクリックデプロイ（v3/v4・公開トグル）＋ CCDG WebUI のマスタースイッチ＋**公開トグル**（下記参照） |
@@ -777,13 +815,14 @@ DG-LAB 制御ページでは、公式 v3 / v4 中継サーバー（[dglab-websoc
 
 > ⚠️ ショック制御は物理デバイスを操作し、安全上のリスクを伴います。安全を確認したうえで有効にしてください。すべてのツールは実行の最初でマスタースイッチを確認し、オフの場合は実行せずメッセージを返します。
 
-#### 登録されるツール一覧（全11個）
+#### 登録されるツール一覧
 
 | 分類 | ツール名 | パラメータ | 説明 |
 | --- | --- | --- | --- |
 | 🖼️ 画像 | `get_pixiv_random` | num, r18 | ランダムな二次元イラスト |
 | 🖼️ 画像 | `search_pixiv` | keyword, num, r18 | キーワードでイラスト検索 |
 | 🖼️ 画像 | `get_pixiv_by_tags` | tags, num, r18 | タグで精密絞り込み（複数タグ AND） |
+| 🌸 百合 | `get_yuri_image` | keyword, tags, num, r18 | キーワード/タグで百合画像を取得 |
 | 👗 男の娘 | `get_femboy_image` | なし | ランダムな男の娘画像 |
 | 🎵 リクエスト | `play_song` | song_name | 検索してリクエスト（ボイス） |
 | ⚡ ショック | `dglab_shock` | channel, strength, wave, duration, device_index | ショック開始 |
@@ -863,7 +902,9 @@ LeiZ 上流エンドポイント全部の認証・接続状態を一括診断し
 
 | 設定項目 | 型 | デフォルト | 説明 |
 | --- | --- | --- | --- |
-| `pixiv_source` | string | pixiv_web | 匿名の全年齢検索。従来のソースは leiz（LeiZ キーが必要） |
+| `pixiv_source` | string | pixiv_web | 匿名の全年齢検索。従来のソースは leiz（LeiZ キーが必要）。`/pixiv` のみに影響し、`/yuri` は常に Pixiv ウェブ API を使用（R18 は Cookie が必要） |
+| `yuri_pixiv_cookie` | string | （空） | `/yuri` の成人/混合向け Pixiv ログイン Cookie。ログイン済みで R18 表示を有効にしたアカウントが必要。空の場合は環境変数 `CURRENTCORTEX_YURI_PIXIV_COOKIE` にフォールバックし、両方空なら全年齢のみ |
+| `pixiv_web_max_images` | int | 20 | `pixiv_web` ソースの複数ページ上限：1 作品あたり取得/送信する最大ページ数（1-100）。`/yuri` では 1 通の総画像上限としても使用 |
 | `default_r18` | int | 0 | デフォルトの R18 モード（0=全年齢、1=R18のみ、2=ミックス） |
 | `default_num` | int | 1 | デフォルトの1回あたり取得枚数（1-20） |
 | `default_size` | string | regular | デフォルトの画像サイズ（original/regular/small/thumb/mini） |
@@ -970,7 +1011,7 @@ v1.2.0 以前は JSON 文字列の設定を使っていました（非推奨）�
 <summary><b>インストール後にプラグインが読み込まれない？</b></summary>
 
 1. Python が 3.10 以上か
-2. 依存関係はインストール済みか：`pip install aiohttp>=3.8.0`（DG-LAB にはさらに `websockets>=10.0`）
+2. AstrBot の Python 環境に必要なパッケージが入っているかを確認します。[依存関係のインストール](#4-依存関係のインストール)
 3. AstrBot が 4.15 以上か（本プラグインは比較的新しい API が必要で、旧版では読み込めません）
 4. AstrBot ログのエラーメッセージを確認
 
@@ -1019,7 +1060,7 @@ v1.2.0 以前は JSON 文字列の設定を使っていました（非推奨）�
 <details>
 <summary><b>DG-LAB 機能が使えない／バインドに失敗する？</b></summary>
 
-1. 依存関係はインストール済みか：`pip install websockets>=10.0`
+1. AstrBot の Python 環境に `websockets>=10.0` が入っているかを確認します。[依存関係のインストール](#4-依存関係のインストール)
 2. `dglab_server_url` は設定済みか。中継サーバーが起動してアクセス可能か
 3. QR コードは有効期限内にアプリでスキャンしたか
 4. アプリが Socket V2 に対応していること、対応デバイスが **DG-LAB 3.0 パルスコントローラー**のみであることを確認
@@ -1150,7 +1191,7 @@ Issue と PR を歓迎します！バグ報告・機能提案には Issue テン
 
 ---
 
-**バージョン**：v2.12.0（バージョンごとの変更は [CHANGELOG.md](CHANGELOG.md) を参照）
+**バージョン**：v2.13.0（バージョンごとの変更は [CHANGELOG.md](CHANGELOG.md) を参照）
 **リポジトリ**：[GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
 
 

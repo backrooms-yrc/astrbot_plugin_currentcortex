@@ -1,5 +1,9 @@
 # AstrBot CurrentCortex All-in-One Plugin
 
+Search Pixiv, request songs, and parse media links in AstrBot. CurrentCortex also provides earthquake and weather alerts, DG-LAB device controls, and Wikidot site management. Use Pages to manage the plugin and toggle features per group through chat commands.
+
+[Quick Start](#-quick-start) · [Command Cheat Sheet](#command-cheat-sheet) · [Latest Release](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/releases/latest) · [Changelog](CHANGELOG.md)
+
 **[简体中文](README.md)** | **[English](README_EN.md)** | **[日本語](README_JA.md)** | **[繁體中文](README_ZH-TW.md)**
 
 ![Visitors](https://count.getloli.com/get/@backrooms-yrc-currentcortex?theme=moebooru)
@@ -49,14 +53,6 @@
 
 </details>
 
-<div align="center">
-
-**An all-in-one AstrBot plugin** — content fetching, media parsing, device control, and cross-group memory in a single package.
-
-Pixiv random images · Hitokoto quotes · Weather · Femboy images · NetEase Cloud Music song requests · Xiaohongshu/Bilibili/Douyin/Weibo parsing · DG-LAB device management · Cross-group memory · LLM tools (AI-initiated calls) · Segmented replies
-
-</div>
-
 ---
 
 > 💬 **Official plugin QQ group**: **1106353813**, [click to join](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFBR1hSV1djMSswSHI4MEpmQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)
@@ -64,7 +60,7 @@ Pixiv random images · Hitokoto quotes · Weather · Femboy images · NetEase Cl
 > Everyone is welcome! The group is where update notices get posted, where you can report problems and suggest features, and where the developer answers questions.
 > Found a bug or have an idea? Ping the maintainer in the group, or open an issue on [GitHub Issues](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/issues).
 >
-> ⚠️ **This group is a community group for the CurrentCortex plugin and is not affiliated with [LeiZ API](https://api.bileizhen.top)**. This plugin is a **community (third-party) plugin** built on top of LeiZ API. Questions about LeiZ API itself — registration, obtaining keys, billing, or service outages — should go to the official LeiZ API website and its official channels, not this group.
+> The CurrentCortex group handles plugin support and feedback. Contact LeiZ API through its official channels for account registration, API keys, billing, and service outages. [LeiZ API website](https://api.bileizhen.top)
 
 ---
 
@@ -81,7 +77,7 @@ Pixiv random images · Hitokoto quotes · Weather · Femboy images · NetEase Cl
   - [6. Femboy Images](#6-femboy-images-femboy)
   - [7. DG-LAB Device Management](#7-dg-lab-device-management-dglab)
   - [8. Earthquake Early Warning](#8-earthquake-early-warning-地震-alias-earthquake-eq-预警)
-  - [9. Yuri Images](#9-yuri-images)
+  - [9. Yuri Images](#9-yuri-images-yuri-alias-百合)
 - [🖥️ Master Pages](#️-master-pages)
 - [🧩 Per-Group Toggle](#-per-group-toggle)
 - [✂️ Segmented Replies](#️-segmented-replies)
@@ -100,16 +96,17 @@ Pixiv random images · Hitokoto quotes · Weather · Femboy images · NetEase Cl
 
 | Module | Capabilities |
 | --- | --- |
-| 🎨 **Pixiv Random Images** | Random picks / R18 / tag filtering / keyword search / by-author / aspect-ratio filtering / exclude AI works |
-| 🔍 **Media Parsing** | Xiaohongshu posts & videos · Bilibili video info · Douyin videos without watermark · Weibo posts & videos |
-| 📚 **Media Content Parsing** | Link parsing for Xiaohongshu / Bilibili / Douyin / Weibo |
+| 🎨 **Pixiv Images** | Anonymous all-ages search by keyword, tag, or artist, with aspect-ratio and AI filters. R18 and mixed ratings require the LeiZ source and key. |
+| 🌸 **Yuri Images** | `/yuri` supports age ratings, tags, keyword search, artist, count, and size; all-ages by default, adult/mixed requires a Pixiv login Cookie. |
+| 🔍 **Media Link Parsing** | Xiaohongshu posts and videos, Bilibili video details, watermark-free Douyin videos, and Weibo posts and videos. |
 | 🎵 **Song Requests** | Song requests · three parallel sources with best-quality selection (self-hosted NetEase SVIP / NetEase / Kugou) · Lossless/Hi-Res/Panoramic/Immersive Surround/Master tiers · numeric tier selection · voice clip / original file · download progress notices |
 | ✨ **Hitokoto** | 12 categories (anime / manga / games / literature / poetry / film …) |
 | 🌤️ **Weather** | Current conditions + 3-day forecast |
 | 👗 **Femboy Images** | Random femboy-themed images (WebP) |
 | 🔌 **DG-LAB** | Full device lifecycle management over Socket V3/V4 (legacy V2 compatible), protocol auto-detection, multi-user/multi-device isolation, CCDG WebUI control panel |
-| 📖 **Wikidot Site Management** | NEW in v2.3.0: edit pages (source / write / append / tags / rename / delete) and manage the site (members / settings / forum / invitations) via Wikidot's front-end JS interface (`/wikidot`). Disabled by default |
+| 📖 **Wikidot Site Management** | Edit pages and manage members, settings, forums, and invitations with `/wikidot` after enabling the module. |
 | 🌏 **Earthquake Early Warning** | Aggregates CENC / Sichuan-Yunnan / Fujian / JMA EEW plus CENC reports and USGS; per-group whitelist; sends basic info first, then a per-group S-wave arrival countdown; simulated drills from Pages |
+| ⛅ **Weather Alerts** | Sends China Meteorological Administration alerts and guidance to groups watching affected cities. Defaults to yellow alerts and above. |
 | 🖥️ **Master Pages** | All-in-one panel integrated into the AstrBot WebUI: dashboard · help center · visual settings (hot-reload on save) · DG-LAB control (one-click relay server deployment · public-exposure toggle) · contact us |
 | 🧩 **Per-Group Toggle** | Turn plugin commands on/off per group with `/toggle` (timed auto-recovery and per-category scope control supported), without affecting other groups |
 | 🧠 **Cross-Group Memory** | All groups on a platform share one persistent context, automatically injected into LLM requests (with optional age filtering, LLM summarization, and keyword-based cleanup) |
@@ -136,6 +133,11 @@ cd AstrBot/data/plugins
 git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 ```
 
+**Marketplace download reports `Temporary failure in name resolution`?** AstrBot hit a DNS error while downloading the ZIP. Check whether the download hostname in the log resolves from the server or container running AstrBot, for example with `getent hosts astrbot-cloud-test-s3.astrbot.app`. Retry the marketplace update after DNS is restored there.
+
+- **Already installed**: If AstrBot can reach GitHub, open the plugin card’s “⋯” menu, choose “Change Plugin Source”, select the repository URL, and confirm. Then choose “Update”, or “Reinstall” and “Force Update” if that is what the panel shows. This downloads the default branch of this project’s GitHub repository without uninstalling the plugin first.
+- **First installation**: On a device that can reach GitHub, download **Source code (zip)** for the desired version from [GitHub Releases](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/releases). Upload the ZIP under “Install Plugin” → “Install from File” in AstrBot.
+
 ### 2. Fill In the Verification Code (Required)
 
 > 🔒 Since **2026-09-20**, due to a series of problems caused by plugin abuse, this plugin uses a verification-code gate.
@@ -148,9 +150,11 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 > Dear user: due to a series of problems caused by plugin abuse, since September 20, 2026, you must join the CurrentCortex plugin's official QQ group (1106353813) to obtain a verification code, then fill it into the plugin config's `verify_code` (verification code) option.
 > 💡 [👉 Click to join the group directly](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info). Obtaining the code is completely free and donations are strictly voluntary — donors and regular users enjoy exactly the same privileges.
 
+Once the plugin is installed and the verification code is saved, send `/pixiv 搜索 风景 数量 1` or `/yuri` in chat to try the image commands. Use `/cc` for the full command list.
+
 ### 3. Configure Your API Key (Optional)
 
-> 🔐 **LeiZ API Key is optional**: without it, non-LeiZ features work normally; **song requests automatically route to the self-hosted NetEase SVIP source** (which doesn't depend on this key — quality goes up to Ultra-Clear Master); LeiZ-based features (Pixiv (LeiZ source only) / Hitokoto / weather / femboy / NetEase / Kugou) prompt the user to configure it when triggered.
+The default Pixiv source and `/yuri` support anonymous access. Set `leiz_api_key` to use the LeiZ Pixiv source, Hitokoto, weather, femboy images, and LeiZ music sources. With the key unset, the `auto` music mode uses the self-hosted NetEase SVIP source.
 
 #### Step 1: Get an API Key
 
@@ -172,17 +176,16 @@ Without a key, LeiZ-based commands (Pixiv (LeiZ source only) / Hitokoto / weathe
 
 ### 4. Install Dependencies
 
+For a manual installation, run this in the plugin directory with AstrBot's Python interpreter.
+
 ```bash
-pip install aiohttp>=3.8.0
-pip install websockets>=10.0   # only needed for DG-LAB features
+python -m pip install -r requirements.txt
 ```
 
 ### System Requirements
 
 - **AstrBot** >= 4.15 (< 5; relies on newer APIs such as `EventMessageType`, handler `priority`, and `ProviderRequest`)
 - **Python** >= 3.10
-- **aiohttp** >= 3.8.0
-- **websockets** >= 10.0 (required for DG-LAB features)
 - **ffmpeg** (needed for voice-clip song requests; must be on the system PATH)
 
 ---
@@ -193,7 +196,7 @@ pip install websockets>=10.0   # only needed for DG-LAB features
 
 ### Command Cheat Sheet
 
-Every command accepts both Chinese and English aliases:
+Enter the command or any alias listed in the table.
 
 | Command | Aliases | What it does |
 | --- | --- | --- |
@@ -209,7 +212,7 @@ Every command accepts both Chinese and English aliases:
 | `/hitokoto` | `/一言` | Hitokoto quote |
 | `/weather` | `/天气` | Weather lookup |
 | `/femboy` | `/男娘` | Femboy image |
-| `/yuri` | `/百合` | Random all-ages yuri image from Pixiv |
+| `/yuri` | `/百合` | Yuri images: random / search / tags / artist / rating |
 | `/dglab` | `/电击` | DG-LAB device management |
 | `/地震` | `/earthquake` `/eq` `/预警` | Group-whitelisted earthquake early warning (owner/admin enables; basic info then countdown) |
 | `/气象预警` | `/天气预警` | Group-whitelisted weather alerts from CMA (matched by city districts, severity filter) |
@@ -304,6 +307,8 @@ Use Chinese subcommands after `/pixiv`, with **spaces between parameter names an
 ```
 
 > 💡 **Random vs. search routing**: with no filter parameters (`tag`/`keyword`/`uid`/`ratio`/`excludeAI`, …) the command hits the GET random endpoint (different results each time); as soon as any filter is present it switches to the POST filtered-search endpoint.
+
+> 🖼️ **Multi-page works**: with the `pixiv_web` source, every page of a multi-page artwork is sent; the limit is controlled by `pixiv_web_max_images` (default 20 pages per work), and truncation is noted in the caption. `num` counts works, not pages.
 
 ---
 
@@ -622,11 +627,45 @@ Key options: `earthquake_enable`, `earthquake_poll_interval` (30 s), `earthquake
 
 ---
 
-### 9. Yuri Images
+### 9. Yuri Images (`/yuri`, alias `/百合`)
 
-Send `/yuri` or `/百合` to receive one random all-ages image from Pixiv's `百合` tag and its artwork link in the same message. Use `/yuri help` or `/百合 帮助` for help. The command respects `exclude_ai` and the per-group `/开关 off image` setting.
+Fetches images from Pixiv's `百合` tag. `/yuri` returns one random all-ages image by default; append a Chinese subcommand and filters to search by keyword, add tags, target an author, or choose count, size, and age rating. The command respects `exclude_ai` and the per-group `/开关 off image` setting.
 
-The server connects directly to `www.pixiv.net` and `i.pximg.net`. Access is anonymous by default and requires no LeiZ key. If sign-in is needed, set the raw Cookie value in the AstrBot process environment as `CURRENTCORTEX_YURI_PIXIV_COOKIE` and restart AstrBot. The Cookie is sent only with this command's Pixiv search and artwork detail requests.
+#### Commands
+
+| Command | Description |
+| --- | --- |
+| `/yuri` (`/百合`) | One random all-ages yuri image |
+| `/yuri 随机 [filters]` | Same as above, with optional filters |
+| `/yuri 搜索 <keyword> [filters]` | Keyword search (the 百合 tag is always applied) |
+| `/yuri 标签 <tag…> [filters]` | Additional tags (AND; use `\|` for OR) |
+| `/yuri 作者 <UID> [filters]` | Works by a Pixiv artist UID |
+| `/yuri 帮助` | Show help |
+
+Filters use the same `key value` syntax as `/pixiv`, in Chinese or English: `数量`/`num` (works, 1-20; multi-page works expand page by page), `尺寸`/`size` (`原图`/`常规`/`小图`/`缩略图`/`迷你图` = original/regular/small/thumb/mini), `分级`/`r18` (`全年龄`/`成人`/`混合` = 0/1/2), `排除AI`/`excludeAI`, `比例`/`ratio`, `起始时间`/`结束时间` (ms), `标签`/`tag`, `关键词`/`keyword`, `作者`/`uid`. The 百合 tag is always included. Defaults are all-ages, one image, and regular size; `/pixiv`'s `default_*` options do not apply.
+
+```text
+/yuri
+/yuri 搜索 校园 数量 3
+/yuri 标签 原创 恋爱 尺寸 原图
+/yuri 标签 校园|社会人 排除AI 是
+/yuri 作者 123456 数量 2
+/yuri 分级 成人 数量 1
+/yuri r18 1 tag 白丝 num 3
+```
+
+**Age ratings:** anonymous access is all-ages only. Adult (R-18/R-18G) and mixed requests use Pixiv's `mode=r18` / `mode=all` and require a logged-in Cookie whose account has enabled R18 viewing:
+
+- **Recommended:** fill in **`yuri_pixiv_cookie`** in the plugin config, or open **Master Pages → Settings → Pixiv Images**; saving hot-reloads the config. You can paste the whole Cookie header or just the `PHPSESSID` value (the `PHPSESSID=` name is added automatically).
+- **Compatible:** set the server environment variable `CURRENTCORTEX_YURI_PIXIV_COOKIE` (the config value takes precedence; the env var is read only when it is empty).
+
+If both are empty, the command returns a clear error and never silently downgrades; an invalid/expired Cookie or an account with R18 viewing disabled also gets a specific hint. The Cookie is used only for `/yuri` search and artwork detail requests, is never logged, and is not sent on image CDN requests.
+
+> **LeiZ:** LeiZ has no dedicated yuri image endpoint, so `/yuri` does not use LeiZ and is not affected by `pixiv_source`. For the LeiZ library, use `/pixiv 标签 百合` (switch `pixiv_source=leiz` for adult works).
+
+All images are combined into **one message**, with a caption containing the title, author, artwork link, tags, and dimensions; multiple works are numbered `[i/n]`. Adult/mixed results include an R-18 warning. A failed download is skipped and noted in the message without affecting the rest.
+
+Every page of a multi-page Pixiv work is included; the default limit is 20 images per request (`pixiv_web_max_images`, 1-100). If truncated, the message says that the remaining pages were not sent. `num` counts works, not pages.
 
 ---
 
@@ -640,7 +679,6 @@ The panel has 7 pages:
 | --- | --- |
 | 📊 **Dashboard** | Plugin overview: uptime, bound devices, active connections, registered users, plugin version / author / start time, feature-toggle states |
 | 🌏 **Earthquake Warning** | Whitelist groups / multiple cities / source health / last event / check now / **simulated warning** and **extreme drill** (real-like messages; typed confirmation) |
-| ⛅ **Weather Alerts** | CMA (nmc.cn) national warnings (typhoon/rain/fog/cold wave…); group whitelist matched by province/city/county path; severity filter (yellow+ by default); alert body & defense guidelines attached |
 | ⛅ **Weather Alerts** | Whitelist groups & watched cities / CMA source health / last broadcasts / check now |
 | 📖 **Help Center** | Built-in docs and FAQs (quick start / earthquake warning / weather alerts / DG-LAB / segmented replies / cross-group memory / troubleshooting) |
 | ⚙️ **Settings** | Edit every plugin option visually: each has a friendly name and plain-language explanation; saving **hot-reloads** the config — no restart needed |
@@ -777,13 +815,14 @@ Optional feature: registers the plugin's image fetching, song requests, shock co
 
 > ⚠️ Shock control involves a physical device and carries real risk — make sure it's safe before enabling. Every tool checks the master switch on its first line; when off, tools return an explanation instead of executing.
 
-#### Registered Tools (11 in total)
+#### Registered Tools
 
 | Category | Tool | Parameters | Description |
 | --- | --- | --- | --- |
 | 🖼️ Images | `get_pixiv_random` | num, r18 | Random anime illustrations |
 | 🖼️ Images | `search_pixiv` | keyword, num, r18 | Search illustrations by keyword |
 | 🖼️ Images | `get_pixiv_by_tags` | tags, num, r18 | Filter precisely by tags (multi-tag AND) |
+| 🌸 Yuri | `get_yuri_image` | keyword, tags, num, r18 | Fetch yuri images by keyword/tags |
 | 👗 Femboy | `get_femboy_image` | none | Random femboy image |
 | 🎵 Songs | `play_song` | song_name | Search and request a song (voice clip) |
 | ⚡ Shock | `dglab_shock` | channel, strength, wave, duration, device_index | Start stimulation |
@@ -863,7 +902,9 @@ Path: AstrBot admin panel → Plugin Management → this plugin → Config.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `pixiv_source` | string | pixiv_web | Anonymous all-age Pixiv search; choose leiz for the original source (requires LeiZ key) |
+| `pixiv_source` | string | pixiv_web | Anonymous all-age Pixiv search; choose leiz for the original source (requires LeiZ key). Affects `/pixiv` only; `/yuri` always uses Pixiv's web API (Cookie required for R18) |
+| `yuri_pixiv_cookie` | string | (empty) | Pixiv login Cookie for `/yuri` adult/mixed ratings; the account must be logged in with R18 viewing enabled. Falls back to `CURRENTCORTEX_YURI_PIXIV_COOKIE` when empty; all-ages only when both are empty |
+| `pixiv_web_max_images` | int | 20 | Multi-page limit for the `pixiv_web` source: max pages fetched/sent per work (1-100). `/yuri` also uses it as the total image limit for its single message |
 | `default_r18` | int | 0 | Default R18 mode (0 = all-ages, 1 = R18 only, 2 = mixed) |
 | `default_num` | int | 1 | Default number of images per fetch (1-20) |
 | `default_size` | string | regular | Default image size (original/regular/small/thumb/mini) |
@@ -970,7 +1011,7 @@ The plugin ships with the official group number **1106353813** ([join now](https
 <summary><b>The plugin won't load after installation?</b></summary>
 
 1. Is Python >= 3.10?
-2. Are dependencies installed: `pip install aiohttp>=3.8.0` (DG-LAB also needs `websockets>=10.0`)?
+2. Check that the full set of dependencies is installed in AstrBot's Python environment. See [Install Dependencies](#4-install-dependencies).
 3. Is AstrBot >= 4.15? (This plugin needs newer APIs; older versions can't load it.)
 4. Check the error details in the AstrBot logs.
 
@@ -1019,7 +1060,7 @@ Major Chinese cities; Chinese city names are recommended (e.g. 「广州市」, 
 <details>
 <summary><b>DG-LAB features don't work / binding fails?</b></summary>
 
-1. Is the dependency installed: `pip install websockets>=10.0`?
+1. Check that `websockets>=10.0` is installed in AstrBot's Python environment. See [Install Dependencies](#4-install-dependencies).
 2. Is `dglab_server_url` configured, and is the relay server running and reachable?
 3. QR codes must be scanned by the app before they expire
 4. Confirm the app version supports Socket V2, and that the device is a **DG-LAB 3.0 pulse box** (the only supported hardware)
@@ -1150,7 +1191,7 @@ Acknowledgements:
 
 ---
 
-**Version**: v2.12.0 (per-version changes in [CHANGELOG.md](CHANGELOG.md))
+**Version**: v2.13.0 (per-version changes in [CHANGELOG.md](CHANGELOG.md))
 **Repository**: [GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
 
 

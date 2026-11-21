@@ -73,6 +73,8 @@ _CONFIG_GROUPS: List[Dict[str, Any]] = [
         "icon": "image",
         "items": [
             "pixiv_source",
+            "yuri_pixiv_cookie",
+            "pixiv_web_max_images",
             "default_r18",
             "default_num",
             "default_size",
@@ -1255,9 +1257,14 @@ _HELP_DOCS: List[Dict[str, Any]] = [
                 "a": "发送 /pixiv 随机，或 /pixiv 搜索 风景 数量 3；支持 /pixiv 标签 星空、/pixiv 作者 123456，发送 /pixiv 帮助 查看参数。也可 /femboy 获取随机男娘图。",
             },
             {
-                "q": "如何获取随机百合图片？",
-                "a": "发送 /yuri 或 /百合，即可从 Pixiv 获取一张全年龄百合图片及作品链接。"
-                "默认匿名访问，无需 LeiZ Key。发送 /yuri 帮助 查看用法。",
+                "q": "如何获取百合图片？",
+                "a": "发送 /yuri 或 /百合 获取随机全年龄百合图片；可用 /yuri 搜索 校园 数量 3、"
+                "/yuri 标签 原创 恋爱、/yuri 作者 123456 等中文子指令筛选，"
+                "发送 /yuri 帮助 查看全部参数。默认匿名访问；成人/混合需在插件配置或"
+                "总 Pages → 设置 → Pixiv 图片中填写 yuri_pixiv_cookie（或设置环境变量 "
+                "CURRENTCORTEX_YURI_PIXIV_COOKIE），Cookie 需登录且开启 R18 显示。"
+                "LeiZ API 没有百合专用接口。Pixiv 组图会合并为一条消息发送"
+                "全部页面；上限可在设置页 pixiv_web_max_images 调整（默认 20 张）。",
             },
             {
                 "q": "如何点歌？",

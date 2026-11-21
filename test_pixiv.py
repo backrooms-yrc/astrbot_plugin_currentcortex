@@ -15,6 +15,7 @@ from test_music_audio import main
 
 PixivWebAPIClient = main.PixivWebAPIClient
 PixivAPIError = main.PixivAPIError
+PixivUsageError = main.PixivUsageError
 
 
 def work(pid="123", **extra):
@@ -165,6 +166,8 @@ class PixivTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         self.calls = []
+        self.self_user = None
+        self.pages = {}
         self.works = {
             "123": work(),
             "124": work("124", xRestrict=1),
@@ -192,9 +195,16 @@ class PixivTests(unittest.IsolatedAsyncioTestCase):
                 return web.json_response(
                     {"error": False, "body": {"illusts": {"123": None}, "manga": {}}}
                 )
+            if path == "/ajax/user/self":
+                return web.json_response({"userData": self.self_user})
             if path == "/ranking.php":
                 return web.json_response(
                     {"contents": [{"illust_id": k} for k in self.works]}
+                )
+            if path.startswith("/ajax/illust/") and path.endswith("/pages"):
+                pid = path.rsplit("/", 2)[-2]
+                return web.json_response(
+                    {"error": False, "body": self.pages.get(pid, [])}
                 )
             if path.startswith("/ajax/illust/"):
                 pid = path.rsplit("/", 1)[-1]
@@ -240,6 +250,7 @@ class PixivTests(unittest.IsolatedAsyncioTestCase):
         searches = [c for c in self.calls if "/search/" in c[0]]
         self.assertIn(len(searches), (2, 3))
         self.assertEqual(searches[0][1]["mode"], "safe")
+        self.assertEqual(searches[0][1]["type"], "all")
         self.assertEqual(searches[0][1]["ai_type"], "1")
         for _, _, headers in self.calls:
             self.assertEqual(headers["Referer"], "https://www.pixiv.net/")
@@ -356,6 +367,8 @@ class PixivTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIs(main._select_pixiv_client("leiz", leiz, 5), leiz)
         self.assertIsNone(main._select_pixiv_client("leiz", None, 5))
+        limited = main._select_pixiv_client("pixiv_web", None, 5, max_pages=7)
+        self.assertEqual(limited.max_pages_per_work, 7)
 
     async def test_leiz_transport_preserved(self):
         leiz = main.PixivAPIClient(api_key="test")
@@ -586,14 +599,495 @@ class PixivTests(unittest.IsolatedAsyncioTestCase):
         schema = pages._load_schema()
         self.assertEqual(schema["pixiv_source"]["default"], "pixiv_web")
         self.assertEqual(schema["pixiv_source"]["options"], ["pixiv_web", "leiz"])
-        self.assertIn(
-            "pixiv_source",
-            next(g for g in pages._CONFIG_GROUPS if g["key"] == "pixiv")["items"],
-        )
+        self.assertEqual(schema["yuri_pixiv_cookie"]["default"], "")
+        self.assertEqual(schema["pixiv_web_max_images"]["default"], 20)
+        pixiv_group = next(g for g in pages._CONFIG_GROUPS if g["key"] == "pixiv")
+        self.assertIn("pixiv_source", pixiv_group["items"])
+        self.assertIn("yuri_pixiv_cookie", pixiv_group["items"])
+        self.assertIn("pixiv_web_max_images", pixiv_group["items"])
         plugin = SimpleNamespace(config={}, context=SimpleNamespace())
         result = await pages._save_and_reload(plugin, {"pixiv_source": "leiz"})
         self.assertEqual(plugin.config["pixiv_source"], "leiz")
         self.assertEqual(result["changed"], ["pixiv_source"])
+
+
+    def test_yuri_cookie_prefers_config_over_env(self):
+        with patch.dict(
+            os.environ, {"CURRENTCORTEX_YURI_PIXIV_COOKIE": "env_cookie"}
+        ):
+            self.assertEqual(
+                main._resolve_yuri_cookie({"yuri_pixiv_cookie": "config_cookie"}),
+                "config_cookie",
+            )
+            self.assertEqual(
+                main._resolve_yuri_cookie({"yuri_pixiv_cookie": "   "}),
+                "env_cookie",
+            )
+            self.assertEqual(main._resolve_yuri_cookie({}), "env_cookie")
+        with patch.dict(os.environ, {"CURRENTCORTEX_YURI_PIXIV_COOKIE": ""}):
+            self.assertEqual(main._resolve_yuri_cookie({}), "")
+        self.assertEqual(
+            main._resolve_yuri_cookie(
+                {"yuri_pixiv_cookie": " Cookie: PHPSESSID=abc; foo=bar "}
+            ),
+            "PHPSESSID=abc; foo=bar",
+        )
+        self.assertEqual(
+            main._resolve_yuri_cookie({"yuri_pixiv_cookie": '"PHPSESSID=abc"'}),
+            "PHPSESSID=abc",
+        )
+        self.assertEqual(
+            main._resolve_yuri_cookie({"yuri_pixiv_cookie": "123456_abcdef"}),
+            "PHPSESSID=123456_abcdef",
+        )
+        self.assertEqual(
+            main._resolve_yuri_cookie(
+                {"yuri_pixiv_cookie": "PHPSESSID=123456_abcdef; foo=bar"}
+            ),
+            "PHPSESSID=123456_abcdef; foo=bar",
+        )
+
+    def test_yuri_parameters_match_pixiv_and_keep_base_tag(self):
+        plugin = main.CurrentCortexPlugin.__new__(main.CurrentCortexPlugin)
+        plugin._exclude_ai = False
+        cases = {
+            "/yuri": {
+                "tag": ["百合"], "exact_tags": True, "r18": 0,
+                "num": 1, "size": "regular",
+            },
+            "/百合 搜索 星空 数量 2 尺寸 原图": {
+                "tag": ["百合"], "keyword": "星空", "num": 2, "size": "original",
+            },
+            "/yuri 标签 校园 原创 数量 3": {
+                "tag": ["百合", "校园", "原创"], "num": 3,
+            },
+            "/yuri 标签 百合 校园": {"tag": ["百合", "校园"]},
+            "/yuri 作者 42 数量 2": {"uid": "42", "num": 2},
+            "/yuri 分级 成人": {"r18": 1},
+            "/yuri r18 2 tag 校园 num 2": {
+                "tag": ["百合", "校园"], "r18": 2, "num": 2,
+            },
+        }
+        for text, expected in cases.items():
+            with self.subTest(text=text):
+                params = plugin._build_yuri_request_params(text)
+                for key, value in expected.items():
+                    self.assertEqual(params[key], value)
+                self.assertTrue(params["exact_tags"])
+
+        self.assertEqual(plugin._build_yuri_request_params("/yuri 数量 100")["num"], 20)
+        self.assertEqual(plugin._build_yuri_request_params("/yuri 数量 0")["num"], 1)
+        plugin._exclude_ai = True
+        self.assertTrue(plugin._build_yuri_request_params("/yuri")["excludeAI"])
+        plugin._exclude_ai = False
+        self.assertTrue(
+            plugin._build_yuri_request_params("/yuri 排除AI 是")["excludeAI"]
+        )
+        self.assertNotIn(
+            "excludeAI", plugin._build_yuri_request_params("/yuri 排除AI 否")
+        )
+
+        for text in ("/yuri 标签", "/yuri 搜索", "/yuri 作者 abc", "/yuri 随机 校园"):
+            with self.subTest(text=text), self.assertRaises(ValueError) as caught:
+                plugin._build_yuri_request_params(text)
+            self.assertIn("/yuri", str(caught.exception))
+        for text, hint in (("/yuri 尺寸 巨大", "尺寸"), ("/yuri r18 5", "分级")):
+            with self.subTest(text=text), self.assertRaises(ValueError) as caught:
+                plugin._build_yuri_request_params(text)
+            self.assertIn(hint, str(caught.exception))
+
+    async def test_yuri_search_tags_and_author_keep_yuri_tag(self):
+        self.works = {
+            "123": work(tags=["百合", "校园"]),
+            "124": work("124", tags=["百合"], title="星空"),
+            "125": work("125", tags=["非百合"], title="校园"),
+        }
+        plugin, event = self._yuri_plugin_and_event("/yuri 标签 校园 数量 2")
+        with (
+            patch.object(
+                self.client, "download_image", AsyncMock(return_value="/tmp/yuri.jpg")
+            ) as download,
+            patch.object(main.Comp, "Plain", lambda text: text, create=True),
+            patch.object(
+                main.Comp, "Image", SimpleNamespace(fromFileSystem=str), create=True
+            ),
+        ):
+            replies = [reply async for reply in plugin.yuri_command(event)]
+            self.assertEqual(len(replies), 1)
+            self.assertIn("/artworks/123", replies[0][0])
+            download.assert_awaited_with("https://i.pximg.net/regular.jpg")
+
+            tag_searches = [q for p, q, _ in self.calls if "/search/" in p]
+            self.assertTrue(tag_searches)
+            self.assertEqual(tag_searches[0]["word"], "百合 校园")
+            self.assertEqual(tag_searches[0]["s_mode"], "s_tag_full")
+            self.assertEqual(tag_searches[0]["mode"], "safe")
+
+            self.calls.clear()
+            download.reset_mock()
+            event.message_str = "/yuri 搜索 星空 数量 2"
+            [reply async for reply in plugin.yuri_command(event)]
+            self.assertEqual(download.await_count, 2)
+            search_calls = [q for p, q, _ in self.calls if "/search/" in p]
+            self.assertTrue(search_calls)
+            self.assertTrue(all("百合" in q["word"] for q in search_calls))
+            self.assertTrue(any("星空" in q["word"] for q in search_calls))
+            self.assertTrue(all(q["s_mode"] == "s_tc" for q in search_calls))
+
+            self.calls.clear()
+            download.reset_mock()
+            event.message_str = "/yuri 作者 42"
+            replies = [reply async for reply in plugin.yuri_command(event)]
+            self.assertTrue(any("/user/42/profile/all" in p for p, _, _ in self.calls))
+            self.assertFalse(any("/search/" in p for p, _, _ in self.calls))
+            self.assertEqual(len(replies), 1)
+
+    async def test_yuri_multiple_images_have_numbered_captions(self):
+        self.works = {
+            "123": work(tags=["百合"]),
+            "124": work("124", tags=["百合"]),
+        }
+        plugin, event = self._yuri_plugin_and_event("/yuri 数量 2")
+        with (
+            patch.object(
+                self.client, "download_image", AsyncMock(return_value="/tmp/yuri.jpg")
+            ),
+            patch.object(main.Comp, "Plain", lambda text: text, create=True),
+            patch.object(
+                main.Comp, "Image", SimpleNamespace(fromFileSystem=str), create=True
+            ),
+        ):
+            replies = [reply async for reply in plugin.yuri_command(event)]
+        self.assertEqual(len(replies), 1)
+        caption, *images = replies[0]
+        self.assertIn("[1/2]", caption)
+        self.assertIn("[2/2]", caption)
+        self.assertEqual(len(images), 2)
+
+    async def test_pixiv_web_multi_page_urls_are_complete(self):
+        self.works = {"123": work(tags=["百合"], pageCount=3)}
+        self.pages = {
+            "123": [
+                {"urls": {"regular": "https://i.pximg.net/p1.jpg"}},
+                {"urls": {"regular": "https://i.pximg.net/p2.jpg"}},
+                {"urls": {"regular": "https://i.pximg.net/p3.jpg"}},
+            ]
+        }
+        result = await self.client.fetch_images(
+            tag=["百合"], exact_tags=True, num=1
+        )
+        item = result["data"]["data"][0]
+        self.assertEqual(item["page_count"], 3)
+        self.assertEqual(
+            item["page_urls"],
+            [
+                "https://i.pximg.net/p1.jpg",
+                "https://i.pximg.net/p2.jpg",
+                "https://i.pximg.net/p3.jpg",
+            ],
+        )
+        self.assertTrue(
+            any("/ajax/illust/123/pages" in path for path, _, _ in self.calls)
+        )
+
+    async def test_yuri_multi_page_sends_all_pages(self):
+        self.works = {"123": work(tags=["百合"], pageCount=3)}
+        self.pages = {
+            "123": [
+                {"urls": {"regular": "https://i.pximg.net/p1.jpg"}},
+                {"urls": {"regular": "https://i.pximg.net/p2.jpg"}},
+                {"urls": {"regular": "https://i.pximg.net/p3.jpg"}},
+            ]
+        }
+        plugin, event = self._yuri_plugin_and_event("/yuri")
+        plugin._pixiv_web_max_images = 3
+        with (
+            patch.object(
+                self.client, "download_image", AsyncMock(return_value="/tmp/page.jpg")
+            ) as download,
+            patch.object(main.Comp, "Plain", lambda text: text, create=True),
+            patch.object(
+                main.Comp, "Image", SimpleNamespace(fromFileSystem=str), create=True
+            ),
+        ):
+            replies = [reply async for reply in plugin.yuri_command(event)]
+        self.assertEqual(len(replies), 1)
+        caption, *images = replies[0]
+        self.assertIn("组图：共 3 页", caption)
+        self.assertNotIn("已达到单次发送上限", caption)
+        self.assertEqual(len(images), 3)
+        self.assertEqual(
+            [call.args[0] for call in download.await_args_list],
+            [
+                "https://i.pximg.net/p1.jpg",
+                "https://i.pximg.net/p2.jpg",
+                "https://i.pximg.net/p3.jpg",
+            ],
+        )
+
+    async def test_yuri_single_message_respects_max_images(self):
+        self.works = {
+            "123": work(tags=["百合"], pageCount=2),
+            "124": work("124", tags=["百合"], pageCount=2),
+        }
+        self.pages = {
+            "123": [
+                {"urls": {"regular": "https://i.pximg.net/a1.jpg"}},
+                {"urls": {"regular": "https://i.pximg.net/a2.jpg"}},
+            ],
+            "124": [
+                {"urls": {"regular": "https://i.pximg.net/b1.jpg"}},
+                {"urls": {"regular": "https://i.pximg.net/b2.jpg"}},
+            ],
+        }
+        plugin, event = self._yuri_plugin_and_event("/yuri 数量 2")
+        plugin._pixiv_web_max_images = 3
+        with (
+            patch.object(
+                self.client, "download_image", AsyncMock(return_value="/tmp/page.jpg")
+            ) as download,
+            patch.object(main.Comp, "Plain", lambda text: text, create=True),
+            patch.object(
+                main.Comp, "Image", SimpleNamespace(fromFileSystem=str), create=True
+            ),
+        ):
+            replies = [reply async for reply in plugin.yuri_command(event)]
+        self.assertEqual(len(replies), 1)
+        caption, *images = replies[0]
+        self.assertEqual(len(images), 3)
+        self.assertEqual(download.await_count, 3)
+        self.assertIn("上限 3 张", caption)
+
+    async def test_pixiv_web_max_pages_cap(self):
+        self.works = {"123": work(tags=["百合"], pageCount=3)}
+        self.pages = {
+            "123": [
+                {"urls": {"regular": "https://i.pximg.net/p1.jpg"}},
+                {"urls": {"regular": "https://i.pximg.net/p2.jpg"}},
+                {"urls": {"regular": "https://i.pximg.net/p3.jpg"}},
+            ]
+        }
+        client = PixivWebAPIClient(timeout=5, max_pages=2)
+        client.BASE = self.client.BASE
+        result = await client.fetch_images(
+            tag=["百合"], exact_tags=True, num=1
+        )
+        item = result["data"]["data"][0]
+        self.assertEqual(item["page_count"], 3)
+        self.assertEqual(len(item["page_urls"]), 2)
+
+    async def test_pixiv_process_response_multi_page(self):
+        plugin = main.CurrentCortexPlugin.__new__(main.CurrentCortexPlugin)
+        plugin._api_client = self.client
+        item = {
+            "pid": "123",
+            "title": "组图",
+            "author": "画师",
+            "tags": ["百合"],
+            "width": 800,
+            "height": 1200,
+            "urls": {"regular": "https://i.pximg.net/p1.jpg"},
+            "page_urls": [
+                "https://i.pximg.net/p1.jpg",
+                "https://i.pximg.net/p2.jpg",
+            ],
+            "page_count": 2,
+            "source": "pixiv_web",
+        }
+        event = SimpleNamespace(
+            plain_result=lambda text: ("text", text),
+            chain_result=lambda parts: ("chain", parts),
+            image_result=lambda url: ("image", url),
+        )
+        with (
+            patch.object(
+                self.client, "download_image", AsyncMock(return_value="/tmp/page.jpg")
+            ),
+            patch.object(
+                main.Comp, "Image", SimpleNamespace(fromFileSystem=str), create=True
+            ),
+        ):
+            responses = await plugin._process_response(
+                {"type": "json", "data": {"data": [item]}},
+                {"r18": 0},
+                event,
+            )
+        self.assertEqual(len(responses), 3)
+        self.assertEqual(responses[0][0], "text")
+        self.assertIn("组图：共 2 页", responses[0][1])
+        self.assertEqual([reply[0] for reply in responses[1:]], ["chain", "chain"])
+
+    async def test_yuri_r18_requires_cookie_and_uses_pixiv_modes(self):
+        self.works = {
+            "123": work(tags=["百合"]),
+            "124": work("124", tags=["百合"], xRestrict=1),
+            "125": work("125", tags=["百合"], xRestrict=2),
+        }
+        with self.assertRaises(PixivUsageError) as caught:
+            await self.client.fetch_images(tag=["百合"], exact_tags=True, r18=1)
+        self.assertIn("CURRENTCORTEX_YURI_PIXIV_COOKIE", str(caught.exception))
+        self.assertIn("leiz", str(caught.exception))
+        self.assertEqual(self.calls, [])
+
+        authenticated = PixivWebAPIClient(timeout=5, cookie="test_session=fixture")
+        authenticated.BASE = self.client.BASE
+        expected = {0: {"123"}, 1: {"124", "125"}, 2: {"123", "124", "125"}}
+        modes = {0: "safe", 1: "r18", 2: "all"}
+        for level in (0, 1, 2):
+            with self.subTest(level=level):
+                self.calls.clear()
+                result = await authenticated.fetch_images(
+                    tag=["百合"], exact_tags=True, r18=level, num=20
+                )
+                self.assertEqual(
+                    {item["pid"] for item in result["data"]["data"]},
+                    expected[level],
+                )
+                searches = [
+                    query
+                    for path, query, _ in self.calls
+                    if "/search/" in path
+                ]
+                self.assertTrue(searches)
+                self.assertEqual(searches[0]["mode"], modes[level])
+                self.assertTrue(
+                    all(
+                        headers.get("Cookie") == "test_session=fixture"
+                        for _, _, headers in self.calls
+                    )
+                )
+
+    async def test_yuri_mixed_allows_safe_results_without_r18_hint(self):
+        self.works = {"123": work(tags=["百合"])}  # All-age only.
+        client = PixivWebAPIClient(timeout=5, cookie="PHPSESSID=invalid")
+        client.BASE = self.client.BASE
+        self.self_user = None
+        result = await client.fetch_images(
+            tag=["百合"], exact_tags=True, r18=2, num=1
+        )
+        self.assertEqual(
+            [item["pid"] for item in result["data"]["data"]], ["123"]
+        )
+
+    async def test_yuri_r18_invalid_cookie_reports_login_hint(self):
+        self.works = {"123": work(tags=["百合"])}  # All-age only.
+        client = PixivWebAPIClient(timeout=5, cookie="PHPSESSID=invalid")
+        client.BASE = self.client.BASE
+        self.self_user = None
+        with self.assertRaises(PixivUsageError) as caught:
+            await client.fetch_images(tag=["百合"], exact_tags=True, r18=1, num=1)
+        message = str(caught.exception)
+        self.assertIn("未登录", message)
+        self.assertIn("PHPSESSID", message)
+
+    async def test_yuri_r18_logged_in_but_disabled_reports_setting_hint(self):
+        self.works = {"123": work(tags=["百合"])}  # All-age only.
+        client = PixivWebAPIClient(timeout=5, cookie="PHPSESSID=valid")
+        client.BASE = self.client.BASE
+        self.self_user = {"id": "42", "xRestrict": 0}
+        with self.assertRaises(PixivUsageError) as caught:
+            await client.fetch_images(tag=["百合"], exact_tags=True, r18=1, num=1)
+        message = str(caught.exception)
+        self.assertIn("R18 显示设置为 0", message)
+        self.assertIn("浏览限制", message)
+
+    async def test_yuri_r18_logged_in_no_adult_results_hint(self):
+        self.works = {"123": work(tags=["百合"])}  # All-age only.
+        client = PixivWebAPIClient(timeout=5, cookie="PHPSESSID=valid")
+        client.BASE = self.client.BASE
+        self.self_user = {"id": "42", "xRestrict": 1}
+        with self.assertRaises(PixivUsageError) as caught:
+            await client.fetch_images(tag=["百合"], exact_tags=True, r18=1, num=1)
+        message = str(caught.exception)
+        self.assertIn("已登录", message)
+        self.assertIn("调整标签", message)
+
+    async def test_yuri_command_r18_requires_cookie_and_renders_adult_caption(self):
+        plugin, event = self._yuri_plugin_and_event("/yuri 分级 成人")
+        replies = [reply async for reply in plugin.yuri_command(event)]
+        self.assertIn("CURRENTCORTEX_YURI_PIXIV_COOKIE", replies[0])
+        self.assertEqual(self.calls, [])
+
+        authenticated = PixivWebAPIClient(timeout=5, cookie="test_session=fixture")
+        authenticated.BASE = self.client.BASE
+        plugin._yuri_client = authenticated
+        self.works = {
+            "123": work(tags=["百合"], xRestrict=0),
+            "124": work("124", tags=["百合"], xRestrict=1),
+        }
+        with (
+            patch.object(
+                authenticated,
+                "download_image",
+                AsyncMock(return_value="/tmp/yuri18.jpg"),
+            ) as download,
+            patch.object(main.Comp, "Plain", lambda text: text, create=True),
+            patch.object(
+                main.Comp, "Image", SimpleNamespace(fromFileSystem=str), create=True
+            ),
+        ):
+            event.message_str = "/yuri 分级 成人"
+            replies = [reply async for reply in plugin.yuri_command(event)]
+        self.assertEqual(len(replies), 1)
+        self.assertIn("[R-18]", replies[0][0])
+        download.assert_awaited_with("https://i.pximg.net/regular.jpg")
+
+    async def test_yuri_llm_tool_sends_images(self):
+        self.works = {
+            "123": work(tags=["百合", "校园"]),
+            "124": work("124", tags=["百合", "校园"]),
+        }
+        plugin, event = self._yuri_plugin_and_event("/yuri")
+        plugin._llm_tools_enable = True
+        plugin._verify_ok = True
+        event.send = AsyncMock()
+        with (
+            patch.object(
+                self.client, "download_image", AsyncMock(return_value="/tmp/yuri.jpg")
+            ),
+            patch.object(main.Comp, "Plain", lambda text: text, create=True),
+            patch.object(
+                main.Comp, "Image", SimpleNamespace(fromFileSystem=str), create=True
+            ),
+        ):
+            reply = await plugin.llm_tool_yuri(
+                event, keyword="", tags="校园,百合", num=2, r18=0
+            )
+        self.assertIn("已发送 2 张", reply)
+        self.assertEqual(event.send.await_count, 1)
+        searches = [q for p, q, _ in self.calls if "/search/" in p]
+        self.assertTrue(searches)
+        self.assertEqual(searches[0]["word"], "百合 校园")
+        self.assertEqual(searches[0]["s_mode"], "s_tag_full")
+
+        event.send.reset_mock()
+        reply = await plugin.llm_tool_yuri(event, keyword="", tags="", num=1, r18=1)
+        self.assertIn("CURRENTCORTEX_YURI_PIXIV_COOKIE", reply)
+        self.assertEqual(event.send.await_count, 0)
+
+    async def test_yuri_thumb_size_uses_pixiv_web_url(self):
+        self.works = {
+            "123": work(
+                tags=["百合"],
+                urls={
+                    "regular": "https://i.pximg.net/regular.jpg",
+                    "thumb_mini": "https://i.pximg.net/thumb_mini.jpg",
+                },
+            )
+        }
+        plugin, event = self._yuri_plugin_and_event("/yuri 尺寸 缩略图")
+        with (
+            patch.object(
+                self.client, "download_image", AsyncMock(return_value="/tmp/thumb.jpg")
+            ) as download,
+            patch.object(main.Comp, "Plain", lambda text: text, create=True),
+            patch.object(
+                main.Comp, "Image", SimpleNamespace(fromFileSystem=str), create=True
+            ),
+        ):
+            replies = [reply async for reply in plugin.yuri_command(event)]
+        self.assertEqual(len(replies), 1)
+        download.assert_awaited_with("https://i.pximg.net/thumb_mini.jpg")
 
 
 if __name__ == "__main__":

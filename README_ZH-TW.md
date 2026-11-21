@@ -1,5 +1,9 @@
 # AstrBot CurrentCortex 綜合插件
 
+在 AstrBot 中搜尋 Pixiv、點歌和解析媒體連結。CurrentCortex 也提供地震與氣象預警、DG-LAB 裝置控制及 Wikidot 站點管理。可在 Pages 面板管理插件，並用聊天指令控制各群組的功能。
+
+[快速開始](#-快速開始) · [指令速查](#指令速查表) · [最新版本](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/releases/latest) · [更新日誌](CHANGELOG.md)
+
 **[简体中文](README.md)** | **[English](README_EN.md)** | **[日本語](README_JA.md)** | **[繁體中文](README_ZH-TW.md)**
 
 ![訪問量](https://count.getloli.com/get/@backrooms-yrc-currentcortex?theme=moebooru)
@@ -49,14 +53,6 @@
 
 </details>
 
-<div align="center">
-
-**多功能 AstrBot 插件** — 集內容取得、媒體解析、裝置控制與跨群記憶於一身。
-
-Pixiv 隨機圖片 · 每日一言 · 天氣查詢 · 男娘圖片 · 網易雲點歌 · 小紅書／B站／抖音／微博解析 · DG-LAB 裝置管理 · 跨群聊記憶 · LLM 工具（AI 自主呼叫）· 語意分段回覆
-
-</div>
-
 ---
 
 > 💬 **插件官方 QQ 交流群**：**1106353813**，[點擊前往](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERWFBR1hSV1djMSswSHI4MEpmQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)
@@ -64,7 +60,7 @@ Pixiv 隨機圖片 · 每日一言 · 天氣查詢 · 男娘圖片 · 網易雲�
 > 歡迎加入！在這裡可以獲取更新通知、回饋問題與建議、交流使用心得，開發者也會在群內答疑。
 > 遇到 bug 或有新功能想法，也可以直接在群裡 @ 維護者，或到 [Issues](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/issues) 提交。
 >
-> ⚠️ **本群是 CurrentCortex 插件的社群交流群，與 [LeiZ API](https://api.bileizhen.top) 官方無關**。本插件是基於 LeiZ API 開發的**社群（第三方）插件**。LeiZ API 的註冊、Key 取得、API 計費、故障等問題請到 LeiZ API 官網及其官方管道諮詢，勿在本群回饋。
+> CurrentCortex 交流群提供插件使用支援與問題回報。帳號註冊、Key、計費與 API 故障請洽 LeiZ API 官方管道。[LeiZ API 官網](https://api.bileizhen.top)
 
 ---
 
@@ -81,7 +77,7 @@ Pixiv 隨機圖片 · 每日一言 · 天氣查詢 · 男娘圖片 · 網易雲�
   - [6. 男娘圖片](#6-男娘圖片-femboy別名-男娘)
   - [7. DG-LAB 裝置管理](#7-dg-lab-裝置管理-dglab別名-电击)
   - [8. 地震預警](#8-地震預警-地震別名-earthquake-eq-预警)
-  - [9. 百合圖片](#9-百合圖片)
+  - [9. 百合圖片](#9-百合圖片yuri別名-百合)
 - [🖥️ 總覽 Pages](#️-總覽-pages)
 - [🧩 按群聊獨立開關](#-按群聊獨立開關)
 - [✂️ 分段回覆](#️-分段回覆)
@@ -100,16 +96,17 @@ Pixiv 隨機圖片 · 每日一言 · 天氣查詢 · 男娘圖片 · 網易雲�
 
 | 模組 | 能力 |
 | --- | --- |
-| 🎨 **Pixiv 隨機圖片** | 隨機圖 / R18 / 標籤篩選 / 關鍵字搜尋 / 指定作者 / 長寬比篩選 / 排除 AI |
-| 🔍 **媒體解析** | 小紅書圖文影片 · B站影片資訊 · 抖音無浮水印影片 · 微博圖文影片 |
-| 📚 **媒體內容解析** | 小紅書 / B站 / 抖音 / 微博連結解析 |
+| 🎨 **Pixiv 圖片** | 預設匿名搜尋全年齡作品，支援關鍵字、標籤、作者、長寬比與排除 AI。R18 和混合模式需要 LeiZ 圖源及 Key。 |
+| 🌸 **百合圖片** | `/yuri` 支援年齡分級、標籤、關鍵字搜尋、作者、數量與尺寸；預設全年齡，成人／混合需 Pixiv 登入 Cookie。 |
+| 🔍 **媒體連結解析** | 小紅書圖文與影片、B 站影片資訊、抖音無浮水印影片、微博圖文與影片。 |
 | 🎵 **音樂點歌** | 三音源並行擇優（自建網易雲SVIP／網易雲／酷狗）· 無損／Hi-Res／臻音全景聲／沉浸環繞聲／超清母帶 · 數字檔位指定 · 語音條／原始檔案 · 下載進度播報 |
 | ✨ **每日一言** | 12 種分類（動畫／漫畫／遊戲／文學／詩詞／影視…） |
 | 🌤️ **天氣查詢** | 即時天氣＋未來 3 天預報 |
 | 👗 **男娘圖片** | 隨機男娘主題圖片（WebP） |
 | 🔌 **DG-LAB** | Socket V3/V4（相容舊 V2）裝置全生命週期管理、協定自動偵測、多使用者／多裝置隔離、CCDG WebUI 控制面板 |
-| 📖 **Wikidot 站點管理** | v2.3.0 新增：呼叫 Wikidot 前端 JS 介面編輯頁面（源碼／寫入／追加／標籤／重新命名／刪除）與管理站點（成員／設定／論壇／邀請）（`/wikidot`）。預設關閉 |
+| 📖 **Wikidot 站點管理** | 啟用後可用 `/wikidot` 編輯頁面及管理成員、設定、論壇與邀請。 |
 | 🌏 **地震預警** | 聚合 CENC／川滇／福建／日本氣象廳預警＋CENC 速報＋USGS；群聊白名單制；支援城市名、單群多城市、倒數開關；Pages 可發起模擬與極限演練 |
+| ⛅ **氣象預警** | 依群組關注的城市播報中央氣象台預警與防禦指南，預設播報黃色及以上的預警。 |
 | 🖥️ **總覽 Pages** | AstrBot WebUI 整合總覽面板：儀表板 · 說明中心 · 視覺化設定（儲存即熱重載）· 郊狼控制（中繼伺服器一鍵部署 · 對外開放開關）· 聯絡我們 |
 | 🧩 **按群聊開關** | 在單一群組用 `/开关` 指令關閉／開啟本插件指令（支援限時關閉自動恢復、按功能域分級），互不影響 |
 | 🧠 **跨群聊記憶** | 同平台所有群共享一份持久化上下文，自動注入 LLM 請求（可依時效過濾、LLM 摘要壓縮、依關鍵字清理） |
@@ -136,6 +133,11 @@ cd AstrBot/data/plugins
 git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 ```
 
+**插件市集下載出現 `Temporary failure in name resolution`？** 這是 AstrBot 下載 ZIP 時的 DNS 錯誤。請在執行 AstrBot 的伺服器或容器內檢查日誌中下載網域的解析，例如 `getent hosts astrbot-cloud-test-s3.astrbot.app`。該環境的 DNS 恢復後，可重試市集更新。
+
+- **已安裝**：若 AstrBot 可連線至 GitHub，在插件卡片的「⋯」選單將插件來源切換為直接使用儲存庫網址，再按「更新」。若面板顯示「重新安裝」，可在確認時選擇「強制更新」。這會從本專案 GitHub 儲存庫的預設分支下載程式碼，無需先解除安裝插件。
+- **首次安裝**：可在能連線至 GitHub 的裝置上，從 [GitHub Releases](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex/releases) 下載所需版本的 **Source code (zip)**，再到 AstrBot 面板選擇從檔案安裝並上傳 ZIP。
+
 ### 2. 填寫檢驗碼（必填）
 
 > 🔒 自 **2026-09-20** 起，因插件濫用行為導致的一系列問題，本插件啟用檢驗碼機制。
@@ -148,9 +150,11 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 > 尊敬的使用者，您好！由於插件濫用行為導致的一系列問題，自 2026 年 9 月 20 日起，您必須加入 CurrentCortex 插件官方 QQ 群（1106353813）獲取檢驗碼，然後將其填寫在插件設定的「檢驗碼」（verify_code）一項中。
 > 💡 [👉 點此直接加群](https://qun.qq.com/universal-share/share?ac=1&authKey=OmLNlwPdKBlOMNNic9zCRIlfAVn%2BqsvY0rZDEpEYLNsZ6D5UvREADl%2FeNd2nGAUH&busi_data=eyJncm91cENvZGUiOiIxMTA2MzUzODEzIiwidG9rZW4iOiJERUFHR1hSV1djMSswSHI4MEZQzhmTFlzZTN0Q2VvbFEvZXpQbWZIaHNNSW5Dd2dHcFVKVVJmTTdzWG1OWXBVIiwidWluIjoiMTk0NTgyNjM0NiJ9&data=AFoZ21e7OHbTEKvm7w_zeEuScAfmBnqoa2V6OZFXfaajJ7cTjHQNk3JxtyRUTFE69pnNSWekOVIAA54qMXW97Q&svctype=4&tempid=h5_group_info)。獲取檢驗碼完全免費，捐贈全憑自願，捐贈使用者與普通使用者的權益沒有任何區別。
 
+安裝完成並儲存檢驗碼後，在聊天中傳送 `/pixiv 搜索 风景 数量 1` 或 `/yuri` 試用圖片功能。傳送 `/cc` 查看完整指令。
+
 ### 3. 設定 API Key (可選)
 
-> 🔐 **LeiZ API Key 非必填**：未填寫時，與 LeiZ 無關的功能（B站／抖音／小紅書／微博解析、DG-LAB、跨群記憶等）正常使用；**點歌自動路由到自建網易雲SVIP音源**（不依賴此 Key，最高可達超清母帶）；Pixiv（僅 LeiZ 圖源）／每日一言／天氣／男娘／網易雲／酷狗 等基於 LeiZ 的功能觸發時會提示填寫。
+預設 Pixiv 圖源和 `/yuri` 支援匿名存取。設定 `leiz_api_key` 後可使用 LeiZ 圖源、一言、天氣、男娘圖片及 LeiZ 音源。若未設定 Key，點歌的 `auto` 模式會使用自建網易雲 SVIP 音源。
 
 #### 第一步：取得 API Key
 
@@ -172,17 +176,16 @@ git clone https://github.com/backrooms-yrc/astrbot_plugin_currentcortex.git
 
 ### 4. 安裝相依套件
 
+手動安裝時，請在插件目錄中使用執行 AstrBot 的 Python 安裝相依套件。
+
 ```bash
-pip install aiohttp>=3.8.0
-pip install websockets>=10.0   # 僅 DG-LAB 功能需要
+python -m pip install -r requirements.txt
 ```
 
 ### 系統需求
 
 - **AstrBot** >= 4.15（< 5；使用 `EventMessageType` / 處理器 `priority` / `ProviderRequest` 等較新的 API）
 - **Python** >= 3.10
-- **aiohttp** >= 3.8.0
-- **websockets** >= 10.0（DG-LAB 功能必備）
 - **ffmpeg**（網易雲語音功能需要，須在系統 PATH 中）
 
 ---
@@ -193,7 +196,7 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 
 ### 指令速查表
 
-所有指令均支援中英文別名（**別名為簡體中文，請照原文輸入**）：
+請照表輸入指令或已列出的別名，中文指令請使用表中的字形。
 
 | 指令 | 別名 | 功能 |
 | --- | --- | --- |
@@ -209,7 +212,7 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 | `/hitokoto` | `/一言` | 每日一言 |
 | `/weather` | `/天气` | 天氣查詢 |
 | `/femboy` | `/男娘` | 男娘圖片 |
-| `/yuri` | `/百合` | 隨機 Pixiv 全年齡百合圖片 |
+| `/yuri` | `/百合` | 百合圖片：隨機 / 搜尋 / 標籤 / 作者 / 分級 |
 | `/dglab` | `/电击` | DG-LAB 裝置管理 |
 | `/地震` | `/earthquake` `/eq` `/预警` | 群聊白名單地震預警（群主／管理員啟用，先基本資訊後倒數） |
 | `/气象预警` | `/天气预警` | 中央氣象台氣象預警（按城市行政區匹配、級別過濾） |
@@ -304,6 +307,8 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 ```
 
 > 💡 **隨機與搜尋的路由**：未提供 `tag`/`keyword`/`uid`/`ratio`/`excludeAI` 等過濾參數時，走 GET 隨機 API（每次結果不同）；提供任一過濾參數時自動切換到 POST 篩選 API。
+
+> 🖼️ **組圖**：`pixiv_web` 圖源遇到多頁作品時會傳送全部頁面；上限由 `pixiv_web_max_images` 控制（預設 20 頁/作品），超過會在首張標註。`num` 指定的是作品數，組圖會按頁展開。
 
 ---
 
@@ -622,11 +627,79 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 
 ---
 
-### 9. 百合圖片
+### 9. 百合圖片（`/yuri`，別名 `/百合`）
 
-傳送 `/yuri` 或 `/百合`，從 Pixiv 的「百合」標籤隨機抽取一張全年齡圖片，並在同一則訊息中附上作品連結。傳送 `/yuri help` 或 `/百合 帮助` 查看用法。指令會套用 `exclude_ai` 與 `/开关 off image` 的群聊設定。
+從 Pixiv 的「百合」標籤取得圖片。傳送 `/yuri` 預設隨機回傳一張全年齡圖片；在指令後附加中文子指令與篩選參數，可依關鍵字、標籤、作者、數量、尺寸與年齡分級精確取圖。指令遵循 `exclude_ai` 與 `/开关 off image` 的群聊設定。
 
-伺服器直接連線至 `www.pixiv.net` 和 `i.pximg.net`，預設匿名存取，免 LeiZ Key。如需登入，管理員可將原始 Cookie 值注入 AstrBot 程序的 `CURRENTCORTEX_YURI_PIXIV_COOKIE` 環境變數，重新啟動 AstrBot 後生效。Cookie 僅用於此指令的 Pixiv 搜尋和作品詳情請求。
+#### 基本指令
+
+| 指令 | 說明 |
+| --- | --- |
+| `/yuri`（`/百合`） | 隨機取得一張全年齡百合圖片 |
+| `/yuri 随机 [參數]` | 同上，可附篩選參數 |
+| `/yuri 搜索 <關鍵字> [參數]` | 關鍵字搜尋（自動疊加「百合」標籤） |
+| `/yuri 标签 <標籤…> [參數]` | 追加標籤（多標籤 AND，`\|` 為 OR） |
+| `/yuri 作者 <UID> [參數]` | 指定作者 UID 的作品 |
+| `/yuri 帮助` | 顯示說明 |
+
+中文子指令採用 `/yuri 中文指令名 參數` 格式，參數名與值以空格分隔；原有英文 `key value` 寫法仍可使用，可混用。
+
+#### 篩選參數
+
+| 參數 | 說明 |
+| --- | --- |
+| `数量` / `num` | 取得的作品數量（1-20，預設 1；組圖按頁展開） |
+| `尺寸` / `size` | `原图` / `常规` / `小图` / `缩略图` / `迷你图`（`original` / `regular` / `small` / `thumb` / `mini`） |
+| `分级` / `r18` | `全年龄` / `成人` / `混合`（`0` / `1` / `2`） |
+| `排除AI` / `excludeAI` | `是` / `否`；預設遵循外掛設定 `exclude_ai` |
+| `比例` / `ratio` | 長寬比表示式，如 `gt1.2lt1.8` |
+| `起始时间` / `结束时间` | 毫秒時間戳 |
+| `标签` / `tag` | 追加標籤；同一 tag 內 `\|` 為 OR，多個 tag 為 AND |
+| `关键词` / `keyword` | 標題／作者／標籤模糊搜尋 |
+| `作者` / `uid` | Pixiv 作者 UID（純數字） |
+
+「百合」標籤始終包含；額外標籤與關鍵字只會進一步縮小範圍。預設全年齡、1 張、常規尺寸，不受 `/pixiv` 的 `default_num` / `default_size` / `default_r18` 影響。
+
+#### 使用範例
+
+```text
+/yuri
+/yuri 搜索 校园 数量 3
+/yuri 标签 原创 恋爱 尺寸 原图
+/yuri 标签 校园|社会人 排除AI 是
+/yuri 作者 123456 数量 2
+/yuri 分级 成人 数量 1
+/yuri r18 1 tag 白丝 num 3
+```
+
+#### 年齡分級與 Cookie
+
+| 分級 | 可存取範圍 | 要求 |
+| --- | --- | --- |
+| 全年齡（預設） | 匿名可見的全年齡作品 | 無需 Key／Cookie |
+| 成人 | R-18 / R-18G | `yuri_pixiv_cookie`（或環境變數 `CURRENTCORTEX_YURI_PIXIV_COOKIE`），已登入且已開啟 R18 顯示 |
+| 混合 | 全年齡 + 成人 | 同上 |
+
+匿名存取只能取得 Pixiv 匿名可見的全年齡作品。請求成人／混合時，外掛使用 Pixiv 網頁的 `mode=r18` / `mode=all`，需要一個**已登入且在 Pixiv 設定中開啟 R18 顯示**的帳號 Cookie：
+
+- **建議**：在外掛設定中填寫 **`yuri_pixiv_cookie`**，或開啟 **總 Pages → 設定 → Pixiv 圖片** 填寫，儲存後熱重載生效。可貼上整段 Cookie 標頭，也可只填 `PHPSESSID` 的值（會自動補上 `PHPSESSID=`）；
+- **相容**：也可設定伺服器環境變數 `CURRENTCORTEX_YURI_PIXIV_COOKIE`（設定項優先，留空時才讀取環境變數）。
+
+兩者都為空時會明確報錯，不會靜默降級為全年齡；Cookie 未登入／已過期或帳號未開啟 R18 顯示時也會分別提示具體原因。Cookie 僅用於 `/yuri` 的搜尋與作品詳情請求，不會寫入日誌；圖片 CDN 請求不攜帶 Cookie。
+
+> **LeiZ 說明**：LeiZ API 沒有獨立的百合圖片介面，因此 `/yuri` 不使用 LeiZ，也不受 `pixiv_source` 設定影響；全年齡與成人／混合都直連 Pixiv 網頁介面。若較偏好使用 LeiZ 圖庫，可用 `/pixiv 标签 百合`（成人需切換 `pixiv_source=leiz`）。
+
+#### 回傳資訊
+
+所有圖片合併為**一則訊息**傳送，說明文字附標題、作者、作品連結、標籤、尺寸；多個作品帶 `[i/n]` 序號。成人／混合會在正文標註 R-18 提示。單張圖片下載失敗會跳過該張並在訊息內說明，不影響其餘圖片。
+
+Pixiv 組圖（多頁作品）的全部頁面會一起傳送；預設單次最多 20 張（設定項 `pixiv_web_max_images`，範圍 1-100），超過時在訊息內說明「其餘頁面未傳送」。`数量` 指定的是作品數，組圖會按頁展開。
+
+#### 限制
+
+- 伺服器需能存取 `www.pixiv.net` 與 `i.pximg.net`；Pixiv 介面變動、存取限制或網路故障時請稍後重試。
+- 成人／混合依賴 Pixiv 帳號的 R18 顯示設定與 Cookie 有效性；若回傳空結果，請先確認帳號設定，或改用 `/pixiv` 的 LeiZ 圖源。
+- 匿名可見範圍不等於全站所有作品；搜尋結果經過抽樣與詳情校驗，每次最多校驗 60 件作品。
 
 ---
 
@@ -640,7 +713,6 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 | --- | --- |
 | 📊 **儀表板** | 插件執行總覽：執行時長、已綁定裝置、活躍連線、註冊使用者、插件版本／作者／啟動時間、功能開關狀態 |
 | 🌏 **地震預警** | 白名單群聊管理／多城市／預警源健康度／最近事件／立即檢查／**模擬預警**與**極限演練**（與真實預警相同訊息、需確認詞） |
-| ⛅ **氣象預警** | 中央氣象台全國預警（颱風／暴雨／大霧／寒潮等）；按省市區路徑匹配關注城市；級別過濾（預設黃色及以上）；附預警正文與防禦指南 |
 | ⛅ **氣象預警** | 白名單群聊與關注城市管理／中央氣象台源健康度／最近播報／立即檢查 |
 | 📖 **說明中心** | 內建使用文件與常見問題（快速開始／地震預警／氣象預警／郊狼／分段回覆／跨群記憶／故障排除） |
 | ⚙️ **設定** | 視覺化修改全部插件設定：每個設定項都有中文名＋白話解釋，儲存後**自動熱重載**生效，無需手動重新啟動 |
@@ -777,13 +849,14 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 
 > ⚠️ 電擊控制涉及實體裝置、有安全風險，請確認安全後再開啟。所有工具執行第一行都會走開關檢查，關閉後工具回傳提示而不執行。
 
-#### 已註冊工具一覽（共 11 個）
+#### 已註冊工具一覽
 
 | 類別 | 工具名 | 參數 | 說明 |
 | --- | --- | --- | --- |
 | 🖼️ 圖片 | `get_pixiv_random` | num, r18 | 隨機二次元插畫 |
 | 🖼️ 圖片 | `search_pixiv` | keyword, num, r18 | 按關鍵字搜尋插畫 |
 | 🖼️ 圖片 | `get_pixiv_by_tags` | tags, num, r18 | 按標籤精確篩選（多標籤 AND） |
+| 🌸 百合 | `get_yuri_image` | keyword, tags, num, r18 | 按關鍵字／標籤取得百合圖片 |
 | 👗 男娘 | `get_femboy_image` | 無 | 隨機男娘圖片 |
 | 🎵 點歌 | `play_song` | song_name | 搜尋並點歌（語音訊息） |
 | ⚡ 電擊 | `dglab_shock` | channel, strength, wave, duration, device_index | 開始電擊 |
@@ -863,7 +936,9 @@ pip install websockets>=10.0   # 僅 DG-LAB 功能需要
 
 | 設定項 | 類型 | 預設值 | 說明 |
 | --- | --- | --- | --- |
-| `pixiv_source` | string | pixiv_web | 匿名全年齡搜尋；可切回 leiz（需要 LeiZ Key） |
+| `pixiv_source` | string | pixiv_web | 匿名全年齡搜尋；可切回 leiz（需要 LeiZ Key）。僅影響 `/pixiv`，`/yuri` 始終使用 Pixiv 網頁 API（R18 需 Cookie） |
+| `yuri_pixiv_cookie` | string | （空） | `/yuri` 成人／混合分级用的 Pixiv 登入 Cookie，需已登入且開啟 R18 顯示。留空時回退環境變數 `CURRENTCORTEX_YURI_PIXIV_COOKIE`；兩者都空時僅支援全年齡 |
+| `pixiv_web_max_images` | int | 20 | `pixiv_web` 圖源的組圖上限：每作品最多取得／傳送的頁數（1-100）。`/yuri` 同時以此作為單則訊息的總圖片上限 |
 | `default_r18` | int | 0 | 預設 R18 模式（0=全年齡, 1=僅R18, 2=混合） |
 | `default_num` | int | 1 | 預設每次取得的圖片數量（1-20） |
 | `default_size` | string | regular | 預設圖片尺寸（original/regular/small/thumb/mini） |
@@ -976,7 +1051,7 @@ v1.2.0 及更早版本使用 JSON 字串設定（已棄用）：
 <summary><b>安裝後插件無法載入？</b></summary>
 
 1. Python 版本是否 >= 3.10
-2. 是否已安裝相依套件：`pip install aiohttp>=3.8.0`（DG-LAB 還需 `websockets>=10.0`）
+2. 確認執行 AstrBot 的 Python 已安裝完整的相依套件，參閱[安裝相依套件](#4-安裝相依套件)。
 3. AstrBot 版本是否 >= 4.15（本插件需要較新的 API，舊版無法載入）
 4. 查看 AstrBot 日誌中的錯誤訊息
 
@@ -1025,7 +1100,7 @@ v1.2.0 及更早版本使用 JSON 字串設定（已棄用）：
 <details>
 <summary><b>DG-LAB 功能無法使用 / 綁定失敗？</b></summary>
 
-1. 是否安裝相依套件：`pip install websockets>=10.0`
+1. 確認執行 AstrBot 的 Python 已安裝 `websockets>=10.0`，參閱[安裝相依套件](#4-安裝相依套件)。
 2. 是否設定 `dglab_server_url`，且中繼伺服器正在執行、可存取
 3. QR Code 產生後需在有效期內用 APP 掃描
 4. 確認 APP 版本支援 Socket V2，且僅支援**郊狼脈衝主機 3.0**
@@ -1156,7 +1231,7 @@ astrbot_plugin_currentcortex/
 
 ---
 
-**版本**：v2.12.0（各版本變更詳見 [CHANGELOG.md](CHANGELOG.md)）
+**版本**：v2.13.0（各版本變更詳見 [CHANGELOG.md](CHANGELOG.md)）
 **儲存庫**：[GitHub](https://github.com/backrooms-yrc/astrbot_plugin_currentcortex)
 
 
